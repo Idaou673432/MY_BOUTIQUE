@@ -1,0 +1,26 @@
+{
+  "$schema": "https://raw.githubusercontent.com/firebase/firebase-tools/master/schema/firestore-blueprint.json",
+  "entities": {
+    "store_data": {
+      "title": "Store Data Document",
+      "description": "Stores state collections for the boutique (products, sales, stock, customers, etc.)",
+      "type": "object",
+      "properties": {
+        "data": {
+          "type": "array",
+          "description": "Serialized collection state data"
+        },
+        "updatedAt": {
+          "type": "string",
+          "description": "Last updated ISO timestamp"
+        }
+      }
+    }
+  },
+  "firestore": {
+    "/store_data/{collectionKey}": {
+      "entity": "store_data",
+      "description": "Global store collection records with real-time sync"
+    }
+  }
+}

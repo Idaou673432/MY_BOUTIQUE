@@ -1,0 +1,42 @@
+@import "tailwindcss";
+
+@layer utilities {
+  /* Hide scrollbar for Chrome, Safari and Opera */
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  /* Hide scrollbar for IE, Edge and Firefox */
+  .no-scrollbar {
+    -ms-overflow-style: none;  /* IE and Edge */
+    scrollbar-width: none;  /* Firefox */
+  }
+}
+
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  .no-print, .no-print * {
+    display: none !important;
+    visibility: hidden !important;
+  }
+  #printable-receipt, #printable-receipt * {
+    visibility: visible;
+  }
+  #printable-receipt {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    margin: 0;
+    padding: 12px;
+    background: white;
+    color: black;
+    box-shadow: none !important;
+    border: none !important;
+  }
+  @page {
+    margin: 10mm;
+    size: auto;
+  }
+}
