@@ -21,12 +21,14 @@ import {
   ArrowRight,
   TrendingDown,
   TrendingUp,
-  MessageSquare
+  MessageSquare,
+  BarChart3
 } from 'lucide-react';
 import { useStore } from '../../context/StoreContext';
 import { Inventory, InventoryItem } from '../../types';
 import { formatMoney, formatDateTime, formatDate } from '../../utils/formatters';
 import { ConfirmModal } from '../common/ConfirmModal';
+import { AnnualInventoryBalance } from './AnnualInventoryBalance';
 
 export const InventoryView: React.FC = () => {
   const {
@@ -46,6 +48,7 @@ export const InventoryView: React.FC = () => {
 
   const sessions: Inventory[] = inventorySessions.length > 0 ? inventorySessions : inventories;
 
+  const [viewMode, setViewMode] = useState<'SESSIONS' | 'BILAN_ANNUEL'>('SESSIONS');
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
   const [showNewModal, setShowNewModal] = useState(false);
@@ -331,12 +334,41 @@ export const InventoryView: React.FC = () => {
             Inventaires & Contrôle Physique du Stock
           </h1>
           <p className="text-xs text-slate-500 mt-0.5">
-            Comptage physique, identification automatique des écarts (pertes/surplus) et régularisation du stock.
+            Comptage physique, identification des écarts (pertes/surplus), régularisation et bilan annuel de valorisation.
           </p>
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          {activeSession && (
+          {/* Top Switcher: Sessions vs Bilan Annuel */}
+          <div className="flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200">
+            <button
+              type="button"
+              onClick={() => setViewMode('SESSIONS')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                viewMode === 'SESSIONS'
+                  ? 'bg-white text-slate-900 shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <ClipboardList className="w-3.5 h-3.5" />
+              <span>Sessions de Comptage</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setViewMode('BILAN_ANNUEL')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                viewMode === 'BILAN_ANNUEL'
+                  ? 'bg-indigo-600 text-white shadow-xs'
+                  : 'text-indigo-700 hover:text-indigo-900'
+              }`}
+            >
+              <BarChart3 className="w-3.5 h-3.5" />
+              <span>Bilan Annuel d'Inventaire</span>
+            </button>
+          </div>
+
+          {viewMode === 'SESSIONS' && activeSession && (
             <>
               <button
                 type="button"
@@ -366,14 +398,22 @@ export const InventoryView: React.FC = () => {
               className="flex items-center gap-1.5 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold shadow-xs transition-colors"
             >
               <Plus className="w-4 h-4" />
-              Lancer une Nouvelle Session
+              Nouvelle Session
             </button>
           )}
         </div>
       </div>
 
-      {/* SESSIONS PICKER / TABS */}
-      <div className="bg-white p-3 rounded-2xl border border-slate-200 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-3">
+      {/* BILAN ANNUEL VIEW */}
+      {viewMode === 'BILAN_ANNUEL' && (
+        <AnnualInventoryBalance />
+      )}
+
+      {/* SESSIONS & COUNTING VIEW */}
+      {viewMode === 'SESSIONS' && (
+        <>
+          {/* SESSIONS PICKER / TABS */}
+          <div className="bg-white p-3 rounded-2xl border border-slate-200 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-3">
         <div className="flex items-center gap-2 overflow-x-auto pb-1 md:pb-0">
           <span className="text-xs font-bold text-slate-500 whitespace-nowrap pl-1">Sessions :</span>
           {filteredSessions.length > 0 ? (
@@ -879,6 +919,8 @@ export const InventoryView: React.FC = () => {
             </button>
           )}
         </div>
+      )}
+      </>
       )}
 
       {/* NEW INVENTORY SESSION MODAL */}

@@ -23,9 +23,11 @@ import {
   Sparkles,
   Layers,
   Check,
+  Printer,
 } from 'lucide-react';
 import { useStore } from '../../context/StoreContext';
 import { ConfirmModal } from '../common/ConfirmModal';
+import { DirectPrinterModal } from '../common/DirectPrinterModal';
 import { BUSINESS_PRESETS, BusinessPreset } from '../../data/industryPresets';
 import { BusinessType, StoreSettings } from '../../types';
 
@@ -64,10 +66,15 @@ export const SettingsView: React.FC = () => {
       settings.invoiceLegalNotice ||
       'Facture établie conformément aux règles du commerce. Merci de votre fidélité.',
     businessType: settings.businessType || 'COMMERCE_GENERAL',
+    printerType: settings.printerType || 'BROWSER',
+    directThermalWidthMm: settings.directThermalWidthMm || 80,
+    autoPrintReceiptOnSale: settings.autoPrintReceiptOnSale || false,
+    openCashDrawerOnPrint: settings.openCashDrawerOnPrint || false,
   });
 
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [showResetModal, setShowResetModal] = useState(false);
+  const [showDirectPrinterModal, setShowDirectPrinterModal] = useState(false);
   const [importStatus, setImportStatus] = useState<string | null>(null);
   const [selectedPresetForModal, setSelectedPresetForModal] = useState<BusinessPreset | null>(null);
   const [includeSampleProducts, setIncludeSampleProducts] = useState(true);
@@ -522,6 +529,102 @@ export const SettingsView: React.FC = () => {
           </div>
         </div>
 
+        {/* Thermal Hardware & Direct Printing Card */}
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-xs p-5 space-y-4">
+          <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+            <h2 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+              <Printer className="w-4 h-4 text-indigo-600" />
+              Imprimante Directe & Périphériques de Caisse (Thermique 80mm / 58mm)
+            </h2>
+            <button
+              type="button"
+              onClick={() => setShowDirectPrinterModal(true)}
+              className="px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-600 rounded-lg text-xs font-bold transition-colors cursor-pointer flex items-center gap-1.5"
+            >
+              <Settings className="w-3.5 h-3.5" />
+              <span>Assistant de Connexion & Test Direct</span>
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
+            <div>
+              <label className="font-semibold text-slate-700 block mb-1">
+                Technologie d'Impression Directe
+              </label>
+              <select
+                value={formData.printerType || 'BROWSER'}
+                onChange={(e) =>
+                  setFormData({
+                    ...formData,
+                    printerType: e.target.value as any,
+                  })
+                }
+                className="w-full px-3 py-2 border border-slate-200 rounded-lg bg-white font-medium text-slate-900"
+              >
+                <option value="BROWSER">Fenêtre Système du Navigateur (Standard & Rapide)</option>
+                <option value="USB_SERIAL">ESC/POS Direct USB / Série (Recommandé Caisse PC)</option>
+                <option value="BLUETOOTH">ESC/POS Direct Bluetooth (Imprimantes Mobiles / Portables)</option>
+                <option value="RAWBT">RawBT Print Service (Application Android / Tablettes)</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="font-semibold text-slate-700 block mb-1">
+                Largeur du Rouleau de Papier Thermique
+              </label>
+              <select
+                value={formData.directThermalWidthMm || 80}
+                onChange={(e) =>
+                  setFormData({
+                    ...formData,
+                    directThermalWidthMm: Number(e.target.value) as 80 | 58,
+                  })
+                }
+                className="w-full px-3 py-2 border border-slate-200 rounded-lg bg-white font-medium text-slate-900"
+              >
+                <option value={80}>80 mm Standard (Tickets de caisse grande lisibilité)</option>
+                <option value={58}>58 mm Compact (Mini imprimantes thermiques de poche)</option>
+              </select>
+            </div>
+
+            <div className="sm:col-span-2 space-y-2.5 pt-2">
+              <label className="flex items-center gap-3 p-3 bg-slate-50 border border-slate-200 rounded-xl cursor-pointer hover:bg-indigo-50/50 transition-colors">
+                <input
+                  type="checkbox"
+                  checked={formData.autoPrintReceiptOnSale || false}
+                  onChange={(e) =>
+                    setFormData({ ...formData, autoPrintReceiptOnSale: e.target.checked })
+                  }
+                  className="h-4 w-4 rounded text-indigo-600 focus:ring-indigo-500"
+                />
+                <div>
+                  <span className="font-bold text-slate-900 block">Impression Automatique du Ticket dès la validation de vente</span>
+                  <span className="text-[11px] text-slate-500">
+                    Envoie directement l'ordre d'impression au matériel dès que l'encaissement est enregistré sans clic supplémentaire.
+                  </span>
+                </div>
+              </label>
+
+              <label className="flex items-center gap-3 p-3 bg-slate-50 border border-slate-200 rounded-xl cursor-pointer hover:bg-indigo-50/50 transition-colors">
+                <input
+                  type="checkbox"
+                  checked={formData.openCashDrawerOnPrint || false}
+                  onChange={(e) =>
+                    setFormData({ ...formData, openCashDrawerOnPrint: e.target.checked })
+                  }
+                  className="h-4 w-4 rounded text-indigo-600 focus:ring-indigo-500"
+                />
+                <div>
+                  <span className="font-bold text-slate-900 block">Impulsion d'ouverture automatique du tiroir-caisse (ESC/POS)</span>
+                  <span className="text-[11px] text-slate-500">
+                    Envoie la commande binaire d'éjection du tiroir-caisse connecté au port RJ11 de l'imprimante thermique.
+                  </span>
+                </div>
+              </label>
+            </div>
+          </div>
+        </div>
+
         {/* Currency & Financial Rules */}
         <div className="bg-white rounded-2xl border border-slate-200 shadow-xs p-5 space-y-4">
           <h2 className="text-sm font-bold text-slate-900 flex items-center gap-2 border-b border-slate-100 pb-3">
@@ -795,6 +898,12 @@ export const SettingsView: React.FC = () => {
           setShowResetModal(false);
         }}
         onCancel={() => setShowResetModal(false)}
+      />
+
+      {/* DIRECT PRINTER MODAL */}
+      <DirectPrinterModal
+        isOpen={showDirectPrinterModal}
+        onClose={() => setShowDirectPrinterModal(false)}
       />
     </div>
   );

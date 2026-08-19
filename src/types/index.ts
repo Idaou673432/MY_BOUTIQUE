@@ -391,6 +391,8 @@ export interface ActivityLog {
   timestamp: string;
 }
 
+export type PrinterType = 'BROWSER' | 'USB_SERIAL' | 'BLUETOOTH' | 'RAWBT';
+
 export interface StoreSettings {
   storeName?: string;
   shopName?: string;
@@ -415,4 +417,9 @@ export interface StoreSettings {
   allowNegativeStock: boolean;
   lowStockThresholdDefault: number;
   cashThresholdAlert?: number;
+  printerType?: PrinterType;
+  autoPrintReceiptOnSale?: boolean;
+  directThermalWidthMm?: 80 | 58;
+  bluetoothDeviceName?: string;
+  openCashDrawerOnPrint?: boolean;
 }

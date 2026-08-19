@@ -17,12 +17,22 @@ import {
   Receipt,
   RotateCcw,
   Sparkles,
-  ShoppingBag
+  ShoppingBag,
+  Printer,
+  Settings as SettingsIcon
 } from 'lucide-react';
 import { useStore } from '../../context/StoreContext';
 import { Product, SaleItem, PaymentMethod, Sale } from '../../types';
 import { formatMoney, getPaymentMethodLabel } from '../../utils/formatters';
 import { InvoiceModal } from '../common/InvoiceModal';
+import { DirectPrinterModal } from '../common/DirectPrinterModal';
+import {
+  generateThermalReceiptHtml,
+  executeDirectPrint,
+  printViaWebSerial,
+  printViaWebBluetooth,
+  printViaRawBT
+} from '../../utils/printService';
 import confetti from 'canvas-confetti';
 
 interface POSViewProps {
@@ -60,6 +70,7 @@ export const POSView: React.FC<POSViewProps> = () => {
   const [showCheckoutModal, setShowCheckoutModal] = useState(false);
   const [lastCompletedSale, setLastCompletedSale] = useState<Sale | null>(null);
   const [showReceiptModal, setShowReceiptModal] = useState(false);
+  const [showPrinterSettings, setShowPrinterSettings] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const barcodeInputRef = useRef<HTMLInputElement>(null);
@@ -262,10 +273,36 @@ export const POSView: React.FC<POSViewProps> = () => {
         });
       } catch {}
 
-      setLastCompletedSale(result.sale);
+      const saleRecord = result.sale;
+      setLastCompletedSale(saleRecord);
       setShowReceiptModal(true);
       setShowCheckoutModal(false);
       clearCart();
+
+      // Automatic direct print if configured
+      if (settings.autoPrintReceiptOnSale) {
+        setTimeout(async () => {
+          try {
+            if (settings.printerType === 'USB_SERIAL') {
+              await printViaWebSerial(saleRecord, settings, selectedCustomer);
+            } else if (settings.printerType === 'BLUETOOTH') {
+              await printViaWebBluetooth(saleRecord, settings, selectedCustomer);
+            } else if (settings.printerType === 'RAWBT') {
+              printViaRawBT(saleRecord, settings, selectedCustomer);
+            } else {
+              const html = generateThermalReceiptHtml(
+                saleRecord,
+                settings,
+                selectedCustomer,
+                settings.directThermalWidthMm || 80
+              );
+              executeDirectPrint(html);
+            }
+          } catch (e) {
+            console.error('Auto-print error:', e);
+          }
+        }, 350);
+      }
     } else {
       setErrorMessage(result.message || 'Erreur lors de la validation de la vente.');
     }
@@ -426,15 +463,25 @@ export const POSView: React.FC<POSViewProps> = () => {
               <Receipt className="w-4 h-4 text-indigo-600" />
               Panier en cours ({cart.reduce((s, i) => s + i.quantity, 0)} art.)
             </h3>
-            {cart.length > 0 && (
+            <div className="flex items-center gap-1.5">
               <button
-                onClick={clearCart}
-                className="text-[11px] text-rose-600 hover:underline flex items-center gap-1 font-medium"
+                type="button"
+                onClick={() => setShowPrinterSettings(true)}
+                className="p-1 rounded-lg text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 transition-colors cursor-pointer"
+                title="Réglages et test de l'imprimante directe"
               >
-                <RotateCcw className="w-3 h-3" />
-                Vider
+                <Printer className="w-3.5 h-3.5" />
               </button>
-            )}
+              {cart.length > 0 && (
+                <button
+                  onClick={clearCart}
+                  className="text-[11px] text-rose-600 hover:underline flex items-center gap-1 font-medium cursor-pointer"
+                >
+                  <RotateCcw className="w-3 h-3" />
+                  Vider
+                </button>
+              )}
+            </div>
           </div>
 
           {/* Customer selector with debt warning */}
@@ -811,6 +858,12 @@ export const POSView: React.FC<POSViewProps> = () => {
         sale={lastCompletedSale}
         isOpen={showReceiptModal}
         onClose={() => setShowReceiptModal(false)}
+      />
+
+      {/* DIRECT PRINTER MODAL */}
+      <DirectPrinterModal
+        isOpen={showPrinterSettings}
+        onClose={() => setShowPrinterSettings(false)}
       />
     </div>
   );
