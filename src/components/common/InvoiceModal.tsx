@@ -25,7 +25,9 @@ import {
   Bluetooth,
   ExternalLink,
   Settings as SettingsIcon,
-  ChevronDown
+  ChevronDown,
+  RotateCcw,
+  AlertTriangle
 } from 'lucide-react';
 import { Sale, Customer } from '../../types';
 import { useStore } from '../../context/StoreContext';
@@ -63,7 +65,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
   onClose,
   initialFormat,
 }) => {
-  const { settings, customers } = useStore();
+  const { settings, customers, cancelSale } = useStore();
   
   const getInitialFormat = (): PrintReceiptFormat => {
     if (initialFormat === 'TICKET_58') return 'TICKET_58';
@@ -79,6 +81,9 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
   const [printFeedback, setPrintFeedback] = useState<string | null>(null);
   const [showPrinterSettings, setShowPrinterSettings] = useState(false);
   const [showPrintMenu, setShowPrintMenu] = useState(false);
+  const [showCancelModal, setShowCancelModal] = useState(false);
+  const [cancelReason, setCancelReason] = useState('Erreur de saisie / Demande client');
+  const [isCancelling, setIsCancelling] = useState(false);
 
   if (!isOpen || !sale) return null;
 
@@ -232,6 +237,25 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
     const url = phone ? `https://wa.me/${phone}?text=${text}` : `https://wa.me/?text=${text}`;
     window.open(url, '_blank');
   };
+
+  const handleExecuteCancelSale = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!sale) return;
+    setIsCancelling(true);
+    const res = cancelSale(sale.id, cancelReason.trim() || 'Annulation par le caissier');
+    setIsCancelling(false);
+    if (res.success) {
+      setPrintFeedback('Vente annulée avec succès. Articles restockés et caisse ajustée.');
+      setShowCancelModal(false);
+      setTimeout(() => {
+        onClose();
+      }, 1200);
+    } else {
+      alert(res.message || 'Impossible d’annuler la vente.');
+    }
+  };
+
+  const isSaleCancelled = sale.status === 'ANNULEE';
 
   return (
     <>
@@ -825,13 +849,32 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
 
         {/* Modal Bottom Footer - Hidden in Print */}
         <div className="p-3.5 sm:p-4 bg-white border-t border-slate-200 flex flex-wrap items-center justify-between gap-3 no-print">
-          <button
-            type="button"
-            onClick={onClose}
-            className="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl transition-colors cursor-pointer"
-          >
-            Fermer
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl transition-colors cursor-pointer"
+            >
+              Fermer
+            </button>
+
+            {!isSaleCancelled ? (
+              <button
+                type="button"
+                onClick={() => setShowCancelModal(true)}
+                className="flex items-center gap-1.5 px-3 py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-xl text-xs font-bold transition-all cursor-pointer"
+                title="Annuler cette vente, restocker les articles et régulariser la caisse / dette"
+              >
+                <RotateCcw className="w-3.5 h-3.5 text-rose-600" />
+                <span>Annuler la Vente</span>
+              </button>
+            ) : (
+              <span className="px-3 py-1.5 bg-rose-100 text-rose-800 rounded-xl text-xs font-bold flex items-center gap-1">
+                <AlertTriangle className="w-3.5 h-3.5" />
+                Vente Annulée & Restockée
+              </span>
+            )}
+          </div>
           
           <div className="flex items-center gap-2">
             <button
@@ -858,6 +901,73 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
 
       </div>
     </div>
+
+    {/* Cancel Sale Confirmation Modal */}
+    {showCancelModal && (
+      <div className="fixed inset-0 z-60 overflow-y-auto bg-slate-950/70 backdrop-blur-xs flex items-center justify-center p-4">
+        <form
+          onSubmit={handleExecuteCancelSale}
+          className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-md overflow-hidden animate-in fade-in zoom-in-95"
+        >
+          <div className="p-4 bg-rose-700 text-white flex items-center justify-between">
+            <h3 className="font-bold text-sm flex items-center gap-2">
+              <AlertTriangle className="w-4 h-4 text-white" />
+              Confirmation Annulation : {sale.invoiceNumber}
+            </h3>
+            <button
+              type="button"
+              onClick={() => setShowCancelModal(false)}
+              className="text-white hover:opacity-80"
+            >
+              ✕
+            </button>
+          </div>
+
+          <div className="p-5 space-y-4 text-xs">
+            <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-rose-900 space-y-1.5">
+              <p className="font-bold text-sm">Action irréversible :</p>
+              <ul className="list-disc list-inside space-y-0.5 text-[11px]">
+                <li>Les <strong>{sale.items.length} article(s)</strong> seront automatiquement restitués en stock.</li>
+                <li>Le montant de <strong>{formatMoney(sale.totalAmount, settings.currency)}</strong> sera déduit de la caisse ou du compte client.</li>
+                <li>Cette opération sera tracée dans le journal d'audit.</li>
+              </ul>
+            </div>
+
+            <div>
+              <label className="font-semibold text-slate-700 block mb-1">
+                Motif d'annulation obligatoire *
+              </label>
+              <input
+                type="text"
+                required
+                value={cancelReason}
+                onChange={(e) => setCancelReason(e.target.value)}
+                placeholder="Ex: Erreur de saisie, client a changé d'avis, retour article..."
+                className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs focus:ring-2 focus:ring-rose-500 focus:outline-none"
+              />
+            </div>
+
+            <div className="pt-2 flex justify-end gap-2 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setShowCancelModal(false)}
+                className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-xl font-medium"
+              >
+                Retour
+              </button>
+              <button
+                type="submit"
+                disabled={isCancelling}
+                className="px-4 py-2 bg-rose-600 hover:bg-rose-700 disabled:bg-rose-300 text-white rounded-xl font-bold shadow-xs flex items-center gap-1.5"
+              >
+                <RotateCcw className="w-3.5 h-3.5" />
+                {isCancelling ? 'Annulation...' : 'Confirmer l’Annulation'}
+              </button>
+            </div>
+          </div>
+        </form>
+      </div>
+    )}
 
     {/* Direct Printer Hardware Settings Modal */}
     <DirectPrinterModal

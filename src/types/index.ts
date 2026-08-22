@@ -19,8 +19,8 @@ export interface RolePermissionConfig {
 export const ROLE_PERMISSIONS: Record<UserRole, RolePermissionConfig> = {
   VENDEUR: {
     label: 'Vendeur (Caissier)',
-    description: 'Accès restreint exclusivement aux Ventes (POS), encaissement, fond de caisse et consultation des prix.',
-    allowedTabs: ['pos', 'cash', 'sales', 'products'],
+    description: 'Accès aux Ventes (POS), encaissement, devis/proformas, consultation crédits et fond de caisse.',
+    allowedTabs: ['pos', 'sales', 'quotes', 'credits-debts', 'cash', 'products', 'customers'],
     defaultTab: 'pos',
     canManageUsers: false,
     canManageSettings: false,
@@ -28,20 +28,22 @@ export const ROLE_PERMISSIONS: Record<UserRole, RolePermissionConfig> = {
     canManagePurchases: false,
     canManageExpenses: false,
     canManageInventories: false,
-    canCancelSales: false,
+    canCancelSales: true, // Caissier autorisé avec motif d'annulation
     canViewReports: false,
     canViewAudit: false,
   },
   GERANT: {
     label: 'Gérant de Boutique',
-    description: 'Gestion complète du magasin : stocks, ventes, achats, inventaires, caisse, clients, fournisseurs et dépenses.',
+    description: 'Gestion complète du magasin : stocks, ventes, devis, crédits/dettes, achats, inventaires, caisse, clients, fournisseurs et dépenses.',
     allowedTabs: [
       'dashboard',
       'pos',
+      'sales',
+      'quotes',
+      'credits-debts',
       'products',
       'stock',
       'purchases',
-      'sales',
       'cash',
       'expenses',
       'inventory',
@@ -68,10 +70,12 @@ export const ROLE_PERMISSIONS: Record<UserRole, RolePermissionConfig> = {
     allowedTabs: [
       'dashboard',
       'pos',
+      'sales',
+      'quotes',
+      'credits-debts',
       'products',
       'stock',
       'purchases',
-      'sales',
       'cash',
       'expenses',
       'inventory',
@@ -238,6 +242,75 @@ export interface Sale {
   userName: string;
   status: SaleStatus;
   notes?: string;
+}
+
+export type QuoteStatus = 'BROUILLON' | 'ENVOYE' | 'ACCEPTE' | 'REFUSE' | 'CONVERTI';
+
+export interface QuoteItem {
+  productId?: string;
+  productName: string;
+  productCode?: string;
+  productUnit?: string;
+  quantity: number;
+  unitPrice: number;
+  unitCost?: number;
+  discountPercent: number;
+  total: number;
+}
+
+export interface Quote {
+  id: string;
+  quoteNumber: string; // e.g. "DEV-2026-0001"
+  date: string;
+  validUntil: string;
+  customerId?: string;
+  customerName: string;
+  customerPhone?: string;
+  customerEmail?: string;
+  customerAddress?: string;
+  items: QuoteItem[];
+  subtotal: number;
+  discountTotal: number;
+  taxAmount: number;
+  totalAmount: number;
+  status: QuoteStatus;
+  notes?: string;
+  terms?: string;
+  userId: string;
+  userName: string;
+  convertedSaleId?: string;
+  createdAt: string;
+}
+
+export type CreditType = 'CLIENT_CREDIT' | 'SUPPLIER_DEBT';
+
+export interface CreditPayment {
+  id: string;
+  date: string;
+  amount: number;
+  paymentMethod: PaymentMethod;
+  notes?: string;
+  receivedBy: string;
+  receiptNumber?: string;
+}
+
+export interface CreditDebtRecord {
+  id: string;
+  type: CreditType;
+  partyId: string; // customerId or supplierId
+  partyName: string;
+  partyPhone?: string;
+  partyAddress?: string;
+  title: string; // e.g. "Facture FAC-2026-0012" or "Commande Fournisseur #CMD-004"
+  initialAmount: number;
+  paidAmount: number;
+  remainingAmount: number;
+  dueDate?: string;
+  date: string;
+  notes?: string;
+  status: 'EN_COURS' | 'SOLDE' | 'EN_RETARD';
+  referenceId?: string;
+  payments: CreditPayment[];
 }
 
 export type CashTransactionType = 

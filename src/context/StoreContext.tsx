@@ -11,6 +11,10 @@ import {
   StockMovement,
   Sale,
   SaleItem,
+  Quote,
+  QuoteItem,
+  CreditDebtRecord,
+  CreditPayment,
   Purchase,
   PurchaseItem,
   Expense,
@@ -46,7 +50,7 @@ import {
   DEMO_SALES,
 } from '../data/initialData';
 import { BUSINESS_PRESETS } from '../data/industryPresets';
-import { generateId, generateInvoiceNumber, generateOrderNumber } from '../utils/formatters';
+import { generateId, generateInvoiceNumber, generateOrderNumber, generateQuoteNumber } from '../utils/formatters';
 
 interface StoreContextType {
   // Firebase Sync State
@@ -129,6 +133,31 @@ interface StoreContextType {
   ) => { success: boolean; sale?: Sale; message?: string };
   cancelSale: (saleId: string, reason: string) => { success: boolean; message?: string };
 
+  // Quotes (Devis & Factures Proforma)
+  quotes: Quote[];
+  addQuote: (quoteData: Omit<Quote, 'id' | 'quoteNumber' | 'createdAt' | 'userId' | 'userName'>) => Quote;
+  updateQuote: (id: string, quoteData: Partial<Quote>) => void;
+  deleteQuote: (id: string) => boolean;
+  convertQuoteToSale: (
+    quoteId: string,
+    paymentMethod: PaymentMethod,
+    amountReceived: number
+  ) => { success: boolean; sale?: Sale; message?: string };
+
+  // Credits & Debts (Créances Clients & Dettes Fournisseurs)
+  creditDebtRecords: CreditDebtRecord[];
+  addCreditDebtRecord: (
+    record: Omit<CreditDebtRecord, 'id' | 'payments' | 'paidAmount' | 'remainingAmount' | 'status'>
+  ) => CreditDebtRecord;
+  recordCreditPayment: (
+    recordId: string,
+    amount: number,
+    paymentMethod: PaymentMethod,
+    notes?: string
+  ) => { success: boolean; message?: string };
+  updateCreditDebtRecord: (id: string, updates: Partial<CreditDebtRecord>) => void;
+  deleteCreditDebtRecord: (id: string) => boolean;
+
   // Expenses & Cash
   expenses: Expense[];
   addExpense: (expense: Omit<Expense, 'id' | 'userId' | 'userName'>) => boolean;
@@ -198,6 +227,8 @@ const STORAGE_KEYS = {
   CUSTOMERS: 'bpm_customers_v2_zero',
   STOCK_MOVEMENTS: 'bpm_movements_v2_zero',
   SALES: 'bpm_sales_v2_zero',
+  QUOTES: 'bpm_quotes_v2_zero',
+  CREDIT_DEBT_RECORDS: 'bpm_credit_debts_v2_zero',
   PURCHASES: 'bpm_purchases_v2_zero',
   EXPENSES: 'bpm_expenses_v2_zero',
   CASH_REGISTER: 'bpm_cash_register_v2_zero',
@@ -264,6 +295,8 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   const [customers, setCustomers] = useState<Customer[]>(() => loadState(STORAGE_KEYS.CUSTOMERS, INITIAL_CUSTOMERS));
   const [stockMovements, setStockMovements] = useState<StockMovement[]>(() => loadState(STORAGE_KEYS.STOCK_MOVEMENTS, INITIAL_STOCK_MOVEMENTS));
   const [sales, setSales] = useState<Sale[]>(() => loadState(STORAGE_KEYS.SALES, INITIAL_SALES));
+  const [quotes, setQuotes] = useState<Quote[]>(() => loadState(STORAGE_KEYS.QUOTES, []));
+  const [creditDebtRecords, setCreditDebtRecords] = useState<CreditDebtRecord[]>(() => loadState(STORAGE_KEYS.CREDIT_DEBT_RECORDS, []));
   const [purchases, setPurchases] = useState<Purchase[]>(() => loadState(STORAGE_KEYS.PURCHASES, INITIAL_PURCHASES));
   const [expenses, setExpenses] = useState<Expense[]>(() => loadState(STORAGE_KEYS.EXPENSES, INITIAL_EXPENSES));
   const [cashRegister, setCashRegister] = useState<CashRegister | null>(() => loadState(STORAGE_KEYS.CASH_REGISTER, INITIAL_CASH_REGISTER));
@@ -287,6 +320,8 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   useEffect(() => { localStorage.setItem(STORAGE_KEYS.CUSTOMERS, JSON.stringify(customers)); }, [customers]);
   useEffect(() => { localStorage.setItem(STORAGE_KEYS.STOCK_MOVEMENTS, JSON.stringify(stockMovements)); }, [stockMovements]);
   useEffect(() => { localStorage.setItem(STORAGE_KEYS.SALES, JSON.stringify(sales)); }, [sales]);
+  useEffect(() => { localStorage.setItem(STORAGE_KEYS.QUOTES, JSON.stringify(quotes)); }, [quotes]);
+  useEffect(() => { localStorage.setItem(STORAGE_KEYS.CREDIT_DEBT_RECORDS, JSON.stringify(creditDebtRecords)); }, [creditDebtRecords]);
   useEffect(() => { localStorage.setItem(STORAGE_KEYS.PURCHASES, JSON.stringify(purchases)); }, [purchases]);
   useEffect(() => { localStorage.setItem(STORAGE_KEYS.EXPENSES, JSON.stringify(expenses)); }, [expenses]);
   useEffect(() => { localStorage.setItem(STORAGE_KEYS.CASH_REGISTER, JSON.stringify(cashRegister)); }, [cashRegister]);
@@ -312,6 +347,8 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
           customers: [],
           stockMovements: [],
           sales: [],
+          quotes: [],
+          creditDebtRecords: [],
           purchases: [],
           expenses: [],
           cashRegister: null,
@@ -341,6 +378,8 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
           if (remote.customers) setCustomers(remote.customers);
           if (remote.stockMovements) setStockMovements(remote.stockMovements);
           if (remote.sales) setSales(remote.sales);
+          if (remote.quotes) setQuotes(remote.quotes);
+          if (remote.creditDebtRecords) setCreditDebtRecords(remote.creditDebtRecords);
           if (remote.purchases) setPurchases(remote.purchases);
           if (remote.expenses) setExpenses(remote.expenses);
           if (remote.cashRegister !== undefined) setCashRegister(remote.cashRegister);
@@ -375,6 +414,8 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         customers,
         stockMovements,
         sales,
+        quotes,
+        creditDebtRecords,
         purchases,
         expenses,
         cashRegister,
@@ -419,6 +460,8 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     customers,
     stockMovements,
     sales,
+    quotes,
+    creditDebtRecords,
     purchases,
     expenses,
     cashRegister,
@@ -987,9 +1030,13 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
 
     // Verify stock availability
     for (const item of items) {
+      if (item.productId.startsWith('custom_')) {
+        continue;
+      }
       const prod = (products || []).find(p => p.id === item.productId);
       if (!prod) {
-        return { success: false, message: `Produit introuvable: ${item.productName}` };
+        // Custom or on-the-fly item: skip stock validation
+        continue;
       }
       if (!settings.allowNegativeStock && prod.currentStock < item.quantity) {
         return {
@@ -1050,13 +1097,18 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
 
     // 2. Decrease Stock automatically and create movement for each item
     items.forEach(it => {
-      createStockMovement(
-        it.productId,
-        -it.quantity,
-        'VENTE',
-        `Vente POS ticket ${sale.invoiceNumber}`,
-        sale.id
-      );
+      if (!it.productId.startsWith('custom_')) {
+        const prod = (products || []).find(p => p.id === it.productId);
+        if (prod) {
+          createStockMovement(
+            it.productId,
+            -it.quantity,
+            'VENTE',
+            `Vente POS ticket ${sale.invoiceNumber}`,
+            sale.id
+          );
+        }
+      }
     });
 
     // 3. Update Customer records if assigned
@@ -1099,13 +1151,18 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
 
     // Restock all items
     sale.items.forEach(it => {
-      createStockMovement(
-        it.productId,
-        it.quantity,
-        'RETOUR_CLIENT',
-        `Annulation vente ${sale.invoiceNumber} : ${reason}`,
-        sale.id
-      );
+      if (!it.productId.startsWith('custom_')) {
+        const prod = (products || []).find(p => p.id === it.productId);
+        if (prod) {
+          createStockMovement(
+            it.productId,
+            it.quantity,
+            'RETOUR_CLIENT',
+            `Annulation vente ${sale.invoiceNumber} : ${reason}`,
+            sale.id
+          );
+        }
+      }
     });
 
     // Revert customer credit or total spent
@@ -1138,6 +1195,227 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     logActivity('Annulation de vente', 'VENTE', sale.invoiceNumber, `Motif: ${reason}`);
 
     return { success: true };
+  };
+
+  // --- QUOTES (DEVIS & FACTURES PROFORMA) ---
+  const addQuote = (quoteData: Omit<Quote, 'id' | 'quoteNumber' | 'createdAt' | 'userId' | 'userName'>): Quote => {
+    const count = (quotes || []).length;
+    const quoteNumber = generateQuoteNumber(count);
+
+    const newQuote: Quote = {
+      ...quoteData,
+      id: generateId('quote'),
+      quoteNumber,
+      createdAt: new Date().toISOString(),
+      userId: currentUser.id,
+      userName: currentUser.name,
+      status: quoteData.status || 'ENVOYE',
+    };
+
+    setQuotes(prev => [newQuote, ...(prev || [])]);
+    logActivity('Création de Devis', 'VENTE', newQuote.quoteNumber, `Client: ${newQuote.customerName}, Montant: ${newQuote.totalAmount}`);
+    return newQuote;
+  };
+
+  const updateQuote = (id: string, quoteData: Partial<Quote>) => {
+    setQuotes(prev => (prev || []).map(q => (q.id === id ? { ...q, ...quoteData } : q)));
+    logActivity('Modification Devis', 'VENTE', id, 'Mise à jour du devis / statut');
+  };
+
+  const deleteQuote = (id: string): boolean => {
+    const q = (quotes || []).find(it => it.id === id);
+    if (!q) return false;
+    setQuotes(prev => (prev || []).filter(it => it.id !== id));
+    logActivity('Suppression Devis', 'VENTE', q.quoteNumber, `Devis ${q.quoteNumber} supprimé`);
+    return true;
+  };
+
+  const convertQuoteToSale = (
+    quoteId: string,
+    paymentMethod: PaymentMethod,
+    amountReceived: number
+  ): { success: boolean; sale?: Sale; message?: string } => {
+    const quote = (quotes || []).find(q => q.id === quoteId);
+    if (!quote) return { success: false, message: 'Devis introuvable.' };
+
+    const saleItems: SaleItem[] = quote.items.map(it => {
+      const prod = it.productId ? (products || []).find(p => p.id === it.productId) : undefined;
+      const unitCost = it.unitCost !== undefined ? it.unitCost : (prod?.purchasePrice || 0);
+      const margin = it.total - (unitCost * it.quantity);
+      return {
+        productId: it.productId || `custom_${generateId('item')}`,
+        productName: it.productName,
+        productCode: it.productCode || prod?.code,
+        productUnit: it.productUnit || prod?.unit || 'pièce',
+        quantity: it.quantity,
+        unitPrice: it.unitPrice,
+        unitCost,
+        discountPercent: it.discountPercent || 0,
+        total: it.total,
+        margin,
+      };
+    });
+
+    const saleResult = createSale(
+      saleItems,
+      paymentMethod,
+      amountReceived,
+      quote.customerId,
+      `Vente issue du devis ${quote.quoteNumber}. ${quote.notes || ''}`
+    );
+
+    if (saleResult.success && saleResult.sale) {
+      updateQuote(quoteId, {
+        status: 'CONVERTI',
+        convertedSaleId: saleResult.sale.id,
+      });
+      logActivity('Conversion Devis en Vente', 'VENTE', quote.quoteNumber, `Converti en facture ${saleResult.sale.invoiceNumber}`);
+    }
+
+    return saleResult;
+  };
+
+  // --- CREDITS & DETTES (GESTION COMPLETE FOURNISSEURS & CLIENTS) ---
+  const addCreditDebtRecord = (
+    record: Omit<CreditDebtRecord, 'id' | 'payments' | 'paidAmount' | 'remainingAmount' | 'status'>
+  ): CreditDebtRecord => {
+    const newRecord: CreditDebtRecord = {
+      ...record,
+      id: generateId('cd'),
+      paidAmount: 0,
+      remainingAmount: record.initialAmount,
+      status: 'EN_COURS',
+      payments: [],
+    };
+
+    setCreditDebtRecords(prev => [newRecord, ...(prev || [])]);
+
+    // Update customer / supplier balance if applicable
+    if (record.type === 'CLIENT_CREDIT') {
+      const cust = (customers || []).find(c => c.id === record.partyId);
+      if (cust) {
+        setCustomers(prev =>
+          prev.map(c => (c.id === cust.id ? { ...c, creditBalance: c.creditBalance + record.initialAmount } : c))
+        );
+      }
+    } else {
+      const sup = (suppliers || []).find(s => s.id === record.partyId);
+      if (sup) {
+        setSuppliers(prev =>
+          prev.map(s => (s.id === sup.id ? { ...s, debtBalance: s.debtBalance + record.initialAmount } : s))
+        );
+      }
+    }
+
+    logActivity(
+      record.type === 'CLIENT_CREDIT' ? 'Nouveau Crédit Client' : 'Nouvelle Dette Fournisseur',
+      record.type === 'CLIENT_CREDIT' ? 'CLIENT' : 'FOURNISSEUR',
+      record.partyName,
+      `Montant: ${record.initialAmount}, Titre: ${record.title}`
+    );
+
+    return newRecord;
+  };
+
+  const recordCreditPayment = (
+    recordId: string,
+    amount: number,
+    paymentMethod: PaymentMethod,
+    notes?: string
+  ): { success: boolean; message?: string } => {
+    const record = (creditDebtRecords || []).find(r => r.id === recordId);
+    if (!record) return { success: false, message: 'Dossier de crédit introuvable.' };
+    if (amount <= 0) return { success: false, message: 'Le montant de versement doit être supérieur à zéro.' };
+    if (amount > record.remainingAmount) {
+      return {
+        success: false,
+        message: `Le versement (${amount}) ne peut pas dépasser le solde restant (${record.remainingAmount}).`,
+      };
+    }
+
+    const receiptNumber = `REC-${new Date().getFullYear()}-${String(record.payments.length + 1).padStart(3, '0')}`;
+    const newPayment: CreditPayment = {
+      id: generateId('pay'),
+      date: new Date().toISOString(),
+      amount,
+      paymentMethod,
+      notes,
+      receivedBy: currentUser.name,
+      receiptNumber,
+    };
+
+    const newPaidAmount = record.paidAmount + amount;
+    const newRemainingAmount = record.initialAmount - newPaidAmount;
+    const newStatus = newRemainingAmount <= 0 ? 'SOLDE' : 'EN_COURS';
+
+    setCreditDebtRecords(prev =>
+      prev.map(r =>
+        r.id === recordId
+          ? {
+              ...r,
+              paidAmount: newPaidAmount,
+              remainingAmount: newRemainingAmount,
+              status: newStatus,
+              payments: [newPayment, ...r.payments],
+            }
+          : r
+      )
+    );
+
+    // If client credit payment, update customer creditBalance and add cash transaction if cash
+    if (record.type === 'CLIENT_CREDIT') {
+      const cust = (customers || []).find(c => c.id === record.partyId);
+      if (cust) {
+        setCustomers(prev =>
+          prev.map(c => (c.id === cust.id ? { ...c, creditBalance: Math.max(0, c.creditBalance - amount) } : c))
+        );
+      }
+      if (paymentMethod === 'ESPECES' && cashRegister && cashRegister.isOpen) {
+        addCashTransaction(
+          'PAIEMENT_DETTE_CLIENT',
+          amount,
+          `Encaissement crédit client : ${record.partyName} (${record.title})`,
+          paymentMethod
+        );
+      }
+    } else {
+      // Supplier debt payment: update supplier debtBalance and register cash out if paid in cash
+      const sup = (suppliers || []).find(s => s.id === record.partyId);
+      if (sup) {
+        setSuppliers(prev =>
+          prev.map(s => (s.id === sup.id ? { ...s, debtBalance: Math.max(0, s.debtBalance - amount) } : s))
+        );
+      }
+      if (paymentMethod === 'ESPECES' && cashRegister && cashRegister.isOpen) {
+        addCashTransaction(
+          'PAIEMENT_DETTE_FOURNISSEUR',
+          -amount,
+          `Règlement dette fournisseur : ${record.partyName} (${record.title})`,
+          paymentMethod
+        );
+      }
+    }
+
+    logActivity(
+      record.type === 'CLIENT_CREDIT' ? 'Règlement Crédit Client' : 'Règlement Dette Fournisseur',
+      record.type === 'CLIENT_CREDIT' ? 'CLIENT' : 'FOURNISSEUR',
+      record.partyName,
+      `Versement: ${amount}, Solde restant: ${newRemainingAmount}`
+    );
+
+    return { success: true };
+  };
+
+  const updateCreditDebtRecord = (id: string, updates: Partial<CreditDebtRecord>) => {
+    setCreditDebtRecords(prev => prev.map(r => (r.id === id ? { ...r, ...updates } : r)));
+  };
+
+  const deleteCreditDebtRecord = (id: string): boolean => {
+    const record = (creditDebtRecords || []).find(r => r.id === id);
+    if (!record) return false;
+    setCreditDebtRecords(prev => prev.filter(r => r.id !== id));
+    logActivity('Suppression dossier dette/crédit', 'SYSTEME', record.partyName, `Dossier ${record.title} supprimé`);
+    return true;
   };
 
   // Expenses
@@ -1555,6 +1833,8 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     setCustomers([]);
     setStockMovements([]);
     setSales([]);
+    setQuotes([]);
+    setCreditDebtRecords([]);
     setPurchases([]);
     setExpenses([]);
     setCashRegister(null);
@@ -1569,7 +1849,7 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         action: 'Remise à zéro complète',
         category: 'SYSTEME',
         targetItem: 'Base de données',
-        details: 'Toutes les données ont été réinitialisées à 0 (ventes, achats, dépenses, caisse, stocks, dettes).',
+        details: 'Toutes les données ont été réinitialisées à 0 (ventes, devis, crédits/dettes, achats, dépenses, caisse, stocks).',
         timestamp: new Date().toISOString(),
       },
     ];
@@ -1586,6 +1866,8 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         customers: [],
         stockMovements: [],
         sales: [],
+        quotes: [],
+        creditDebtRecords: [],
         purchases: [],
         expenses: [],
         cashRegister: null,
@@ -1612,6 +1894,8 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     setCustomers(DEMO_CUSTOMERS);
     setStockMovements(DEMO_STOCK_MOVEMENTS);
     setSales(DEMO_SALES);
+    setQuotes([]);
+    setCreditDebtRecords([]);
     setPurchases([]);
     setExpenses([]);
     setCashRegister(null);
@@ -1643,6 +1927,8 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         customers: DEMO_CUSTOMERS,
         stockMovements: DEMO_STOCK_MOVEMENTS,
         sales: DEMO_SALES,
+        quotes: [],
+        creditDebtRecords: [],
         purchases: [],
         expenses: [],
         cashRegister: null,
@@ -1672,6 +1958,8 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       customers,
       stockMovements,
       sales,
+      quotes,
+      creditDebtRecords,
       purchases,
       expenses,
       cashRegister,
@@ -1694,6 +1982,8 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         if (parsed.customers) setCustomers(parsed.customers);
         if (parsed.stockMovements) setStockMovements(parsed.stockMovements);
         if (parsed.sales) setSales(parsed.sales);
+        if (parsed.quotes) setQuotes(parsed.quotes);
+        if (parsed.creditDebtRecords) setCreditDebtRecords(parsed.creditDebtRecords);
         if (parsed.purchases) setPurchases(parsed.purchases);
         if (parsed.expenses) setExpenses(parsed.expenses);
         if (parsed.cashRegister) setCashRegister(parsed.cashRegister);
@@ -1756,6 +2046,16 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         sales: sales || [],
         createSale,
         cancelSale,
+        quotes: quotes || [],
+        addQuote,
+        updateQuote,
+        deleteQuote,
+        convertQuoteToSale,
+        creditDebtRecords: creditDebtRecords || [],
+        addCreditDebtRecord,
+        recordCreditPayment,
+        updateCreditDebtRecord,
+        deleteCreditDebtRecord,
         expenses: expenses || [],
         addExpense,
         deleteExpense,

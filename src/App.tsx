@@ -11,6 +11,8 @@ import { SalesHistoryView } from './components/sales/SalesHistoryView';
 import { CashRegisterView } from './components/cash/CashRegisterView';
 import { ExpensesView } from './components/expenses/ExpensesView';
 import { ThirdPartiesView } from './components/third-parties/ThirdPartiesView';
+import { CreditDebtView } from './components/credit-debt/CreditDebtView';
+import { QuotesView } from './components/quotes/QuotesView';
 import { InventoryView } from './components/inventory/InventoryView';
 import { ReportsView } from './components/reports/ReportsView';
 import { UsersView } from './components/users/UsersView';
@@ -101,6 +103,10 @@ const MainAppContent: React.FC = () => {
         return <PurchasesView />;
       case 'sales':
         return <SalesHistoryView onNavigate={handleNavigate} />;
+      case 'quotes':
+        return <QuotesView />;
+      case 'credits-debts':
+        return <CreditDebtView />;
       case 'cash':
         return <CashRegisterView onNavigate={handleNavigate} />;
       case 'expenses':

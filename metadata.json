@@ -1,6 +1,6 @@
 {
   "name": "Boutique Manager Pro",
-  "description": "Application de gestion commerciale intégrée pour boutiques : gestion des stocks, point de vente (POS), suivi de caisse, inventaires mensuels, achats fournisseurs et rapports financiers.",
+  "description": "Application complète de gestion commerciale pour boutique : POS, devis & proformas, gestion des crédits clients et dettes fournisseurs, majorations en caisse, annulation de vente et impression directe ticket thermique.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

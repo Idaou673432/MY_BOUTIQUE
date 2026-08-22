@@ -60,6 +60,12 @@ export const generateInvoiceNumber = (count: number): string => {
   return `FAC-${year}-${padded}`;
 };
 
+export const generateQuoteNumber = (count: number): string => {
+  const year = new Date().getFullYear();
+  const padded = String(count + 1).padStart(4, '0');
+  return `DEV-${year}-${padded}`;
+};
+
 export const generateOrderNumber = (count: number): string => {
   const year = new Date().getFullYear();
   const padded = String(count + 1).padStart(3, '0');

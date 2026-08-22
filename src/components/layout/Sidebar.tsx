@@ -6,6 +6,8 @@ import {
   Boxes,
   Truck,
   Receipt,
+  FileSpreadsheet,
+  Landmark,
   Users,
   Building2,
   Wallet,
@@ -29,11 +31,14 @@ interface SidebarProps {
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({ currentTab, onSelectTab, isOpen, onCloseMobile }) => {
-  const { currentUser, metrics, cashRegister, settings, lockSession } = useStore();
+  const { currentUser, metrics, cashRegister, quotes, creditDebtRecords, settings, lockSession } = useStore();
 
   const userRole = currentUser?.role || 'VENDEUR';
   const roleConfig = ROLE_PERMISSIONS[userRole] || ROLE_PERMISSIONS.VENDEUR;
   const isVendeur = userRole === 'VENDEUR';
+
+  const pendingDebtsCount = (creditDebtRecords || []).filter(r => r.status === 'EN_COURS').length;
+  const sentQuotesCount = (quotes || []).filter(q => q.status === 'ENVOYE' || q.status === 'BROUILLON').length;
 
   const allPrincipalItems = [
     {
@@ -46,6 +51,20 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentTab, onSelectTab, isOpe
       label: 'Ventes (POS / Caisse)',
       icon: ShoppingCart,
       highlight: true,
+    },
+    {
+      id: 'quotes',
+      label: 'Devis & Proformas',
+      icon: FileSpreadsheet,
+      badge: sentQuotesCount > 0 ? `${sentQuotesCount}` : undefined,
+      badgeColor: 'bg-indigo-500 text-white',
+    },
+    {
+      id: 'credits-debts',
+      label: 'Crédits & Dettes',
+      icon: Landmark,
+      badge: pendingDebtsCount > 0 ? `${pendingDebtsCount} actif` : undefined,
+      badgeColor: 'bg-amber-500 text-white',
     },
     {
       id: 'products',

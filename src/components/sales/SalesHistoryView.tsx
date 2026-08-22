@@ -11,14 +11,19 @@ import {
   Calendar,
   DollarSign,
   Download,
-  AlertTriangle
+  AlertTriangle,
+  Plus
 } from 'lucide-react';
 import { useStore } from '../../context/StoreContext';
 import { Sale } from '../../types';
 import { formatMoney, formatDateTime, getPaymentMethodLabel } from '../../utils/formatters';
 import { InvoiceModal } from '../common/InvoiceModal';
 
-export const SalesHistoryView: React.FC = () => {
+interface SalesHistoryViewProps {
+  onNavigate?: (tab: string) => void;
+}
+
+export const SalesHistoryView: React.FC<SalesHistoryViewProps> = ({ onNavigate }) => {
   const { sales, cancelSale, settings, currentUser } = useStore();
 
   const [searchTerm, setSearchTerm] = useState('');
@@ -88,6 +93,17 @@ export const SalesHistoryView: React.FC = () => {
             Recherche, réimpression des tickets et gestion des annulations / retours articles.
           </p>
         </div>
+
+        {onNavigate && (
+          <button
+            type="button"
+            onClick={() => onNavigate('pos')}
+            className="inline-flex items-center gap-2 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition-all shadow-xs shrink-0 cursor-pointer"
+          >
+            <Plus className="w-4 h-4 stroke-[3]" />
+            <span>Nouvelle Vente (POS)</span>
+          </button>
+        )}
       </div>
 
       {/* Filter & Search Bar */}
@@ -210,7 +226,7 @@ export const SalesHistoryView: React.FC = () => {
                           >
                             <Printer className="w-4 h-4" />
                           </button>
-                          {!isVendeur && !isCancelled && (
+                          {!isCancelled && (
                             <button
                               onClick={() => handleOpenCancelModal(sale)}
                               className="p-1.5 text-slate-500 hover:text-rose-600 hover:bg-slate-100 rounded-lg"
