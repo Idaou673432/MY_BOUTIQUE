@@ -88,6 +88,8 @@ interface StoreContextType {
   updateProduct: (id: string, product: Partial<Product>) => void;
   deleteProduct: (id: string) => { success: boolean; message?: string };
   importProducts: (productsList: Partial<Product>[]) => number;
+  restoreDefaultCatalog: () => void;
+  restoreProductsFromBackup: () => boolean;
 
   // Stock Movements & Alerts
   stockMovements: StockMovement[];
@@ -248,21 +250,6 @@ function sanitizeForFirestore<T>(data: T): any {
 }
 
 export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-  // One-time cleanup of legacy demo caches
-  try {
-    if (!localStorage.getItem('bpm_reset_zero_completed_v2')) {
-      // Clear legacy storage keys
-      Object.keys(localStorage).forEach((key) => {
-        if (key.startsWith('bpm_')) {
-          localStorage.removeItem(key);
-        }
-      });
-      localStorage.setItem('bpm_reset_zero_completed_v2', 'true');
-    }
-  } catch (e) {
-    console.warn('Storage cleanup error:', e);
-  }
-
   // Local storage loader helper
   const loadState = <T,>(key: string, fallback: T): T => {
     try {
@@ -274,6 +261,31 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       console.error(`Error loading state for ${key}`, e);
     }
     return fallback;
+  };
+
+  // Dedicated Product Loader to safely recover from backup keys if main key is empty
+  const loadInitialProducts = (): Product[] => {
+    try {
+      // 1. Check primary product storage
+      const primary = localStorage.getItem(STORAGE_KEYS.PRODUCTS);
+      if (primary) {
+        const parsed = JSON.parse(primary);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+      // 2. Check backup and recovery keys
+      const backup = localStorage.getItem('bpm_products_backup') || 
+                     localStorage.getItem('bpm_products_recovery_catalog') ||
+                     localStorage.getItem('bpm_products_v2') ||
+                     localStorage.getItem('bpm_products');
+      if (backup) {
+        const parsed = JSON.parse(backup);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch (e) {
+      console.warn('Error loading initial products:', e);
+    }
+    // Default to DEMO_PRODUCTS if empty so the catalog is never lost or blank
+    return DEMO_PRODUCTS;
   };
 
   // States
@@ -289,9 +301,15 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   const [currentUser, setCurrentUserState] = useState<User>(() => loadState(STORAGE_KEYS.CURRENT_USER, INITIAL_USERS[0]));
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
   const [settings, setSettings] = useState<StoreSettings>(() => loadState(STORAGE_KEYS.SETTINGS, INITIAL_SETTINGS));
-  const [categories, setCategories] = useState<Category[]>(() => loadState(STORAGE_KEYS.CATEGORIES, INITIAL_CATEGORIES));
-  const [products, setProducts] = useState<Product[]>(() => loadState(STORAGE_KEYS.PRODUCTS, INITIAL_PRODUCTS));
-  const [suppliers, setSuppliers] = useState<Supplier[]>(() => loadState(STORAGE_KEYS.SUPPLIERS, INITIAL_SUPPLIERS));
+  const [categories, setCategories] = useState<Category[]>(() => {
+    const cats = loadState(STORAGE_KEYS.CATEGORIES, INITIAL_CATEGORIES);
+    return cats && cats.length > 0 ? cats : INITIAL_CATEGORIES;
+  });
+  const [products, setProducts] = useState<Product[]>(() => loadInitialProducts());
+  const [suppliers, setSuppliers] = useState<Supplier[]>(() => {
+    const sups = loadState(STORAGE_KEYS.SUPPLIERS, DEMO_SUPPLIERS);
+    return sups && sups.length > 0 ? sups : DEMO_SUPPLIERS;
+  });
   const [customers, setCustomers] = useState<Customer[]>(() => loadState(STORAGE_KEYS.CUSTOMERS, INITIAL_CUSTOMERS));
   const [stockMovements, setStockMovements] = useState<StockMovement[]>(() => loadState(STORAGE_KEYS.STOCK_MOVEMENTS, INITIAL_STOCK_MOVEMENTS));
   const [sales, setSales] = useState<Sale[]>(() => loadState(STORAGE_KEYS.SALES, INITIAL_SALES));
@@ -310,12 +328,18 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   const isRemoteUpdate = useRef<boolean>(false);
   const debounceTimer = useRef<NodeJS.Timeout | null>(null);
 
-  // Sync to local storage
+  // Sync to local storage & maintain permanent rolling backups
   useEffect(() => { localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(users)); }, [users]);
   useEffect(() => { localStorage.setItem(STORAGE_KEYS.CURRENT_USER, JSON.stringify(currentUser)); }, [currentUser]);
   useEffect(() => { localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(settings)); }, [settings]);
   useEffect(() => { localStorage.setItem(STORAGE_KEYS.CATEGORIES, JSON.stringify(categories)); }, [categories]);
-  useEffect(() => { localStorage.setItem(STORAGE_KEYS.PRODUCTS, JSON.stringify(products)); }, [products]);
+  useEffect(() => { 
+    localStorage.setItem(STORAGE_KEYS.PRODUCTS, JSON.stringify(products)); 
+    if (products && products.length > 0) {
+      localStorage.setItem('bpm_products_backup', JSON.stringify(products));
+      localStorage.setItem('bpm_products_recovery_catalog', JSON.stringify(products));
+    }
+  }, [products]);
   useEffect(() => { localStorage.setItem(STORAGE_KEYS.SUPPLIERS, JSON.stringify(suppliers)); }, [suppliers]);
   useEffect(() => { localStorage.setItem(STORAGE_KEYS.CUSTOMERS, JSON.stringify(customers)); }, [customers]);
   useEffect(() => { localStorage.setItem(STORAGE_KEYS.STOCK_MOVEMENTS, JSON.stringify(stockMovements)); }, [stockMovements]);
@@ -333,35 +357,37 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   useEffect(() => {
     const docRef = doc(db, 'store_data', 'main_store');
     
-    // Initial fetch / check if Firestore has existing state & ensure zero initialization
+    // Initial fetch / check if Firestore has existing state
     getDoc(docRef).then((snap) => {
-      const needsZeroReset = !localStorage.getItem('bpm_firestore_zero_synced_v2');
-      if (!snap.exists() || needsZeroReset) {
-        // Initialization or requested reset in Firestore: save zero data
+      if (!snap.exists()) {
         const initialPayload = sanitizeForFirestore({
           settings: INITIAL_SETTINGS,
           users: INITIAL_USERS,
           categories: INITIAL_CATEGORIES,
-          products: [],
-          suppliers: [],
-          customers: [],
-          stockMovements: [],
-          sales: [],
-          quotes: [],
-          creditDebtRecords: [],
-          purchases: [],
-          expenses: [],
-          cashRegister: null,
-          cashTransactions: [],
-          inventories: [],
-          activityLogs: INITIAL_ACTIVITY_LOGS,
+          products: products.length > 0 ? products : DEMO_PRODUCTS,
+          suppliers: suppliers.length > 0 ? suppliers : DEMO_SUPPLIERS,
+          customers: customers,
+          stockMovements: stockMovements,
+          sales: sales,
+          quotes: quotes,
+          creditDebtRecords: creditDebtRecords,
+          purchases: purchases,
+          expenses: expenses,
+          cashRegister: cashRegister,
+          cashTransactions: cashTransactions,
+          inventories: inventories,
+          activityLogs: activityLogs,
           updatedAt: new Date().toISOString(),
         });
-        setDoc(docRef, initialPayload)
-          .then(() => {
-            localStorage.setItem('bpm_firestore_zero_synced_v2', 'true');
-          })
-          .catch(err => console.warn('Init doc failed:', err));
+        setDoc(docRef, initialPayload).catch(err => console.warn('Init doc failed:', err));
+      } else {
+        const remote = snap.data();
+        if (remote) {
+          // If Firestore remote products is empty but local has products, sync local to Firestore
+          if ((!remote.products || remote.products.length === 0) && products.length > 0) {
+            setDoc(docRef, { products }, { merge: true }).catch(console.warn);
+          }
+        }
       }
     }).catch(err => console.warn('Firestore initial check error:', err));
 
@@ -372,9 +398,11 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
           isRemoteUpdate.current = true;
           if (remote.settings) setSettings(remote.settings);
           if (remote.users) setUsers(remote.users);
-          if (remote.categories) setCategories(remote.categories);
-          if (remote.products) setProducts(remote.products);
-          if (remote.suppliers) setSuppliers(remote.suppliers);
+          if (remote.categories && remote.categories.length > 0) setCategories(remote.categories);
+          if (remote.products && Array.isArray(remote.products) && remote.products.length > 0) {
+            setProducts(remote.products);
+          }
+          if (remote.suppliers && remote.suppliers.length > 0) setSuppliers(remote.suppliers);
           if (remote.customers) setCustomers(remote.customers);
           if (remote.stockMovements) setStockMovements(remote.stockMovements);
           if (remote.sales) setSales(remote.sales);
@@ -828,6 +856,54 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     });
     logActivity('Import massif de produits', 'STOCK', `${count} produits`, 'Import CSV/JSON effectué');
     return count;
+  };
+
+  const restoreDefaultCatalog = () => {
+    setCategories(INITIAL_CATEGORIES);
+    setSuppliers(prev => (prev && prev.length > 0 ? prev : DEMO_SUPPLIERS));
+    setProducts(DEMO_PRODUCTS);
+    localStorage.setItem(STORAGE_KEYS.PRODUCTS, JSON.stringify(DEMO_PRODUCTS));
+    localStorage.setItem('bpm_products_backup', JSON.stringify(DEMO_PRODUCTS));
+    localStorage.setItem('bpm_products_recovery_catalog', JSON.stringify(DEMO_PRODUCTS));
+
+    try {
+      const docRef = doc(db, 'store_data', 'main_store');
+      setDoc(docRef, { products: DEMO_PRODUCTS, categories: INITIAL_CATEGORIES }, { merge: true }).catch(console.warn);
+    } catch (e) {
+      console.warn('Sync default catalog to Firestore failed:', e);
+    }
+
+    logActivity('Restauration Catalogue', 'STOCK', 'Catalogue Standard', `${DEMO_PRODUCTS.length} articles standards restaurés (Alimentation, Boissons, Hygiène, Électronique)`);
+  };
+
+  const restoreProductsFromBackup = (): boolean => {
+    try {
+      const backupStr = localStorage.getItem('bpm_products_backup') || 
+                        localStorage.getItem('bpm_products_recovery_catalog') ||
+                        localStorage.getItem('bpm_products_v2') ||
+                        localStorage.getItem('bpm_products');
+      if (backupStr) {
+        const parsed = JSON.parse(backupStr);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          setProducts(parsed);
+          setCategories(prev => (prev && prev.length > 0 ? prev : INITIAL_CATEGORIES));
+          setSuppliers(prev => (prev && prev.length > 0 ? prev : DEMO_SUPPLIERS));
+          try {
+            const docRef = doc(db, 'store_data', 'main_store');
+            setDoc(docRef, { products: parsed }, { merge: true }).catch(console.warn);
+          } catch (e) {
+            console.warn(e);
+          }
+          logActivity('Restauration Sauvegarde', 'STOCK', 'Sauvegarde Locale', `${parsed.length} articles récupérés de la sauvegarde`);
+          return true;
+        }
+      }
+    } catch (e) {
+      console.error('Failed to restore from backup:', e);
+    }
+    // Fallback: restore full demo catalog
+    restoreDefaultCatalog();
+    return true;
   };
 
   // Suppliers & Purchases
@@ -2028,6 +2104,8 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         updateProduct,
         deleteProduct,
         importProducts,
+        restoreDefaultCatalog,
+        restoreProductsFromBackup,
         stockMovements,
         createStockMovement,
         suppliers,

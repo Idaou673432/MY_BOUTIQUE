@@ -73,7 +73,7 @@ export interface AnnualInventorySummary {
 }
 
 /**
- * Generates isolated HTML string for thermal receipt (80mm or 58mm)
+ * Generates isolated HTML string for thermal receipt (80mm or 58mm) with high-contrast bold typography
  */
 export const generateThermalReceiptHtml = (
   sale: Sale,
@@ -83,14 +83,16 @@ export const generateThermalReceiptHtml = (
 ): string => {
   const is58 = widthMm === 58;
   const currency = settings.currency || 'FCFA';
-  const storeName = settings.storeName || settings.shopName || 'BOUTIQUE MALI';
-  const storeTagline = settings.storeTagline || 'Commerce Général';
+  const storeName = (settings.storeName || settings.shopName || 'BOUTIQUE MALI').toUpperCase();
+  const storeTagline = settings.storeTagline || settings.businessType || '';
   const address = settings.address || settings.shopAddress || '';
   const phone = settings.phone || settings.shopPhone || '';
+  const email = settings.email || settings.shopEmail || '';
   const nif = settings.nifRccm || '';
+  const mobileMoney = settings.mobileMoneyNumber || '';
 
-  const fontSize = is58 ? '10px' : '12px';
-  const headerFontSize = is58 ? '13px' : '15px';
+  const fontSize = is58 ? '12px' : '14px';
+  const headerFontSize = is58 ? '18px' : '22px';
   const maxContentWidth = is58 ? '48mm' : '72mm';
 
   return `
@@ -109,19 +111,25 @@ export const generateThermalReceiptHtml = (
       box-sizing: border-box;
       margin: 0;
       padding: 0;
+      font-weight: 900 !important;
+      color: #000000 !important;
+      -webkit-text-stroke: 0.35px #000000;
+      text-shadow: 0 0 0.3px #000000;
     }
     body {
-      font-family: 'Courier New', Courier, monospace, -apple-system, BlinkMacSystemFont, sans-serif;
+      font-family: 'Courier New', Courier, monospace, -apple-system, BlinkMacSystemFont, Arial, sans-serif;
       font-size: ${fontSize};
-      line-height: 1.25;
-      color: #000;
-      background: #fff;
+      font-weight: 900 !important;
+      line-height: 1.35;
+      color: #000000 !important;
+      background: #ffffff !important;
       padding: ${is58 ? '2mm' : '4mm'};
       width: ${widthMm}mm;
       max-width: ${widthMm}mm;
       margin: 0 auto;
-      -webkit-print-color-adjust: exact;
-      print-color-adjust: exact;
+      -webkit-print-color-adjust: exact !important;
+      print-color-adjust: exact !important;
+      -webkit-font-smoothing: antialiased;
     }
     .ticket-container {
       width: 100%;
@@ -131,63 +139,100 @@ export const generateThermalReceiptHtml = (
     .center { text-align: center; }
     .right { text-align: right; }
     .left { text-align: left; }
-    .bold { font-weight: bold; }
+    .bold { font-weight: 900 !important; }
     .uppercase { text-transform: uppercase; }
     .divider {
-      border-top: 1px dashed #000;
-      margin: 4px 0;
+      border-top: 2px solid #000000;
+      margin: 6px 0;
     }
     .double-divider {
-      border-top: 2px solid #000;
-      margin: 5px 0;
+      border-top: 3px double #000000;
+      margin: 7px 0;
+    }
+    .store-header-box {
+      text-align: center;
+      margin-bottom: 5px;
+      padding-bottom: 2px;
     }
     .store-name {
       font-size: ${headerFontSize};
-      font-weight: 900;
+      font-weight: 900 !important;
       letter-spacing: 0.5px;
+      margin-bottom: 4px;
+      line-height: 1.15;
+      text-transform: uppercase;
+      color: #000000 !important;
+    }
+    .store-sub {
+      font-size: ${is58 ? '11px' : '13px'};
+      font-weight: 900 !important;
+      margin-bottom: 3px;
+      line-height: 1.3;
+      color: #000000 !important;
+      text-transform: uppercase;
+    }
+    .store-info-line {
+      font-size: ${is58 ? '11px' : '13px'};
+      font-weight: 900 !important;
       margin-bottom: 2px;
+      line-height: 1.35;
+      color: #000000 !important;
     }
     .meta-row {
       display: flex;
       justify-content: space-between;
-      margin-bottom: 2px;
+      margin-bottom: 3px;
       font-size: ${fontSize};
+      font-weight: 900 !important;
+      color: #000000 !important;
     }
     .item-table {
       width: 100%;
       border-collapse: collapse;
-      margin: 4px 0;
+      margin: 6px 0;
     }
     .item-table th {
-      border-bottom: 1px dashed #000;
-      padding: 2px 0;
-      font-size: ${is58 ? '9px' : '10px'};
+      border-bottom: 2px solid #000000;
+      border-top: 2px solid #000000;
+      padding: 4px 0;
+      font-size: ${is58 ? '11px' : '13px'};
+      font-weight: 900 !important;
       text-transform: uppercase;
+      color: #000000 !important;
     }
     .item-table td {
-      padding: 2px 0;
+      padding: 4px 0;
       vertical-align: top;
+      font-size: ${fontSize};
+      font-weight: 900 !important;
+      border-bottom: 1px dashed #000000;
+      color: #000000 !important;
     }
     .total-row {
       display: flex;
       justify-content: space-between;
-      font-size: ${is58 ? '11px' : '13px'};
-      font-weight: 900;
-      margin: 3px 0;
+      font-size: ${is58 ? '15px' : '18px'};
+      font-weight: 900 !important;
+      margin: 6px 0;
+      padding: 4px 0;
+      color: #000000 !important;
     }
     .barcode {
       text-align: center;
-      margin: 6px 0 2px 0;
+      margin: 8px 0 3px 0;
       font-family: monospace;
       letter-spacing: 3px;
-      font-size: 11px;
-      font-weight: bold;
+      font-size: 13px;
+      font-weight: 900 !important;
+      color: #000000 !important;
     }
     .footer-msg {
       text-align: center;
-      font-size: ${is58 ? '8.5px' : '9.5px'};
-      margin-top: 5px;
-      color: #222;
+      font-size: ${is58 ? '10px' : '12px'};
+      font-weight: 900 !important;
+      margin-top: 8px;
+      line-height: 1.4;
+      color: #000000 !important;
     }
     .no-print-toolbar {
       display: flex;
@@ -199,23 +244,23 @@ export const generateThermalReceiptHtml = (
       margin-bottom: 8px;
     }
     .btn-print {
-      background: #4f46e5;
-      color: white;
+      background: #4f46e5 !important;
+      color: white !important;
       border: none;
-      padding: 6px 14px;
-      font-weight: bold;
+      padding: 8px 16px;
+      font-weight: 900;
       border-radius: 6px;
       cursor: pointer;
-      font-size: 12px;
+      font-size: 13px;
     }
     .btn-close {
-      background: #64748b;
-      color: white;
+      background: #64748b !important;
+      color: white !important;
       border: none;
-      padding: 6px 12px;
+      padding: 8px 14px;
       border-radius: 6px;
       cursor: pointer;
-      font-size: 12px;
+      font-size: 13px;
     }
     @media print {
       .no-print-toolbar {
@@ -223,24 +268,37 @@ export const generateThermalReceiptHtml = (
       }
       body {
         padding: 0 !important;
+        color: #000000 !important;
+      }
+      * {
+        color: #000000 !important;
+        font-weight: 900 !important;
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+      }
+      .store-header-box * {
+        font-weight: 900 !important;
+        color: #000000 !important;
       }
     }
   </style>
 </head>
 <body>
   <div class="no-print-toolbar">
-    <button class="btn-print" onclick="window.print()">🖨️ IMPRIMER CE TICKET</button>
+    <button class="btn-print" onclick="window.print()">🖨️ IMPRIMER CE TICKET (TEXTE GRAS)</button>
     <button class="btn-close" onclick="window.close()">✕ Fermer</button>
   </div>
 
   <div class="ticket-container">
-    <!-- Store Header -->
-    <div class="center">
-      <div class="store-name uppercase">${storeName}</div>
-      ${storeTagline ? `<div style="font-size: ${is58 ? '8.5px' : '10px'}">${storeTagline}</div>` : ''}
-      ${address ? `<div style="font-size: ${is58 ? '8.5px' : '10px'}">${address}</div>` : ''}
-      ${phone ? `<div style="font-size: ${is58 ? '8.5px' : '10px'}">Tél: ${phone}</div>` : ''}
-      ${nif ? `<div style="font-size: ${is58 ? '8px' : '9px'}">NIF: ${nif}</div>` : ''}
+    <!-- Store Header (ALL IN BOLD AND CLEARLY VISIBLE) -->
+    <div class="store-header-box center">
+      <div class="store-name bold">${storeName}</div>
+      ${storeTagline ? `<div class="store-sub bold uppercase">${storeTagline}</div>` : ''}
+      ${address ? `<div class="store-info-line bold uppercase">ADRESSE: ${address}</div>` : ''}
+      ${phone ? `<div class="store-info-line bold">TÉL: ${phone}</div>` : ''}
+      ${email ? `<div class="store-info-line bold">EMAIL: ${email}</div>` : ''}
+      ${nif ? `<div class="store-info-line bold uppercase">NIF / RCCM: ${nif}</div>` : ''}
+      ${mobileMoney ? `<div class="store-info-line bold uppercase">PAIEMENT MOBILE: ${mobileMoney}</div>` : ''}
     </div>
 
     <div class="divider"></div>
@@ -248,21 +306,21 @@ export const generateThermalReceiptHtml = (
     <!-- Metadata -->
     <div>
       <div class="meta-row">
-        <span>Ticket N°:</span>
+        <span class="bold">TICKET N°:</span>
         <span class="bold">${sale.invoiceNumber}</span>
       </div>
       <div class="meta-row">
-        <span>Date:</span>
-        <span>${formatDateTime(sale.date)}</span>
+        <span class="bold">DATE:</span>
+        <span class="bold">${formatDateTime(sale.date)}</span>
       </div>
       <div class="meta-row">
-        <span>Caissier:</span>
-        <span>${sale.userName || 'Caisse 1'}</span>
+        <span class="bold">CAISSIER:</span>
+        <span class="bold">${sale.userName || 'Caisse 1'}</span>
       </div>
       ${sale.customerName ? `
       <div class="meta-row">
-        <span>Client:</span>
-        <span class="bold">${sale.customerName}</span>
+        <span class="bold">CLIENT:</span>
+        <span class="bold uppercase">${sale.customerName}</span>
       </div>
       ` : ''}
     </div>
@@ -273,85 +331,86 @@ export const generateThermalReceiptHtml = (
     <table class="item-table">
       <thead>
         <tr>
-          <th class="left">Article</th>
-          <th class="center">Qté</th>
-          <th class="right">P.U</th>
-          <th class="right">Total</th>
+          <th class="left bold">Article</th>
+          <th class="center bold">Qté</th>
+          <th class="right bold">P.U</th>
+          <th class="right bold">Total</th>
         </tr>
       </thead>
       <tbody>
         ${sale.items.map((item) => `
         <tr>
-          <td class="left" style="max-width: ${is58 ? '24mm' : '36mm'}; word-break: break-word;">
+          <td class="left bold" style="max-width: ${is58 ? '24mm' : '36mm'}; word-break: break-word;">
             <div class="bold">${item.productName}</div>
-            ${item.discountPercent > 0 ? `<div style="font-size: 8px; color: #333;">Remise -${item.discountPercent}%</div>` : ''}
+            ${item.discountPercent > 0 ? `<div style="font-size: ${is58 ? '9px' : '10px'};" class="bold">Remise -${item.discountPercent}%</div>` : ''}
           </td>
-          <td class="center">${formatQuantity(item.quantity)}</td>
-          <td class="right">${formatMoney(item.unitPrice, '')}</td>
+          <td class="center bold">${formatQuantity(item.quantity)}</td>
+          <td class="right bold">${formatMoney(item.unitPrice, '')}</td>
           <td class="right bold">${formatMoney(item.total, '')}</td>
         </tr>
         `).join('')}
       </tbody>
     </table>
 
-    <div class="divider"></div>
-
     <!-- Totals -->
     <div>
       <div class="meta-row">
-        <span>Sous-total:</span>
-        <span>${formatMoney(sale.subtotal, currency)}</span>
+        <span class="bold">SOUS-TOTAL:</span>
+        <span class="bold">${formatMoney(sale.subtotal, currency)}</span>
       </div>
       ${sale.discountTotal > 0 ? `
       <div class="meta-row">
-        <span>Remise accordée:</span>
-        <span>-${formatMoney(sale.discountTotal, currency)}</span>
+        <span class="bold">REMISE:</span>
+        <span class="bold">-${formatMoney(sale.discountTotal, currency)}</span>
       </div>
       ` : ''}
       ${settings.taxEnabled && sale.taxAmount > 0 ? `
       <div class="meta-row">
-        <span>TVA (${settings.taxRatePercent}%):</span>
-        <span>${formatMoney(sale.taxAmount, currency)}</span>
+        <span class="bold">TVA (${settings.taxRatePercent}%):</span>
+        <span class="bold">${formatMoney(sale.taxAmount, currency)}</span>
       </div>
       ` : ''}
+      
       <div class="double-divider"></div>
       <div class="total-row">
-        <span>NET À PAYER:</span>
-        <span>${formatMoney(sale.totalAmount, currency)}</span>
+        <span class="bold uppercase">NET À PAYER:</span>
+        <span class="bold">${formatMoney(sale.totalAmount, currency)}</span>
       </div>
       <div class="double-divider"></div>
     </div>
 
     <!-- Payment info -->
-    <div style="font-size: ${is58 ? '9px' : '10.5px'}; margin-top: 3px;">
+    <div style="font-size: ${is58 ? '10px' : '11.5px'}; margin-top: 4px;">
       <div class="meta-row">
-        <span>Mode de règlement:</span>
-        <span class="bold">${getPaymentMethodLabel(sale.paymentMethod)}</span>
+        <span class="bold">PAIEMENT:</span>
+        <span class="bold uppercase">${getPaymentMethodLabel(sale.paymentMethod)}</span>
       </div>
       ${sale.amountReceived > 0 ? `
       <div class="meta-row">
-        <span>Montant Reçu:</span>
-        <span>${formatMoney(sale.amountReceived, currency)}</span>
+        <span class="bold">MONTANT REÇU:</span>
+        <span class="bold">${formatMoney(sale.amountReceived, currency)}</span>
       </div>
       ` : ''}
       ${sale.changeGiven > 0 ? `
-      <div class="meta-row bold">
-        <span>Monnaie Rendue:</span>
-        <span>${formatMoney(sale.changeGiven, currency)}</span>
+      <div class="meta-row">
+        <span class="bold">MONNAIE RENDUE:</span>
+        <span class="bold">${formatMoney(sale.changeGiven, currency)}</span>
       </div>
       ` : ''}
     </div>
 
+    <div class="divider"></div>
+
     <!-- Barcode simulation -->
-    <div class="barcode">
+    <div class="barcode bold">
       ||||| ||| |||| || |||||| | |||
-      <div style="font-size: 8px; font-weight: normal; letter-spacing: 0;">${sale.invoiceNumber}</div>
+      <div style="font-size: 10px; font-weight: 900; letter-spacing: 0;">${sale.invoiceNumber}</div>
     </div>
 
     <!-- Footer message -->
-    <div class="footer-msg">
-      <div>${settings.receiptFooterMessage || 'Merci de votre visite et à bientôt !'}</div>
-      <div style="margin-top: 2px;">Les articles vendus ne sont ni repris ni échangés sauf accord préalable.</div>
+    <div class="footer-msg bold">
+      <div class="bold">${settings.receiptFooterMessage || 'Merci de votre visite et à bientôt !'}</div>
+      <div style="margin-top: 3px;" class="bold">Les articles vendus ne sont ni repris ni échangés sauf accord préalable.</div>
     </div>
   </div>
 
@@ -370,7 +429,7 @@ export const generateThermalReceiptHtml = (
 };
 
 /**
- * Generates official A4 invoice HTML
+ * Generates official A4 invoice HTML with bold, high-contrast typography
  */
 export const generateA4InvoiceHtml = (
   sale: Sale,
@@ -378,12 +437,13 @@ export const generateA4InvoiceHtml = (
   customer?: Customer
 ): string => {
   const currency = settings.currency || 'FCFA';
-  const storeName = settings.storeName || settings.shopName || 'BOUTIQUE MALI';
-  const storeTagline = settings.storeTagline || 'Commerce Général';
-  const address = settings.address || settings.shopAddress || 'Bamako, Mali';
+  const storeName = (settings.storeName || settings.shopName || 'BOUTIQUE MALI').toUpperCase();
+  const storeTagline = settings.storeTagline || settings.businessType || '';
+  const address = settings.address || settings.shopAddress || '';
   const phone = settings.phone || settings.shopPhone || '';
   const email = settings.email || settings.shopEmail || '';
   const nif = settings.nifRccm || '';
+  const mobileMoney = settings.mobileMoneyNumber || '';
 
   return `
 <!DOCTYPE html>
@@ -400,42 +460,69 @@ export const generateA4InvoiceHtml = (
       box-sizing: border-box;
       margin: 0;
       padding: 0;
+      font-weight: 900 !important;
+      color: #000000 !important;
+      -webkit-text-stroke: 0.35px #000000;
+      text-shadow: 0 0 0.3px #000000;
     }
     body {
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-      font-size: 11px;
+      font-size: 12px;
+      font-weight: 900 !important;
       line-height: 1.4;
-      color: #0f172a;
+      color: #000000 !important;
       background: #fff;
-      padding: 10mm;
+      padding: 8mm;
+      -webkit-print-color-adjust: exact !important;
+      print-color-adjust: exact !important;
+      -webkit-font-smoothing: antialiased;
     }
     .center { text-align: center; }
     .right { text-align: right; }
     .left { text-align: left; }
-    .bold { font-weight: bold; }
+    .bold { font-weight: 900 !important; }
     .uppercase { text-transform: uppercase; }
     .header {
       display: flex;
       justify-content: space-between;
       align-items: flex-start;
-      border-bottom: 2px solid #0f172a;
+      border-bottom: 3px solid #000000;
       padding-bottom: 12px;
       margin-bottom: 16px;
     }
     .store-title {
-      font-size: 20px;
-      font-weight: 900;
-      color: #0f172a;
+      font-size: 24px;
+      font-weight: 900 !important;
+      color: #000000 !important;
       text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 3px;
+    }
+    .store-tagline-a4 {
+      font-size: 12px;
+      font-weight: 900 !important;
+      color: #000000 !important;
+      text-transform: uppercase;
+      margin-bottom: 5px;
+    }
+    .store-info-a4 {
+      font-size: 12px;
+      font-weight: 900 !important;
+      color: #000000 !important;
+      line-height: 1.45;
+    }
+    .store-info-a4 strong {
+      font-weight: 900 !important;
+      color: #000000 !important;
     }
     .invoice-badge {
       display: inline-block;
-      background: #0f172a;
-      color: #fff;
-      font-weight: 900;
-      padding: 4px 10px;
+      background: #000000 !important;
+      color: #ffffff !important;
+      font-weight: 900 !important;
+      padding: 6px 12px;
       border-radius: 4px;
-      font-size: 12px;
+      font-size: 13px;
       text-transform: uppercase;
     }
     .info-grid {
@@ -446,7 +533,7 @@ export const generateA4InvoiceHtml = (
       background: #f8fafc;
       padding: 12px;
       border-radius: 8px;
-      border: 1px solid #e2e8f0;
+      border: 2px solid #000000;
     }
     table.invoice-table {
       width: 100%;
@@ -454,17 +541,19 @@ export const generateA4InvoiceHtml = (
       margin-bottom: 16px;
     }
     table.invoice-table th {
-      background: #0f172a;
-      color: #fff;
+      background: #000000 !important;
+      color: #ffffff !important;
       padding: 8px;
-      font-size: 10px;
+      font-size: 11px;
+      font-weight: 900 !important;
       text-transform: uppercase;
       text-align: left;
     }
     table.invoice-table td {
       padding: 8px;
-      border-bottom: 1px solid #e2e8f0;
-      font-size: 11px;
+      border-bottom: 1.5px solid #000000;
+      font-size: 12px;
+      font-weight: 800 !important;
     }
     .totals-area {
       display: flex;
@@ -473,33 +562,35 @@ export const generateA4InvoiceHtml = (
       margin-bottom: 20px;
     }
     .totals-box {
-      width: 260px;
-      background: #f8fafc;
-      border: 1px solid #e2e8f0;
+      width: 290px;
+      background: #ffffff;
+      border: 2px solid #000000;
       border-radius: 8px;
       padding: 12px;
     }
     .total-line {
       display: flex;
       justify-content: space-between;
-      margin-bottom: 4px;
+      margin-bottom: 5px;
+      font-size: 12px;
+      font-weight: 800 !important;
     }
     .net-to-pay {
-      border-top: 1px solid #cbd5e1;
+      border-top: 2px solid #000000;
       padding-top: 6px;
       margin-top: 6px;
-      font-size: 14px;
-      font-weight: 900;
-      color: #4338ca;
+      font-size: 16px;
+      font-weight: 900 !important;
+      color: #000000 !important;
     }
     .signatures {
       display: grid;
       grid-template-columns: 1fr 1fr;
-      gap: 20px;
+      gap: 24px;
       margin-top: 24px;
     }
     .sig-box {
-      border: 1px dashed #cbd5e1;
+      border: 2px dashed #000000;
       border-radius: 8px;
       height: 90px;
       padding: 8px;
@@ -507,14 +598,16 @@ export const generateA4InvoiceHtml = (
       flex-direction: column;
       justify-content: space-between;
       text-align: center;
+      font-weight: 800 !important;
     }
     .footer {
-      border-top: 1px solid #e2e8f0;
+      border-top: 1.5px solid #000000;
       margin-top: 24px;
       padding-top: 10px;
       text-align: center;
-      font-size: 9px;
-      color: #64748b;
+      font-size: 10px;
+      font-weight: 800 !important;
+      color: #000000 !important;
     }
     .no-print-toolbar {
       display: flex;
@@ -526,8 +619,8 @@ export const generateA4InvoiceHtml = (
       margin-bottom: 12px;
     }
     .btn-print {
-      background: #4f46e5;
-      color: white;
+      background: #4f46e5 !important;
+      color: white !important;
       border: none;
       padding: 8px 18px;
       font-weight: bold;
@@ -535,8 +628,8 @@ export const generateA4InvoiceHtml = (
       cursor: pointer;
     }
     .btn-close {
-      background: #64748b;
-      color: white;
+      background: #64748b !important;
+      color: white !important;
       border: none;
       padding: 8px 14px;
       border-radius: 6px;
@@ -548,73 +641,81 @@ export const generateA4InvoiceHtml = (
       }
       body {
         padding: 0 !important;
+        color: #000000 !important;
+      }
+      * {
+        color: #000000 !important;
+        font-weight: 900 !important;
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
       }
     }
   </style>
 </head>
 <body>
   <div class="no-print-toolbar">
-    <button class="btn-print" onclick="window.print()">🖨️ IMPRIMER CETTE FACTURE A4</button>
+    <button class="btn-print" onclick="window.print()">🖨️ IMPRIMER CETTE FACTURE A4 (TEXTE GRAS)</button>
     <button class="btn-close" onclick="window.close()">✕ Fermer</button>
   </div>
 
   <div class="header">
     <div>
-      <div class="store-title">${storeName}</div>
-      ${storeTagline ? `<div style="font-size: 11px; color: #475569;">${storeTagline}</div>` : ''}
-      <div style="font-size: 10px; color: #475569; margin-top: 4px;">
-        ${address ? `<div>${address}</div>` : ''}
-        ${phone ? `<div>Tél: <strong>${phone}</strong></div>` : ''}
-        ${email ? `<div>Email: ${email}</div>` : ''}
-        ${nif ? `<div>NIF / RCCM : <strong>${nif}</strong></div>` : ''}
+      <div class="store-title bold">${storeName}</div>
+      ${storeTagline ? `<div class="store-tagline-a4 bold">${storeTagline}</div>` : ''}
+      <div class="store-info-a4 bold">
+        ${address ? `<div><strong>ADRESSE :</strong> <span>${address.toUpperCase()}</span></div>` : ''}
+        ${phone ? `<div><strong>TÉLÉPHONE :</strong> <span>${phone}</span></div>` : ''}
+        ${email ? `<div><strong>EMAIL :</strong> <span>${email}</span></div>` : ''}
+        ${nif ? `<div><strong>NIF / RCCM :</strong> <span>${nif}</span></div>` : ''}
+        ${mobileMoney ? `<div><strong>PAIEMENT MOBILE :</strong> <span>${mobileMoney}</span></div>` : ''}
       </div>
     </div>
 
     <div class="right">
       <div class="invoice-badge">FACTURE OFFICIELLE</div>
-      <div style="font-size: 11px; margin-top: 6px;">
+      <div style="font-size: 12px; margin-top: 6px;" class="bold">
         <div>N° : <strong>${sale.invoiceNumber}</strong></div>
         <div>Date : <strong>${formatDate(sale.date)}</strong></div>
-        <div>Établi par : <strong>${sale.userName}</strong></div>
+        <div>Établi par : <strong>${sale.userName || 'Caisse'}</strong></div>
       </div>
     </div>
   </div>
 
   <div class="info-grid">
     <div>
-      <div style="font-size: 9px; font-weight: bold; color: #94a3b8; text-transform: uppercase;">Facturé à :</div>
-      <div style="font-size: 13px; font-weight: bold; margin-top: 2px;">${sale.customerName || 'Client Comptoir'}</div>
-      ${customer?.phone ? `<div>Tél : ${customer.phone}</div>` : ''}
-      ${customer?.address ? `<div>Adresse : ${customer.address}</div>` : ''}
+      <div style="font-size: 10px; font-weight: 900; text-transform: uppercase;">Facturé à :</div>
+      <div style="font-size: 14px; font-weight: 900; margin-top: 2px;" class="uppercase">${sale.customerName || 'Client Comptoir'}</div>
+      ${customer?.phone ? `<div class="bold">Tél : ${customer.phone}</div>` : ''}
+      ${customer?.address ? `<div class="bold">Adresse : ${customer.address}</div>` : ''}
     </div>
     <div class="right">
-      <div style="font-size: 9px; font-weight: bold; color: #94a3b8; text-transform: uppercase;">Modalités de Règlement :</div>
-      <div style="font-weight: bold; margin-top: 2px;">${getPaymentMethodLabel(sale.paymentMethod)}</div>
-      <div style="color: #059669; font-weight: bold;">Statut : Réglée / Acquittée</div>
+      <div style="font-size: 10px; font-weight: 900; text-transform: uppercase;">Modalités de Règlement :</div>
+      <div style="font-weight: 900; margin-top: 2px;" class="uppercase">${getPaymentMethodLabel(sale.paymentMethod)}</div>
+      <div style="font-weight: 900;" class="uppercase">Statut : Réglée / Acquittée</div>
     </div>
   </div>
 
   <table class="invoice-table">
     <thead>
       <tr>
-        <th style="width: 40px;">N°</th>
-        <th>Désignation de l'Article</th>
-        <th class="center" style="width: 70px;">Qté</th>
-        <th class="right" style="width: 110px;">Prix Unitaire</th>
-        <th class="right" style="width: 120px;">Montant Net (${currency})</th>
+        <th style="width: 40px;" class="bold">N°</th>
+        <th class="bold">Désignation de l'Article</th>
+        <th class="center bold" style="width: 70px;">Qté</th>
+        <th class="right bold" style="width: 120px;">Prix Unitaire</th>
+        <th class="right bold" style="width: 140px;">Montant Net (${currency})</th>
       </tr>
     </thead>
     <tbody>
       ${sale.items.map((item, idx) => `
       <tr>
-        <td style="color: #64748b;">${idx + 1}</td>
+        <td class="bold">${idx + 1}</td>
         <td>
-          <strong>${item.productName}</strong>
-          ${item.productCode ? `<span style="font-size: 9px; color: #94a3b8; margin-left: 4px;">(${item.productCode})</span>` : ''}
-          ${item.discountPercent > 0 ? `<div style="font-size: 9px; color: #059669;">Remise de ${item.discountPercent}%</div>` : ''}
+          <strong class="bold">${item.productName}</strong>
+          ${item.productCode ? `<span style="font-size: 10px; margin-left: 4px;" class="bold">(${item.productCode})</span>` : ''}
+          ${item.discountPercent > 0 ? `<div style="font-size: 10px;" class="bold">Remise de ${item.discountPercent}%</div>` : ''}
         </td>
-        <td class="center font-bold">${formatQuantity(item.quantity)} ${item.productUnit || ''}</td>
-        <td class="right">${formatMoney(item.unitPrice, '')}</td>
+        <td class="center bold">${formatQuantity(item.quantity)} ${item.productUnit || ''}</td>
+        <td class="right bold">${formatMoney(item.unitPrice, '')}</td>
         <td class="right bold">${formatMoney(item.total, '')}</td>
       </tr>
       `).join('')}
@@ -622,10 +723,10 @@ export const generateA4InvoiceHtml = (
   </table>
 
   <div class="totals-area">
-    <div style="max-width: 320px;">
-      <div style="background: #eef2ff; border: 1px solid #c7d2fe; border-radius: 6px; padding: 8px; font-size: 10px;">
-        <span style="font-weight: bold;">Arrêtée la présente facture à la somme de :</span><br>
-        <span style="font-style: italic; font-weight: bold; text-transform: uppercase; color: #312e81;">
+    <div style="max-width: 340px;">
+      <div style="background: #ffffff; border: 2px solid #000000; border-radius: 6px; padding: 10px; font-size: 11px;">
+        <span style="font-weight: 900;">Arrêtée la présente facture à la somme de :</span><br>
+        <span style="font-style: italic; font-weight: 900; text-transform: uppercase; color: #000000;">
           ${numberToWordsFrench(Math.round(sale.totalAmount))} ${currency}
         </span>
       </div>
@@ -633,42 +734,42 @@ export const generateA4InvoiceHtml = (
 
     <div class="totals-box">
       <div class="total-line">
-        <span>Total Brut :</span>
-        <span>${formatMoney(sale.subtotal, currency)}</span>
+        <span class="bold">Total Brut :</span>
+        <span class="bold">${formatMoney(sale.subtotal, currency)}</span>
       </div>
       ${sale.discountTotal > 0 ? `
-      <div class="total-line" style="color: #059669;">
-        <span>Remise :</span>
-        <span>-${formatMoney(sale.discountTotal, currency)}</span>
+      <div class="total-line">
+        <span class="bold">Remise :</span>
+        <span class="bold">-${formatMoney(sale.discountTotal, currency)}</span>
       </div>
       ` : ''}
       ${settings.taxEnabled && sale.taxAmount > 0 ? `
       <div class="total-line">
-        <span>TVA (${settings.taxRatePercent}%) :</span>
-        <span>${formatMoney(sale.taxAmount, currency)}</span>
+        <span class="bold">TVA (${settings.taxRatePercent}%) :</span>
+        <span class="bold">${formatMoney(sale.taxAmount, currency)}</span>
       </div>
       ` : ''}
       <div class="total-line net-to-pay">
-        <span>Net à Payer :</span>
-        <span>${formatMoney(sale.totalAmount, currency)}</span>
+        <span class="bold uppercase">Net à Payer :</span>
+        <span class="bold">${formatMoney(sale.totalAmount, currency)}</span>
       </div>
     </div>
   </div>
 
   <div class="signatures">
     <div class="sig-box">
-      <div style="font-weight: bold; font-size: 10px; text-transform: uppercase;">Le Client (Bon pour accord)</div>
-      <div style="color: #94a3b8; font-size: 9px; font-style: italic;">Date et Signature</div>
+      <div style="font-weight: 900; font-size: 11px; text-transform: uppercase;">Le Client (Bon pour accord)</div>
+      <div style="font-size: 10px; font-style: italic;" class="bold">Date et Signature</div>
     </div>
     <div class="sig-box">
-      <div style="font-weight: bold; font-size: 10px; text-transform: uppercase;">Pour l'Établissement (Signature & Cachet)</div>
-      <div style="color: #94a3b8; font-size: 9px; font-style: italic;">Cachet commercial autorisé</div>
+      <div style="font-weight: 900; font-size: 11px; text-transform: uppercase;">Pour l'Établissement (Signature & Cachet)</div>
+      <div style="font-size: 10px; font-style: italic;" class="bold">Cachet commercial autorisé</div>
     </div>
   </div>
 
-  <div class="footer">
-    <div>${settings.receiptFooterMessage || 'Merci de votre confiance.'}</div>
-    <div style="margin-top: 2px;">
+  <div class="footer bold">
+    <div class="bold">${settings.receiptFooterMessage || 'Merci de votre confiance.'}</div>
+    <div style="margin-top: 3px;" class="bold">
       ${settings.invoiceLegalNotice || 'Facture établie conformément aux lois en vigueur. En cas de contestation, seuls les tribunaux compétents sont habilités.'}
     </div>
   </div>
@@ -1032,10 +1133,13 @@ export const generateEscPosBytes = (
 ): Uint8Array => {
   const bytes: number[] = [];
   const currency = settings.currency || 'FCFA';
-  const storeName = settings.storeName || settings.shopName || 'BOUTIQUE MALI';
-  const storeTagline = settings.storeTagline || 'Commerce General';
+  const storeName = (settings.storeName || settings.shopName || 'BOUTIQUE MALI').toUpperCase();
+  const storeTagline = settings.storeTagline || settings.businessType || '';
   const address = settings.address || settings.shopAddress || '';
   const phone = settings.phone || settings.shopPhone || '';
+  const email = settings.email || settings.shopEmail || '';
+  const nif = settings.nifRccm || '';
+  const mobileMoney = settings.mobileMoneyNumber || '';
 
   // Helpers
   const add = (...b: number[]) => bytes.push(...b);
@@ -1046,8 +1150,8 @@ export const generateEscPosBytes = (
   const center = () => add(0x1b, 0x61, 0x01);
   const left = () => add(0x1b, 0x61, 0x00);
   const right = () => add(0x1b, 0x61, 0x02);
-  const boldOn = () => add(0x1b, 0x45, 0x01);
-  const boldOff = () => add(0x1b, 0x45, 0x00);
+  const boldOn = () => add(0x1b, 0x45, 0x01, 0x1b, 0x47, 0x01);
+  const boldOff = () => add(0x1b, 0x45, 0x00, 0x1b, 0x47, 0x00);
   const doubleSize = () => add(0x1d, 0x21, 0x11);
   const normalSize = () => add(0x1d, 0x21, 0x00);
 
@@ -1059,44 +1163,49 @@ export const generateEscPosBytes = (
     add(0x1b, 0x70, 0x00, 0x19, 0xfa);
   }
 
-  // Header
+  // Header (ALL IN BOLD AND CLEAR)
   center();
   boldOn();
   doubleSize();
-  line(storeName.toUpperCase());
+  line(storeName);
   normalSize();
+  boldOn();
+  if (storeTagline) line(storeTagline.toUpperCase());
+  if (address) line(`ADRESSE: ${address.toUpperCase()}`);
+  if (phone) line(`TEL: ${phone}`);
+  if (email) line(`EMAIL: ${email}`);
+  if (nif) line(`NIF/RCCM: ${nif}`);
+  if (mobileMoney) line(`OM/WAVE: ${mobileMoney}`);
   boldOff();
-  if (storeTagline) line(storeTagline);
-  if (address) line(address);
-  if (phone) line(`Tel: ${phone}`);
-  if (settings.nifRccm) line(`NIF: ${settings.nifRccm}`);
 
   dashedLine();
 
-  // Metadata
+  // Metadata (All in BOLD)
   left();
+  boldOn();
   line(`Ticket N: ${sale.invoiceNumber}`);
   line(`Date: ${formatDateTime(sale.date)}`);
   line(`Caissier: ${sale.userName || 'Caisse'}`);
-  if (sale.customerName) line(`Client: ${sale.customerName}`);
+  if (sale.customerName) line(`Client: ${sale.customerName.toUpperCase()}`);
+  boldOff();
 
   dashedLine();
 
-  // Items
+  // Items (Bold names and lines)
   sale.items.forEach((item) => {
     boldOn();
     line(item.productName);
-    boldOff();
-
     const qtyStr = `${formatQuantity(item.quantity)} x ${formatMoney(item.unitPrice, '')}`;
     const totStr = `${formatMoney(item.total, '')} ${currency}`;
     const spaces = Math.max(1, widthColumns - qtyStr.length - totStr.length);
     line(qtyStr + ' '.repeat(spaces) + totStr);
+    boldOff();
   });
 
   dashedLine();
 
-  // Totals
+  // Totals (Bold)
+  boldOn();
   const subTotalLabel = 'Sous-total:';
   const subTotalVal = formatMoney(sale.subtotal, currency);
   line(subTotalLabel + ' '.repeat(Math.max(1, widthColumns - subTotalLabel.length - subTotalVal.length)) + subTotalVal);
@@ -1106,6 +1215,7 @@ export const generateEscPosBytes = (
     const discVal = `-${formatMoney(sale.discountTotal, currency)}`;
     line(discLabel + ' '.repeat(Math.max(1, widthColumns - discLabel.length - discVal.length)) + discVal);
   }
+  boldOff();
 
   doubleLine();
 
@@ -1118,23 +1228,25 @@ export const generateEscPosBytes = (
   boldOff();
   doubleLine();
 
-  // Payment
+  // Payment (Bold)
   left();
+  boldOn();
   line(`Paiement: ${getPaymentMethodLabel(sale.paymentMethod)}`);
   if (sale.amountReceived > 0) {
     line(`Montant Recu: ${formatMoney(sale.amountReceived, currency)}`);
   }
   if (sale.changeGiven > 0) {
-    boldOn();
     line(`Monnaie Rendue: ${formatMoney(sale.changeGiven, currency)}`);
-    boldOff();
   }
+  boldOff();
 
   // Footer & Cut
   center();
+  boldOn();
   add(0x0a);
   line(settings.receiptFooterMessage || 'Merci de votre confiance !');
   line('A bientot.');
+  boldOff();
   add(0x0a, 0x0a, 0x0a, 0x0a);
 
   // Partial paper cut

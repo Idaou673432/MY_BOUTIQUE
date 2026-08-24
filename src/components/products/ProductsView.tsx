@@ -18,7 +18,11 @@ import {
   FileText,
   Tag,
   Building2,
-  MapPin
+  MapPin,
+  RotateCcw,
+  Sparkles,
+  Database,
+  RefreshCw,
 } from 'lucide-react';
 import { useStore } from '../../context/StoreContext';
 import { Product } from '../../types';
@@ -35,6 +39,8 @@ export const ProductsView: React.FC = () => {
     updateProduct,
     deleteProduct,
     importProducts,
+    restoreDefaultCatalog,
+    restoreProductsFromBackup,
     settings,
     currentUser,
   } = useStore();
@@ -217,6 +223,20 @@ export const ProductsView: React.FC = () => {
 
   const isVendeur = currentUser.role === 'VENDEUR';
 
+  const handleRestoreFromBackup = () => {
+    const success = restoreProductsFromBackup();
+    if (success) {
+      showToast('Articles du catalogue récupérés et restaurés avec succès !');
+    } else {
+      showToast('Aucune sauvegarde locale trouvée. Catalogue standard chargé.');
+    }
+  };
+
+  const handleRestoreStandardCatalog = () => {
+    restoreDefaultCatalog();
+    showToast('Catalogue standard complet restauré avec succès.');
+  };
+
   return (
     <div className="space-y-6 pb-12">
       {/* Toast Notification */}
@@ -241,11 +261,19 @@ export const ProductsView: React.FC = () => {
             Gestion des Produits ({products.length})
           </h1>
           <p className="text-xs text-slate-500">
-            Catalogue complet, prix d'achat, prix de vente, codes-barres et stocks.
+            Catalogue complet, prix d'achat, prix de vente, codes-barres et stocks synchronisés.
           </p>
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
+          <button
+            onClick={handleRestoreFromBackup}
+            className="flex items-center gap-1.5 px-3 py-2 bg-amber-50 hover:bg-amber-100 text-amber-900 rounded-xl text-xs font-bold border border-amber-200 shadow-2xs transition-colors"
+            title="Récupérer vos produits depuis la sauvegarde ou le catalogue par défaut"
+          >
+            <RotateCcw className="w-3.5 h-3.5 text-amber-700" />
+            Récupérer / Restaurer
+          </button>
           <button
             onClick={handleExportCSV}
             className="flex items-center gap-1.5 px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold border border-slate-200"
@@ -264,6 +292,48 @@ export const ProductsView: React.FC = () => {
           )}
         </div>
       </div>
+
+      {/* RECOVERY BANNER IF PRODUCTS CATALOG IS EMPTY */}
+      {products.length === 0 && (
+        <div className="bg-gradient-to-r from-amber-50 via-indigo-50 to-emerald-50 p-6 rounded-2xl border-2 border-dashed border-amber-300 shadow-sm space-y-4">
+          <div className="flex items-start gap-3">
+            <div className="p-3 bg-amber-500 text-white rounded-xl shadow-xs">
+              <Sparkles className="w-6 h-6" />
+            </div>
+            <div className="space-y-1">
+              <h3 className="text-base font-bold text-slate-900">
+                Vos données de produits semblent absentes ou réinitialisées ?
+              </h3>
+              <p className="text-xs text-slate-600 leading-relaxed">
+                Pas d'inquiétude ! Vous pouvez récupérer instantanément l'intégralité de vos articles via notre système de sauvegarde automatique ou recharger le catalogue standard d'articles prêt à l'emploi.
+              </p>
+            </div>
+          </div>
+          <div className="flex flex-wrap items-center gap-3 pt-2">
+            <button
+              onClick={handleRestoreFromBackup}
+              className="flex items-center gap-2 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold shadow-md transition-all"
+            >
+              <Database className="w-4 h-4" />
+              ✨ Récupérer depuis la sauvegarde automatique
+            </button>
+            <button
+              onClick={handleRestoreStandardCatalog}
+              className="flex items-center gap-2 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold shadow-md transition-all"
+            >
+              <RotateCcw className="w-4 h-4" />
+              📦 Restaurer le catalogue d'articles standard
+            </button>
+            <button
+              onClick={handleOpenAddModal}
+              className="flex items-center gap-2 px-4 py-2.5 bg-white hover:bg-slate-100 text-slate-800 rounded-xl text-xs font-bold border border-slate-300 shadow-xs transition-all"
+            >
+              <Plus className="w-4 h-4" />
+              + Créer un produit manuellement
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Filter & Search Bar */}
       <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs space-y-3">

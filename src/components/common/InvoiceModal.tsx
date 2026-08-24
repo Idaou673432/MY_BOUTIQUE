@@ -489,98 +489,105 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
           {printFormat === 'A4' && (
             <div
               id="printable-receipt"
-              className="bg-white p-6 sm:p-10 mx-auto border border-slate-200 shadow-md text-slate-900 rounded-xl max-w-3xl print:border-none print:shadow-none print:p-2 print:max-w-full"
+              className="bg-white p-6 sm:p-10 mx-auto border-2 border-slate-900 shadow-md text-slate-950 rounded-xl max-w-3xl print:border-none print:shadow-none print:p-2 print:max-w-full font-bold"
             >
               {/* Top Business Header */}
-              <div className="flex flex-col sm:flex-row justify-between items-start gap-4 pb-6 border-b-2 border-slate-900">
-                <div className="space-y-1">
-                  <div className="flex items-center gap-2">
-                    <div className="w-10 h-10 rounded-xl bg-slate-900 text-white flex items-center justify-center font-black text-xl shadow-xs">
-                      {settings.storeName ? settings.storeName.charAt(0).toUpperCase() : 'B'}
+              <div className="flex flex-col sm:flex-row justify-between items-start gap-4 pb-6 border-b-4 border-slate-950">
+                <div className="space-y-1.5">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-11 h-11 rounded-xl bg-slate-950 text-white flex items-center justify-center font-black text-2xl shadow-xs">
+                      {(settings.storeName || settings.shopName || 'B').charAt(0).toUpperCase()}
                     </div>
                     <div>
-                      <h1 className="text-xl sm:text-2xl font-black tracking-tight text-slate-900 uppercase">
-                        {settings.storeName || 'Boutique Mali'}
+                      <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-slate-950 uppercase">
+                        {settings.storeName || settings.shopName || 'BOUTIQUE MALI'}
                       </h1>
-                      {settings.storeTagline && (
-                        <p className="text-xs text-slate-600 font-medium">{settings.storeTagline}</p>
+                      {(settings.storeTagline || settings.businessType) && (
+                        <p className="text-xs text-slate-950 font-black uppercase tracking-wider">
+                          {settings.storeTagline || settings.businessType}
+                        </p>
                       )}
                     </div>
                   </div>
 
-                  <div className="text-xs text-slate-600 space-y-0.5 pt-2">
-                    {settings.address && (
+                  <div className="text-xs text-slate-950 font-black space-y-1 pt-2">
+                    {(settings.address || settings.shopAddress) && (
                       <p className="flex items-center gap-1.5">
-                        <MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                        <span>{settings.address}</span>
+                        <MapPin className="w-4 h-4 text-slate-950 shrink-0" />
+                        <span className="font-black">ADRESSE : {settings.address || settings.shopAddress}</span>
                       </p>
                     )}
-                    {settings.phone && (
+                    {(settings.phone || settings.shopPhone) && (
                       <p className="flex items-center gap-1.5">
-                        <Phone className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                        <span>Tél: <strong>{settings.phone}</strong></span>
+                        <Phone className="w-4 h-4 text-slate-950 shrink-0" />
+                        <span className="font-black">TÉL : <strong className="font-black text-slate-950">{settings.phone || settings.shopPhone}</strong></span>
                       </p>
                     )}
-                    {settings.email && (
+                    {(settings.email || settings.shopEmail) && (
                       <p className="flex items-center gap-1.5">
-                        <Mail className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                        <span>Email: {settings.email}</span>
+                        <Mail className="w-4 h-4 text-slate-950 shrink-0" />
+                        <span className="font-black">EMAIL : <strong className="font-black text-slate-950">{settings.email || settings.shopEmail}</strong></span>
                       </p>
                     )}
                     {settings.nifRccm && (
-                      <p className="text-[11px] font-mono text-slate-500 font-semibold pt-0.5">
-                        NIF / RCCM : {settings.nifRccm}
+                      <p className="text-xs font-mono text-slate-950 font-black pt-0.5">
+                        NIF / RCCM : <span className="font-black">{settings.nifRccm}</span>
+                      </p>
+                    )}
+                    {settings.mobileMoneyNumber && (
+                      <p className="text-xs font-mono text-slate-950 font-black">
+                        PAIEMENT MOBILE (WAVE/OM) : <span className="font-black">{settings.mobileMoneyNumber}</span>
                       </p>
                     )}
                   </div>
                 </div>
 
                 {/* Right Document Title & Reference */}
-                <div className="text-left sm:text-right space-y-1 self-stretch sm:self-auto bg-slate-50 p-4 rounded-xl border border-slate-200">
-                  <div className="inline-block px-3 py-1 bg-slate-900 text-white rounded-lg text-xs font-black uppercase tracking-wider">
+                <div className="text-left sm:text-right space-y-1 self-stretch sm:self-auto bg-slate-100 p-4 rounded-xl border-2 border-slate-950">
+                  <div className="inline-block px-3 py-1 bg-slate-950 text-white rounded-lg text-xs font-black uppercase tracking-wider">
                     FACTURE OFFICIELLE
                   </div>
-                  <div className="pt-2 text-xs space-y-0.5">
-                    <p className="text-slate-500">
-                      N° Facture : <strong className="text-slate-900 text-sm">{sale.invoiceNumber}</strong>
+                  <div className="pt-2 text-xs space-y-0.5 font-black">
+                    <p className="text-slate-950">
+                      N° Facture : <strong className="text-black text-sm font-black">{sale.invoiceNumber}</strong>
                     </p>
-                    <p className="text-slate-500">
-                      Date : <strong className="text-slate-900">{formatDate(sale.date)}</strong>
+                    <p className="text-slate-950">
+                      Date : <strong className="text-black font-black">{formatDate(sale.date)}</strong>
                     </p>
-                    <p className="text-slate-500">
-                      Heure : <strong className="text-slate-900">{formatDateTime(sale.date).split(' ')[1] || ''}</strong>
+                    <p className="text-slate-950">
+                      Heure : <strong className="text-black font-black">{formatDateTime(sale.date).split(' ')[1] || ''}</strong>
                     </p>
-                    <p className="text-slate-500">
-                      Établi par : <strong className="text-slate-900">{sale.userName}</strong>
+                    <p className="text-slate-950">
+                      Établi par : <strong className="text-black font-black">{sale.userName}</strong>
                     </p>
                   </div>
                 </div>
               </div>
 
               {/* Client Info Card */}
-              <div className="my-6 p-4 rounded-xl bg-slate-50 border border-slate-200 grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
+              <div className="my-6 p-4 rounded-xl bg-slate-50 border-2 border-black grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs font-black">
                 <div>
-                  <p className="text-[10px] font-bold uppercase text-slate-400 tracking-wider">Facturé à :</p>
-                  <p className="font-bold text-base text-slate-900 mt-0.5">{sale.customerName || 'Client Comptoir'}</p>
+                  <p className="text-[11px] font-black uppercase text-black tracking-wider">Facturé à :</p>
+                  <p className="font-black text-base text-black mt-0.5 uppercase">{sale.customerName || 'Client Comptoir'}</p>
                   {customer?.phone && (
-                    <p className="text-slate-600 mt-1 flex items-center gap-1.5">
-                      <Phone className="w-3.5 h-3.5 text-slate-400" />
+                    <p className="text-black mt-1 flex items-center gap-1.5 font-black">
+                      <Phone className="w-3.5 h-3.5 text-black" />
                       <span>{customer.phone}</span>
                     </p>
                   )}
                   {customer?.address && (
-                    <p className="text-slate-600 mt-0.5 flex items-center gap-1.5">
-                      <MapPin className="w-3.5 h-3.5 text-slate-400" />
+                    <p className="text-black mt-0.5 flex items-center gap-1.5 font-black">
+                      <MapPin className="w-3.5 h-3.5 text-black" />
                       <span>{customer.address}</span>
                     </p>
                   )}
                 </div>
 
-                <div className="sm:text-right space-y-1 sm:border-l sm:border-slate-200 sm:pl-4">
-                  <p className="text-[10px] font-bold uppercase text-slate-400 tracking-wider">Modalités de règlement :</p>
-                  <p className="font-bold text-slate-800">{getPaymentMethodLabel(sale.paymentMethod)}</p>
-                  <p className="text-slate-500 text-[11px]">
-                    Statut : <span className="text-emerald-700 font-bold">Acquittée / Réglée</span>
+                <div className="sm:text-right space-y-1 sm:border-l-2 sm:border-black sm:pl-4">
+                  <p className="text-[11px] font-black uppercase text-black tracking-wider">Modalités de règlement :</p>
+                  <p className="font-black text-black uppercase">{getPaymentMethodLabel(sale.paymentMethod)}</p>
+                  <p className="text-black text-xs font-black">
+                    Statut : <span className="text-black font-black underline">Acquittée / Réglée</span>
                   </p>
                 </div>
               </div>
@@ -589,7 +596,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
               <div className="overflow-x-auto mb-6">
                 <table className="w-full text-left text-xs border-collapse">
                   <thead>
-                    <tr className="bg-slate-900 text-white uppercase text-[10px] tracking-wider">
+                    <tr className="bg-slate-950 text-white uppercase text-[10px] tracking-wider font-black">
                       <th className="py-2.5 px-3 rounded-l-lg">N°</th>
                       <th className="py-2.5 px-3">Désignation</th>
                       <th className="py-2.5 px-3 text-center">Qté</th>
@@ -597,28 +604,28 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
                       <th className="py-2.5 px-3 text-right rounded-r-lg">Total ({settings.currency || 'FCFA'})</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-200">
+                  <tbody className="divide-y-2 divide-slate-300">
                     {sale.items.map((item, idx) => (
                       <tr key={idx} className="hover:bg-slate-50/50">
-                        <td className="py-3 px-3 text-slate-500 font-mono text-[11px]">{idx + 1}</td>
+                        <td className="py-3 px-3 text-slate-900 font-mono text-[11px] font-bold">{idx + 1}</td>
                         <td className="py-3 px-3">
-                          <p className="font-bold text-slate-900">{item.productName}</p>
+                          <p className="font-black text-slate-950">{item.productName}</p>
                           {item.productCode && (
-                            <p className="text-[10px] font-mono text-slate-400">Réf: {item.productCode}</p>
+                            <p className="text-[10px] font-mono text-slate-700 font-bold">Réf: {item.productCode}</p>
                           )}
                           {item.discountPercent > 0 && (
-                            <p className="text-[10px] text-emerald-600 font-semibold">
+                            <p className="text-[10px] text-emerald-800 font-black">
                               Remise de {item.discountPercent}% appliquée
                             </p>
                           )}
                         </td>
-                        <td className="py-3 px-3 text-center font-bold text-slate-800">
+                        <td className="py-3 px-3 text-center font-black text-slate-950">
                           {formatQuantity(item.quantity)} {item.productUnit || ''}
                         </td>
-                        <td className="py-3 px-3 text-right text-slate-700 font-mono">
+                        <td className="py-3 px-3 text-right text-slate-900 font-mono font-bold">
                           {formatMoney(item.unitPrice, '')}
                         </td>
-                        <td className="py-3 px-3 text-right font-black text-slate-900 font-mono">
+                        <td className="py-3 px-3 text-right font-black text-slate-950 font-mono">
                           {formatMoney(item.total, '')}
                         </td>
                       </tr>
@@ -628,39 +635,39 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
               </div>
 
               {/* Totals Section */}
-              <div className="flex flex-col sm:flex-row justify-between items-start gap-4 pb-6 border-b border-slate-200">
+              <div className="flex flex-col sm:flex-row justify-between items-start gap-4 pb-6 border-b-2 border-slate-300">
                 <div className="space-y-2 max-w-sm text-xs">
-                  <div className="p-3 bg-indigo-50/60 rounded-xl border border-indigo-100 text-indigo-950 space-y-1">
-                    <p className="font-bold text-[11px]">Arrêté la présente facture à la somme de :</p>
-                    <p className="font-bold uppercase text-indigo-900 italic text-[11px]">
+                  <div className="p-3 bg-slate-100 rounded-xl border-2 border-slate-300 text-slate-950 space-y-1">
+                    <p className="font-black text-[11px]">Arrêté la présente facture à la somme de :</p>
+                    <p className="font-black uppercase text-slate-950 italic text-[11px]">
                       {numberToWordsFrench(Math.round(sale.totalAmount))} {settings.currency || 'Francs CFA'}
                     </p>
                   </div>
                 </div>
 
-                <div className="w-full sm:w-72 space-y-2 text-xs bg-slate-50 p-4 rounded-xl border border-slate-200">
-                  <div className="flex justify-between text-slate-600">
-                    <span>Total Brut :</span>
-                    <span className="font-mono">{formatMoney(sale.subtotal, settings.currency)}</span>
+                <div className="w-full sm:w-72 space-y-2 text-xs bg-slate-50 p-4 rounded-xl border-2 border-black font-black">
+                  <div className="flex justify-between text-black">
+                    <span className="font-black">Total Brut :</span>
+                    <span className="font-mono font-black">{formatMoney(sale.subtotal, settings.currency)}</span>
                   </div>
 
                   {sale.discountTotal > 0 && (
-                    <div className="flex justify-between text-emerald-600 font-medium">
+                    <div className="flex justify-between text-black font-black">
                       <span>Remise accordée :</span>
-                      <span className="font-mono">-{formatMoney(sale.discountTotal, settings.currency)}</span>
+                      <span className="font-mono font-black">-{formatMoney(sale.discountTotal, settings.currency)}</span>
                     </div>
                   )}
 
                   {settings.taxEnabled && sale.taxAmount > 0 && (
-                    <div className="flex justify-between text-slate-600">
-                      <span>TVA ({settings.taxRatePercent}%) :</span>
-                      <span className="font-mono">{formatMoney(sale.taxAmount, settings.currency)}</span>
+                    <div className="flex justify-between text-black">
+                      <span className="font-black">TVA ({settings.taxRatePercent}%) :</span>
+                      <span className="font-mono font-black">{formatMoney(sale.taxAmount, settings.currency)}</span>
                     </div>
                   )}
 
-                  <div className="flex justify-between items-center pt-2 border-t border-slate-300 font-black text-base text-slate-900">
-                    <span>Net à Payer :</span>
-                    <span className="text-lg text-indigo-700 font-mono">
+                  <div className="flex justify-between items-center pt-2 border-t-2 border-black font-black text-base text-black">
+                    <span className="font-black uppercase">Net à Payer :</span>
+                    <span className="text-lg text-black font-mono font-black">
                       {formatMoney(sale.totalAmount, settings.currency)}
                     </span>
                   </div>
@@ -669,24 +676,24 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
 
               {/* Signatures */}
               <div className="pt-4 grid grid-cols-2 gap-8 text-center text-xs">
-                <div className="border border-dashed border-slate-300 rounded-xl p-4 min-h-[90px] flex flex-col justify-between">
-                  <p className="font-bold text-slate-700 uppercase text-[10px]">
+                <div className="border-2 border-dashed border-black rounded-xl p-4 min-h-[90px] flex flex-col justify-between">
+                  <p className="font-black text-black uppercase text-[10px]">
                     Le Client (Mention "Bon pour accord")
                   </p>
-                  <p className="text-[10px] text-slate-400 italic">Signature & Date</p>
+                  <p className="text-[10px] text-black font-black italic">Signature & Date</p>
                 </div>
 
-                <div className="border border-dashed border-slate-300 rounded-xl p-4 min-h-[90px] flex flex-col justify-between">
-                  <p className="font-bold text-slate-700 uppercase text-[10px]">
+                <div className="border-2 border-dashed border-black rounded-xl p-4 min-h-[90px] flex flex-col justify-between">
+                  <p className="font-black text-black uppercase text-[10px]">
                     Pour l'Établissement (Signature & Cachet)
                   </p>
-                  <p className="text-[10px] text-slate-400 italic">Cachet & Signature autorisée</p>
+                  <p className="text-[10px] text-black font-black italic">Cachet & Signature autorisée</p>
                 </div>
               </div>
 
               {/* Footer Notice */}
-              <div className="pt-4 text-center text-[10px] text-slate-500 border-t border-slate-200 mt-4 space-y-0.5">
-                <p className="font-semibold text-slate-700">{settings.receiptFooterMessage}</p>
+              <div className="pt-4 text-center text-[10px] text-black font-black border-t-2 border-black mt-4 space-y-0.5">
+                <p className="font-black text-black">{settings.receiptFooterMessage}</p>
                 <p>
                   {settings.invoiceLegalNotice ||
                     'Facture établie conformément aux usages du commerce. En cas de litige, seuls les tribunaux compétents sont habilités.'}
@@ -701,80 +708,98 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
           {(printFormat === 'TICKET_80' || printFormat === 'TICKET_58') && (
             <div
               id="printable-receipt"
-              className={`bg-white p-4 mx-auto border border-slate-300 shadow-md text-slate-900 text-xs font-mono rounded-lg ${
+              className={`bg-white p-4 mx-auto border-2 border-slate-900 shadow-md text-slate-950 text-xs font-mono font-bold rounded-lg ${
                 printFormat === 'TICKET_58' ? 'max-w-[280px]' : 'max-w-[350px]'
               } print:border-none print:shadow-none print:max-w-full print:p-0`}
             >
-              {/* Store Header */}
-              <div className="text-center space-y-1 pb-3 border-b border-dashed border-slate-400">
-                <h2 className="font-black text-base text-slate-900 uppercase tracking-tight">
-                  {settings.storeName || 'BOUTIQUE MALI'}
+              {/* Store Header (ULTRA BOLD & HIGH CONTRAST) */}
+              <div className="text-center space-y-1 pb-3 border-b-2 border-dashed border-slate-950">
+                <h2 className="font-black text-lg text-slate-950 uppercase tracking-wide">
+                  {settings.storeName || settings.shopName || 'BOUTIQUE MALI'}
                 </h2>
-                {settings.storeTagline && (
-                  <p className="text-[10px] text-slate-600">{settings.storeTagline}</p>
+                {(settings.storeTagline || settings.businessType) && (
+                  <p className="text-xs text-slate-950 font-black uppercase">
+                    {settings.storeTagline || settings.businessType}
+                  </p>
                 )}
-                {settings.address && (
-                  <p className="text-[10px] text-slate-500">{settings.address}</p>
+                {(settings.address || settings.shopAddress) && (
+                  <p className="text-xs text-slate-950 font-black uppercase">
+                    ADRESSE: {settings.address || settings.shopAddress}
+                  </p>
                 )}
-                {settings.phone && (
-                  <p className="text-[10px] text-slate-500">Tél: {settings.phone}</p>
+                {(settings.phone || settings.shopPhone) && (
+                  <p className="text-xs text-slate-950 font-black">
+                    TÉL: {settings.phone || settings.shopPhone}
+                  </p>
+                )}
+                {(settings.email || settings.shopEmail) && (
+                  <p className="text-xs text-slate-950 font-black">
+                    EMAIL: {settings.email || settings.shopEmail}
+                  </p>
                 )}
                 {settings.nifRccm && (
-                  <p className="text-[9px] text-slate-400">NIF: {settings.nifRccm}</p>
+                  <p className="text-[11px] text-slate-950 font-black uppercase">
+                    NIF / RCCM: {settings.nifRccm}
+                  </p>
+                )}
+                {settings.mobileMoneyNumber && (
+                  <p className="text-[11px] text-slate-950 font-black uppercase">
+                    WAVE / OM: {settings.mobileMoneyNumber}
+                  </p>
                 )}
               </div>
 
               {/* Sale Metadata */}
-              <div className="py-2 border-b border-dashed border-slate-400 space-y-0.5 text-[11px]">
+              <div className="py-2 border-b-2 border-dashed border-black space-y-0.5 text-xs font-black text-black">
                 <div className="flex justify-between">
-                  <span className="text-slate-500">Ticket N°:</span>
-                  <span className="font-bold text-slate-900">{sale.invoiceNumber}</span>
+                  <span>Ticket N°:</span>
+                  <span className="font-black text-black">{sale.invoiceNumber}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-slate-500">Date:</span>
-                  <span>{formatDateTime(sale.date)}</span>
+                  <span>Date:</span>
+                  <span className="font-black">{formatDateTime(sale.date)}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-slate-500">Caissier:</span>
-                  <span className="font-medium">{sale.userName}</span>
+                  <span>Caissier:</span>
+                  <span className="font-black">{sale.userName}</span>
                 </div>
                 {sale.customerName && (
                   <div className="flex justify-between">
-                    <span className="text-slate-500">Client:</span>
-                    <span className="font-semibold text-slate-900">{sale.customerName}</span>
+                    <span>Client:</span>
+                    <span className="font-black text-black uppercase">{sale.customerName}</span>
                   </div>
                 )}
               </div>
 
               {/* Items List */}
-              <div className="py-2.5 border-b border-dashed border-slate-400">
+              <div className="py-2.5 border-b-2 border-dashed border-black">
                 <table className="w-full text-left">
                   <thead>
-                    <tr className="border-b border-slate-300 text-[10px] text-slate-500 uppercase">
+                    <tr className="border-b-2 border-black text-xs text-black uppercase font-black">
                       <th className="pb-1">Article</th>
                       <th className="pb-1 text-center">Qté</th>
                       <th className="pb-1 text-right">P.U</th>
                       <th className="pb-1 text-right">Total</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-100">
+                  <tbody className="divide-y divide-dashed divide-black">
                     {sale.items.map((item, idx) => (
                       <tr key={idx} className="py-1">
-                        <td className="py-1 text-[11px] pr-1 font-medium leading-tight">
+                        <td className="py-1 text-xs pr-1 font-black leading-tight text-black">
                           {item.productName}
                           {item.discountPercent > 0 && (
-                            <span className="block text-[9px] text-emerald-600 font-bold">
+                            <span className="block text-[10px] text-black font-black">
                               Remise -{item.discountPercent}%
                             </span>
                           )}
                         </td>
-                        <td className="py-1 text-center text-slate-600">
+                        <td className="py-1 text-center font-black text-black">
                           {formatQuantity(item.quantity)}
                         </td>
-                        <td className="py-1 text-right text-slate-600">
+                        <td className="py-1 text-right font-black text-black">
                           {formatMoney(item.unitPrice, '')}
                         </td>
-                        <td className="py-1 text-right font-bold text-slate-900">
+                        <td className="py-1 text-right font-black text-black">
                           {formatMoney(item.total, '')}
                         </td>
                       </tr>
@@ -784,63 +809,63 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
               </div>
 
               {/* Totals */}
-              <div className="py-2 border-b border-dashed border-slate-400 space-y-1 text-xs">
-                <div className="flex justify-between text-slate-600">
+              <div className="py-2 border-b-2 border-dashed border-black space-y-1 text-xs font-black text-black">
+                <div className="flex justify-between">
                   <span>Sous-total :</span>
-                  <span>{formatMoney(sale.subtotal, settings.currency)}</span>
+                  <span className="font-black">{formatMoney(sale.subtotal, settings.currency)}</span>
                 </div>
                 {sale.discountTotal > 0 && (
-                  <div className="flex justify-between text-emerald-600 font-medium">
+                  <div className="flex justify-between text-black font-black">
                     <span>Remise totale :</span>
                     <span>-{formatMoney(sale.discountTotal, settings.currency)}</span>
                   </div>
                 )}
                 {settings.taxEnabled && sale.taxAmount > 0 && (
-                  <div className="flex justify-between text-slate-600">
+                  <div className="flex justify-between text-black font-black">
                     <span>TVA ({settings.taxRatePercent}%) :</span>
-                    <span>{formatMoney(sale.taxAmount, settings.currency)}</span>
+                    <span className="font-black">{formatMoney(sale.taxAmount, settings.currency)}</span>
                   </div>
                 )}
-                <div className="flex justify-between items-center pt-1 text-sm font-black text-slate-900 border-t border-slate-300">
-                  <span>NET À PAYER :</span>
-                  <span className="text-base font-black text-indigo-700">
+                <div className="flex justify-between items-center pt-1 text-sm font-black text-black border-t-2 border-black">
+                  <span className="font-black uppercase">NET À PAYER :</span>
+                  <span className="text-base font-black text-black">
                     {formatMoney(sale.totalAmount, settings.currency)}
                   </span>
                 </div>
               </div>
 
               {/* Payment Details */}
-              <div className="py-2 border-b border-dashed border-slate-400 space-y-1 text-[11px]">
+              <div className="py-2 border-b-2 border-dashed border-black space-y-1 text-xs font-black text-black">
                 <div className="flex justify-between">
-                  <span className="text-slate-500">Paiement:</span>
-                  <span className="font-bold">{getPaymentMethodLabel(sale.paymentMethod)}</span>
+                  <span>Paiement:</span>
+                  <span className="font-black uppercase">{getPaymentMethodLabel(sale.paymentMethod)}</span>
                 </div>
                 {sale.amountReceived > 0 && (
                   <div className="flex justify-between">
-                    <span className="text-slate-500">Montant reçu:</span>
-                    <span>{formatMoney(sale.amountReceived, settings.currency)}</span>
+                    <span>Montant reçu:</span>
+                    <span className="font-black">{formatMoney(sale.amountReceived, settings.currency)}</span>
                   </div>
                 )}
                 {sale.changeGiven > 0 && (
-                  <div className="flex justify-between font-bold text-slate-900">
+                  <div className="flex justify-between font-black text-black">
                     <span>Monnaie rendue:</span>
-                    <span>{formatMoney(sale.changeGiven, settings.currency)}</span>
+                    <span className="font-black">{formatMoney(sale.changeGiven, settings.currency)}</span>
                   </div>
                 )}
               </div>
 
               {/* Barcode simulation */}
               <div className="pt-2 text-center space-y-0.5">
-                <div className="inline-block px-3 py-1 bg-slate-100 rounded tracking-widest text-[10px] font-mono font-bold text-slate-700">
+                <div className="inline-block px-3 py-1 bg-slate-200 rounded tracking-widest text-[10px] font-mono font-black text-slate-950">
                   ||||| | |||| || |||||| | |||||
                 </div>
-                <p className="text-[9px] text-slate-400">{sale.invoiceNumber}</p>
+                <p className="text-[9px] text-slate-800 font-bold">{sale.invoiceNumber}</p>
               </div>
 
               {/* Footer */}
-              <div className="pt-2 text-center text-[10px] text-slate-500 leading-tight space-y-0.5">
-                <p>{settings.receiptFooterMessage}</p>
-                <p className="text-[9px] text-slate-400">Merci de votre fidélité !</p>
+              <div className="pt-2 text-center text-[10px] text-slate-950 font-bold leading-tight space-y-0.5">
+                <p className="font-black">{settings.receiptFooterMessage}</p>
+                <p className="text-[9px] text-slate-800 font-bold">Merci de votre fidélité !</p>
               </div>
             </div>
           )}
