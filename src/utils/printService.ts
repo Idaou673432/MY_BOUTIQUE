@@ -415,7 +415,6 @@ export const generateThermalReceiptHtml = (
     <!-- Footer message -->
     <div class="footer-msg bold">
       <div class="bold">${settings.receiptFooterMessage || 'Merci de votre visite et à bientôt !'}</div>
-      <div style="margin-top: 3px;" class="bold">Les articles vendus ne sont ni repris ni échangés sauf accord préalable.</div>
     </div>
   </div>
 
