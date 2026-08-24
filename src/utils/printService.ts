@@ -192,6 +192,19 @@ export const generateThermalReceiptHtml = (
       margin-bottom: 2px;
       padding-bottom: 0px;
     }
+    .receipt-logo {
+      display: block;
+      margin: 0 auto 6px auto;
+      max-height: ${is58 ? '75px' : '98px'};
+      max-width: ${is58 ? '180px' : '240px'};
+      width: auto;
+      object-fit: contain;
+      filter: contrast(175%) brightness(80%) saturate(150%);
+      -webkit-print-color-adjust: exact !important;
+      print-color-adjust: exact !important;
+      image-rendering: -webkit-optimize-contrast;
+      image-rendering: crisp-edges;
+    }
     .store-name {
       font-size: ${headerFontSize};
       font-weight: 900 !important;
@@ -319,6 +332,12 @@ export const generateThermalReceiptHtml = (
         -webkit-print-color-adjust: exact !important;
         print-color-adjust: exact !important;
       }
+      .receipt-logo {
+        filter: contrast(200%) brightness(70%) saturate(180%) !important;
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+        image-rendering: -webkit-optimize-contrast !important;
+      }
       .store-header-box * {
         font-weight: 900 !important;
         color: #000000 !important;
@@ -335,8 +354,8 @@ export const generateThermalReceiptHtml = (
   <div class="ticket-container">
     <!-- Store Header (ALL IN BOLD AND CLEARLY VISIBLE) -->
     <div class="store-header-box center">
-      <div style="text-align: center; margin: 0 auto 5px auto;">
-        <img src="${settings.logoUrl || STORE_LOGO_BASE64}" alt="${storeName}" style="max-height: ${is58 ? '46px' : '62px'}; max-width: ${is58 ? '130px' : '170px'}; object-fit: contain; margin: 0 auto; display: block; border-radius: 4px;" />
+      <div style="text-align: center; margin: 0 auto 4px auto;">
+        <img class="receipt-logo" src="${settings.logoUrl || STORE_LOGO_BASE64}" alt="${storeName}" />
       </div>
       <div class="store-name bold">${storeName}</div>
       ${storeTagline ? `<div class="store-sub bold uppercase">${storeTagline}</div>` : ''}
@@ -689,6 +708,17 @@ export const generateA4InvoiceHtml = (
       border-radius: 6px;
       cursor: pointer;
     }
+    .a4-logo {
+      max-height: 88px;
+      max-width: 175px;
+      object-fit: contain;
+      border-radius: 6px;
+      padding: 2px;
+      filter: contrast(175%) brightness(80%) saturate(150%);
+      -webkit-print-color-adjust: exact !important;
+      print-color-adjust: exact !important;
+      image-rendering: -webkit-optimize-contrast;
+    }
     @media print {
       .no-print-toolbar {
         display: none !important;
@@ -703,6 +733,11 @@ export const generateA4InvoiceHtml = (
         -webkit-print-color-adjust: exact !important;
         print-color-adjust: exact !important;
       }
+      .a4-logo {
+        filter: contrast(200%) brightness(70%) saturate(180%) !important;
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+      }
     }
   </style>
 </head>
@@ -714,7 +749,7 @@ export const generateA4InvoiceHtml = (
 
   <div class="header">
     <div style="display: flex; align-items: center; gap: 14px;">
-      <img src="${settings.logoUrl || STORE_LOGO_BASE64}" alt="${storeName}" style="max-height: 70px; max-width: 140px; object-fit: contain; border-radius: 6px; border: 1px solid #e2e8f0; padding: 2px;" />
+      <img class="a4-logo" src="${settings.logoUrl || STORE_LOGO_BASE64}" alt="${storeName}" />
       <div>
         <div class="store-title bold">${storeName}</div>
         ${storeTagline ? `<div class="store-tagline-a4 bold">${storeTagline}</div>` : ''}
@@ -988,12 +1023,26 @@ export const generateAnnualInventoryReportHtml = (
       border-radius: 6px;
       cursor: pointer;
     }
+    .inventory-logo {
+      max-height: 70px;
+      max-width: 130px;
+      object-fit: contain;
+      border-radius: 4px;
+      filter: contrast(175%) brightness(80%) saturate(150%);
+      -webkit-print-color-adjust: exact !important;
+      print-color-adjust: exact !important;
+    }
     @media print {
       .no-print-toolbar {
         display: none !important;
       }
       body {
         padding: 0 !important;
+      }
+      .inventory-logo {
+        filter: contrast(200%) brightness(70%) saturate(180%) !important;
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
       }
     }
   </style>
@@ -1006,7 +1055,7 @@ export const generateAnnualInventoryReportHtml = (
 
   <div class="header">
     <div style="display: flex; align-items: center; gap: 12px;">
-      <img src="${settings.logoUrl || STORE_LOGO_BASE64}" alt="${storeName}" style="max-height: 50px; max-width: 100px; object-fit: contain; border-radius: 4px;" />
+      <img class="inventory-logo" src="${settings.logoUrl || STORE_LOGO_BASE64}" alt="${storeName}" />
       <div>
         <div style="font-size: 16px; font-weight: 900; text-transform: uppercase;">${storeName}</div>
         <div style="font-size: 10px; color: #475569;">AUDIT ET BILAN ANNUEL DE VALORISATION DES STOCKS</div>

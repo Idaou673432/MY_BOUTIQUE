@@ -496,11 +496,11 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
             >
               {/* Top Business Header */}
               <div className="flex flex-col sm:flex-row justify-between items-start gap-3 pb-3 border-b-2 border-slate-950">
-                <div className="flex items-start gap-3">
+                <div className="flex items-start gap-3.5">
                   <img
                     src={settings.logoUrl || STORE_LOGO_BASE64}
                     alt={settings.storeName || 'Logo'}
-                    className="w-16 h-16 sm:w-20 sm:h-20 object-contain rounded-lg border border-slate-200 p-1 shrink-0 bg-white"
+                    className="w-20 h-20 sm:w-24 sm:h-24 object-contain rounded-xl border border-slate-300 p-1 shrink-0 bg-white shadow-xs contrast-[1.6] brightness-[0.82] saturate-[1.4] print:contrast-[1.9] print:brightness-[0.72] print:saturate-[1.7]"
                   />
                   <div className="space-y-1">
                     <div>
@@ -718,12 +718,12 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
             >
               {/* Store Header (ULTRA BOLD & HIGH CONTRAST) */}
               <div className="text-center space-y-0.5 pb-2 border-b-2 border-dashed border-slate-950">
-                <div className="flex justify-center mb-1">
+                <div className="flex justify-center mb-1.5">
                   <img
                     src={settings.logoUrl || STORE_LOGO_BASE64}
                     alt={settings.storeName || 'Logo'}
-                    className={`object-contain rounded ${
-                      printFormat === 'TICKET_58' ? 'max-h-12 max-w-[120px]' : 'max-h-14 max-w-[150px]'
+                    className={`object-contain rounded contrast-[1.75] brightness-[0.78] saturate-[1.5] print:contrast-[2.0] print:brightness-[0.70] print:saturate-[1.8] ${
+                      printFormat === 'TICKET_58' ? 'max-h-16 max-w-[160px]' : 'max-h-20 max-w-[210px]'
                     }`}
                   />
                 </div>

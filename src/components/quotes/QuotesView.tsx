@@ -228,6 +228,24 @@ export const QuotesView: React.FC = () => {
         <style>
           body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; padding: 20px; color: #1e293b; max-width: 800px; margin: 0 auto; line-height: 1.25; }
           .header { display: flex; justify-content: space-between; border-bottom: 2px solid #e2e8f0; padding-bottom: 12px; margin-bottom: 14px; }
+          .quote-logo {
+            max-height: 80px;
+            max-width: 160px;
+            object-fit: contain;
+            border-radius: 6px;
+            border: 1px solid #e2e8f0;
+            padding: 2px;
+            filter: contrast(175%) brightness(80%) saturate(150%);
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+          }
+          @media print {
+            .quote-logo {
+              filter: contrast(200%) brightness(70%) saturate(180%) !important;
+              -webkit-print-color-adjust: exact !important;
+              print-color-adjust: exact !important;
+            }
+          }
           .shop-title { font-size: 20px; font-weight: 800; color: #0f172a; line-height: 1.15; margin-bottom: 2px; }
           .doc-title { font-size: 22px; font-weight: 900; color: #4338ca; text-align: right; line-height: 1.15; }
           .meta-box { display: flex; justify-content: space-between; margin-bottom: 14px; background: #f8fafc; padding: 10px 12px; border-radius: 8px; line-height: 1.25; }
@@ -242,7 +260,7 @@ export const QuotesView: React.FC = () => {
       <body>
         <div class="header">
           <div style="display: flex; align-items: center; gap: 14px;">
-            <img src="${settings.logoUrl || STORE_LOGO_BASE64}" alt="Logo" style="max-height: 60px; max-width: 120px; object-fit: contain; border-radius: 6px; border: 1px solid #e2e8f0; padding: 2px;" />
+            <img class="quote-logo" src="${settings.logoUrl || STORE_LOGO_BASE64}" alt="Logo" />
             <div>
               <div class="shop-title">${settings.storeName || settings.shopName || 'TANE FAH COLLECTION'}</div>
               <div>${settings.address || ''}</div>
