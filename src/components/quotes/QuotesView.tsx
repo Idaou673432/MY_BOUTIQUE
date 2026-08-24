@@ -225,17 +225,17 @@ export const QuotesView: React.FC = () => {
         <meta charset="utf-8">
         <title>Devis / Proforma - ${quote.quoteNumber}</title>
         <style>
-          body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; padding: 30px; color: #1e293b; max-width: 800px; margin: 0 auto; line-height: 1.5; }
-          .header { display: flex; justify-content: space-between; border-bottom: 2px solid #e2e8f0; padding-bottom: 20px; margin-bottom: 25px; }
-          .shop-title { font-size: 22px; font-weight: 800; color: #0f172a; }
-          .doc-title { font-size: 24px; font-weight: 900; color: #4338ca; text-align: right; }
-          .meta-box { display: flex; justify-content: space-between; margin-bottom: 25px; background: #f8fafc; padding: 15px; border-radius: 10px; }
-          table { width: 100%; border-collapse: collapse; margin: 20px 0; }
-          th { background: #f1f5f9; padding: 10px; text-align: left; font-size: 12px; font-weight: 700; text-transform: uppercase; }
-          td { padding: 10px; border-bottom: 1px solid #e2e8f0; font-size: 13px; }
-          .total-box { margin-left: auto; width: 280px; margin-top: 15px; border-top: 2px solid #0f172a; padding-top: 10px; }
-          .total-row { display: flex; justify-content: space-between; font-size: 15px; font-weight: 800; }
-          .footer { margin-top: 40px; border-top: 1px solid #e2e8f0; padding-top: 15px; font-size: 11px; text-align: center; color: #64748b; }
+          body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; padding: 20px; color: #1e293b; max-width: 800px; margin: 0 auto; line-height: 1.25; }
+          .header { display: flex; justify-content: space-between; border-bottom: 2px solid #e2e8f0; padding-bottom: 12px; margin-bottom: 14px; }
+          .shop-title { font-size: 20px; font-weight: 800; color: #0f172a; line-height: 1.15; margin-bottom: 2px; }
+          .doc-title { font-size: 22px; font-weight: 900; color: #4338ca; text-align: right; line-height: 1.15; }
+          .meta-box { display: flex; justify-content: space-between; margin-bottom: 14px; background: #f8fafc; padding: 10px 12px; border-radius: 8px; line-height: 1.25; }
+          table { width: 100%; border-collapse: collapse; margin: 12px 0; }
+          th { background: #f1f5f9; padding: 6px 8px; text-align: left; font-size: 11.5px; font-weight: 700; text-transform: uppercase; line-height: 1.2; }
+          td { padding: 6px 8px; border-bottom: 1px solid #e2e8f0; font-size: 12px; line-height: 1.2; }
+          .total-box { margin-left: auto; width: 280px; margin-top: 10px; border-top: 2px solid #0f172a; padding-top: 6px; }
+          .total-row { display: flex; justify-content: space-between; font-size: 14px; font-weight: 800; line-height: 1.2; }
+          .footer { margin-top: 20px; border-top: 1px solid #e2e8f0; padding-top: 10px; font-size: 10.5px; text-align: center; color: #64748b; line-height: 1.25; }
         </style>
       </head>
       <body>

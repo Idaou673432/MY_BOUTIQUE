@@ -120,10 +120,10 @@ export const generateThermalReceiptHtml = (
       font-family: 'Courier New', Courier, monospace, -apple-system, BlinkMacSystemFont, Arial, sans-serif;
       font-size: ${fontSize};
       font-weight: 900 !important;
-      line-height: 1.35;
+      line-height: 1.15;
       color: #000000 !important;
       background: #ffffff !important;
-      padding: ${is58 ? '2mm' : '4mm'};
+      padding: ${is58 ? '1.5mm' : '3mm'};
       width: ${widthMm}mm;
       max-width: ${widthMm}mm;
       margin: 0 auto;
@@ -143,68 +143,71 @@ export const generateThermalReceiptHtml = (
     .uppercase { text-transform: uppercase; }
     .divider {
       border-top: 2px solid #000000;
-      margin: 6px 0;
+      margin: 3px 0;
     }
     .double-divider {
       border-top: 3px double #000000;
-      margin: 7px 0;
+      margin: 4px 0;
     }
     .store-header-box {
       text-align: center;
-      margin-bottom: 5px;
-      padding-bottom: 2px;
+      margin-bottom: 2px;
+      padding-bottom: 0px;
     }
     .store-name {
       font-size: ${headerFontSize};
       font-weight: 900 !important;
       letter-spacing: 0.5px;
-      margin-bottom: 4px;
-      line-height: 1.15;
+      margin-bottom: 1px;
+      line-height: 1.05;
       text-transform: uppercase;
       color: #000000 !important;
     }
     .store-sub {
       font-size: ${is58 ? '11px' : '13px'};
       font-weight: 900 !important;
-      margin-bottom: 3px;
-      line-height: 1.3;
+      margin-bottom: 1px;
+      line-height: 1.12;
       color: #000000 !important;
       text-transform: uppercase;
     }
     .store-info-line {
       font-size: ${is58 ? '11px' : '13px'};
       font-weight: 900 !important;
-      margin-bottom: 2px;
-      line-height: 1.35;
+      margin-bottom: 1px;
+      line-height: 1.15;
       color: #000000 !important;
     }
     .meta-row {
       display: flex;
       justify-content: space-between;
-      margin-bottom: 3px;
+      margin-bottom: 1px;
       font-size: ${fontSize};
       font-weight: 900 !important;
+      line-height: 1.15;
       color: #000000 !important;
     }
     .item-table {
       width: 100%;
       border-collapse: collapse;
-      margin: 6px 0;
+      margin: 3px 0;
     }
     .item-table th {
       border-bottom: 2px solid #000000;
       border-top: 2px solid #000000;
-      padding: 4px 0;
+      padding: 2px 0;
       font-size: ${is58 ? '11px' : '13px'};
       font-weight: 900 !important;
+      line-height: 1.15;
       text-transform: uppercase;
       color: #000000 !important;
     }
     .item-table td {
-      padding: 4px 0;
+      padding: 2px 0;
       vertical-align: top;
       font-size: ${fontSize};
       font-weight: 900 !important;
+      line-height: 1.15;
       border-bottom: 1px dashed #000000;
       color: #000000 !important;
     }
@@ -213,25 +216,27 @@ export const generateThermalReceiptHtml = (
       justify-content: space-between;
       font-size: ${is58 ? '15px' : '18px'};
       font-weight: 900 !important;
-      margin: 6px 0;
-      padding: 4px 0;
+      margin: 3px 0;
+      padding: 2px 0;
+      line-height: 1.15;
       color: #000000 !important;
     }
     .barcode {
       text-align: center;
-      margin: 8px 0 3px 0;
+      margin: 4px 0 1px 0;
       font-family: monospace;
       letter-spacing: 3px;
       font-size: 13px;
       font-weight: 900 !important;
+      line-height: 1.1;
       color: #000000 !important;
     }
     .footer-msg {
       text-align: center;
       font-size: ${is58 ? '10px' : '12px'};
       font-weight: 900 !important;
-      margin-top: 8px;
-      line-height: 1.4;
+      margin-top: 4px;
+      line-height: 1.18;
       color: #000000 !important;
     }
     .no-print-toolbar {
@@ -469,10 +474,10 @@ export const generateA4InvoiceHtml = (
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
       font-size: 12px;
       font-weight: 900 !important;
-      line-height: 1.4;
+      line-height: 1.2;
       color: #000000 !important;
       background: #fff;
-      padding: 8mm;
+      padding: 6mm;
       -webkit-print-color-adjust: exact !important;
       print-color-adjust: exact !important;
       -webkit-font-smoothing: antialiased;
@@ -487,29 +492,31 @@ export const generateA4InvoiceHtml = (
       justify-content: space-between;
       align-items: flex-start;
       border-bottom: 3px solid #000000;
-      padding-bottom: 12px;
-      margin-bottom: 16px;
+      padding-bottom: 8px;
+      margin-bottom: 10px;
     }
     .store-title {
-      font-size: 24px;
+      font-size: 22px;
       font-weight: 900 !important;
       color: #000000 !important;
       text-transform: uppercase;
       letter-spacing: 0.5px;
-      margin-bottom: 3px;
+      margin-bottom: 2px;
+      line-height: 1.1;
     }
     .store-tagline-a4 {
       font-size: 12px;
       font-weight: 900 !important;
       color: #000000 !important;
       text-transform: uppercase;
-      margin-bottom: 5px;
+      margin-bottom: 3px;
+      line-height: 1.15;
     }
     .store-info-a4 {
-      font-size: 12px;
+      font-size: 11.5px;
       font-weight: 900 !important;
       color: #000000 !important;
-      line-height: 1.45;
+      line-height: 1.2;
     }
     .store-info-a4 strong {
       font-weight: 900 !important;
@@ -520,80 +527,86 @@ export const generateA4InvoiceHtml = (
       background: #000000 !important;
       color: #ffffff !important;
       font-weight: 900 !important;
-      padding: 6px 12px;
+      padding: 4px 10px;
       border-radius: 4px;
-      font-size: 13px;
+      font-size: 12px;
       text-transform: uppercase;
+      line-height: 1.15;
     }
     .info-grid {
       display: grid;
       grid-template-columns: 1fr 1fr;
-      gap: 16px;
-      margin-bottom: 16px;
+      gap: 10px;
+      margin-bottom: 10px;
       background: #f8fafc;
-      padding: 12px;
-      border-radius: 8px;
+      padding: 8px 10px;
+      border-radius: 6px;
       border: 2px solid #000000;
+      line-height: 1.2;
     }
     table.invoice-table {
       width: 100%;
       border-collapse: collapse;
-      margin-bottom: 16px;
+      margin-bottom: 10px;
     }
     table.invoice-table th {
       background: #000000 !important;
       color: #ffffff !important;
-      padding: 8px;
+      padding: 6px 8px;
       font-size: 11px;
       font-weight: 900 !important;
       text-transform: uppercase;
       text-align: left;
+      line-height: 1.15;
     }
     table.invoice-table td {
-      padding: 8px;
+      padding: 5px 8px;
       border-bottom: 1.5px solid #000000;
-      font-size: 12px;
+      font-size: 11.5px;
       font-weight: 800 !important;
+      line-height: 1.2;
     }
     .totals-area {
       display: flex;
       justify-content: space-between;
       align-items: flex-start;
-      margin-bottom: 20px;
+      margin-bottom: 12px;
     }
     .totals-box {
       width: 290px;
       background: #ffffff;
       border: 2px solid #000000;
-      border-radius: 8px;
-      padding: 12px;
+      border-radius: 6px;
+      padding: 8px 10px;
     }
     .total-line {
       display: flex;
       justify-content: space-between;
-      margin-bottom: 5px;
-      font-size: 12px;
+      margin-bottom: 3px;
+      font-size: 11.5px;
       font-weight: 800 !important;
+      line-height: 1.15;
     }
     .net-to-pay {
       border-top: 2px solid #000000;
-      padding-top: 6px;
-      margin-top: 6px;
-      font-size: 16px;
+      padding-top: 4px;
+      margin-top: 4px;
+      font-size: 15px;
       font-weight: 900 !important;
       color: #000000 !important;
+      line-height: 1.15;
     }
     .signatures {
       display: grid;
       grid-template-columns: 1fr 1fr;
-      gap: 24px;
-      margin-top: 24px;
+      gap: 16px;
+      margin-top: 12px;
     }
     .sig-box {
       border: 2px dashed #000000;
-      border-radius: 8px;
-      height: 90px;
-      padding: 8px;
+      border-radius: 6px;
+      height: 70px;
+      padding: 6px;
       display: flex;
       flex-direction: column;
       justify-content: space-between;
@@ -602,12 +615,13 @@ export const generateA4InvoiceHtml = (
     }
     .footer {
       border-top: 1.5px solid #000000;
-      margin-top: 24px;
-      padding-top: 10px;
+      margin-top: 12px;
+      padding-top: 6px;
       text-align: center;
       font-size: 10px;
       font-weight: 800 !important;
       color: #000000 !important;
+      line-height: 1.2;
     }
     .no-print-toolbar {
       display: flex;
@@ -817,10 +831,10 @@ export const generateAnnualInventoryReportHtml = (
     body {
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
       font-size: 9.5px;
-      line-height: 1.35;
+      line-height: 1.2;
       color: #0f172a;
       background: #fff;
-      padding: 6mm;
+      padding: 5mm;
     }
     .center { text-align: center; }
     .right { text-align: right; }
