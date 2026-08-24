@@ -288,6 +288,42 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     return DEMO_PRODUCTS;
   };
 
+  // Helper to remove any unwanted 'ni repris ni échangé sauf accord préalable' clauses
+  const cleanSettingStrings = (s: StoreSettings): StoreSettings => {
+    if (!s) return s;
+    let receiptFooterMessage = s.receiptFooterMessage || '';
+    let invoiceLegalNotice = s.invoiceLegalNotice || '';
+
+    const clean = (txt: string) =>
+      txt
+        .replace(/les\s+articles\s+vendus?\s+ne\s+sont\s+ni\s+repris?\s+ni\s+échangés?[^.\n]*/gi, '')
+        .replace(/les\s+marchandises\s+vendues?\s+ne\s+sont\s+ni\s+reprises?\s+ni\s+échangées?[^.\n]*/gi, '')
+        .replace(/les\s+articles\s+frais\s+ne\s+sont\s+ni\s+repris?\s+ni\s+échangés?[^.\n]*/gi, '')
+        .replace(/ne\s+sont\s+ni\s+repris?\s+ni\s+échangés?[^.\n]*/gi, '')
+        .replace(/sauf\s+accord\s+préalable[^.\n]*/gi, '')
+        .replace(/au-delà\s+de\s+48h[^.\n]*/gi, '')
+        .replace(/\s{2,}/g, ' ')
+        .replace(/^[ -.,;:]+/, '')
+        .replace(/[ -.,;:]+$/, '')
+        .trim();
+
+    receiptFooterMessage = clean(receiptFooterMessage);
+    if (!receiptFooterMessage) {
+      receiptFooterMessage = 'Merci pour votre visite ! Aw ni ce !';
+    }
+
+    invoiceLegalNotice = clean(invoiceLegalNotice);
+    if (!invoiceLegalNotice) {
+      invoiceLegalNotice = 'Facture conforme aux normes du commerce au Mali.';
+    }
+
+    return {
+      ...s,
+      receiptFooterMessage,
+      invoiceLegalNotice,
+    };
+  };
+
   // States
   const [users, setUsers] = useState<User[]>(() => {
     const loaded = loadState(STORAGE_KEYS.USERS, INITIAL_USERS);
@@ -300,7 +336,7 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   });
   const [currentUser, setCurrentUserState] = useState<User>(() => loadState(STORAGE_KEYS.CURRENT_USER, INITIAL_USERS[0]));
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
-  const [settings, setSettings] = useState<StoreSettings>(() => loadState(STORAGE_KEYS.SETTINGS, INITIAL_SETTINGS));
+  const [settings, setSettings] = useState<StoreSettings>(() => cleanSettingStrings(loadState(STORAGE_KEYS.SETTINGS, INITIAL_SETTINGS)));
   const [categories, setCategories] = useState<Category[]>(() => {
     const cats = loadState(STORAGE_KEYS.CATEGORIES, INITIAL_CATEGORIES);
     return cats && cats.length > 0 ? cats : INITIAL_CATEGORIES;
@@ -396,7 +432,7 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         const remote = docSnap.data();
         if (remote && !docSnap.metadata.hasPendingWrites) {
           isRemoteUpdate.current = true;
-          if (remote.settings) setSettings(remote.settings);
+          if (remote.settings) setSettings(cleanSettingStrings(remote.settings));
           if (remote.users) setUsers(remote.users);
           if (remote.categories && remote.categories.length > 0) setCategories(remote.categories);
           if (remote.products && Array.isArray(remote.products) && remote.products.length > 0) {
@@ -650,7 +686,7 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   };
 
   const updateSettings = (newSettings: Partial<StoreSettings>) => {
-    setSettings(prev => ({ ...prev, ...newSettings }));
+    setSettings(prev => cleanSettingStrings({ ...prev, ...newSettings }));
     logActivity('Modification des paramètres', 'SYSTEME', 'Boutique', 'Mise à jour des réglages généraux');
   };
 

@@ -24,7 +24,7 @@ export const BUSINESS_PRESETS: BusinessPreset[] = [
       businessType: 'ALIMENTATION',
       storeName: 'Supérette & Alimentation Centrale',
       storeTagline: 'Votre épicerie de proximité - Fraîcheur & Qualité garanties',
-      receiptFooterMessage: 'Merci pour votre visite ! Les articles frais ne sont ni repris ni échangés.',
+      receiptFooterMessage: 'Merci pour votre visite ! Aw ni ce !',
       lowStockThresholdDefault: 10,
     },
     sampleCategories: [
@@ -234,7 +234,7 @@ export const BUSINESS_PRESETS: BusinessPreset[] = [
       businessType: 'MODE_BOUTIQUE',
       storeName: 'Élégance & Mode Boutique',
       storeTagline: 'Prêt-à-Porter & Chaussures Chic - Tendances du moment',
-      receiptFooterMessage: 'Merci pour vos achats ! Échange possible sous 7 jours avec ticket et étiquette intacte.',
+      receiptFooterMessage: 'Merci pour votre confiance et à bientôt !',
       lowStockThresholdDefault: 3,
     },
     sampleCategories: [

@@ -48,7 +48,9 @@ import {
   printViaWebSerial,
   printViaWebBluetooth,
   printViaRawBT,
-  PrintReceiptFormat
+  PrintReceiptFormat,
+  sanitizeReceiptFooter,
+  sanitizeLegalNotice
 } from '../../utils/printService';
 import { DirectPrinterModal } from './DirectPrinterModal';
 
@@ -693,10 +695,9 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
 
               {/* Footer Notice */}
               <div className="pt-4 text-center text-[10px] text-black font-black border-t-2 border-black mt-4 space-y-0.5">
-                <p className="font-black text-black">{settings.receiptFooterMessage}</p>
+                <p className="font-black text-black">{sanitizeReceiptFooter(settings.receiptFooterMessage)}</p>
                 <p>
-                  {settings.invoiceLegalNotice ||
-                    'Facture établie conformément aux usages du commerce. En cas de litige, seuls les tribunaux compétents sont habilités.'}
+                  {sanitizeLegalNotice(settings.invoiceLegalNotice)}
                 </p>
               </div>
             </div>
@@ -864,7 +865,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
 
               {/* Footer */}
               <div className="pt-1.5 text-center text-[9.5px] text-slate-950 font-bold leading-tight space-y-0.5">
-                <p className="font-black">{settings.receiptFooterMessage}</p>
+                <p className="font-black">{sanitizeReceiptFooter(settings.receiptFooterMessage)}</p>
                 <p className="text-[8.5px] text-slate-800 font-bold">Merci de votre fidélité !</p>
               </div>
             </div>

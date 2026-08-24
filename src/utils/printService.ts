@@ -73,6 +73,43 @@ export interface AnnualInventorySummary {
 }
 
 /**
+ * Sanitizes any receipt footer or legal notice to strictly exclude unwanted clauses like
+ * "Les articles vendus ne sont ni repris ni échangés sauf accord préalable"
+ */
+export const sanitizeReceiptFooter = (text?: string): string => {
+  if (!text) return 'Merci de votre visite et à bientôt !';
+  let cleaned = text
+    .replace(/les\s+articles\s+vendus?\s+ne\s+sont\s+ni\s+repris?\s+ni\s+échangés?[^.\n]*/gi, '')
+    .replace(/les\s+marchandises\s+vendues?\s+ne\s+sont\s+ni\s+reprises?\s+ni\s+échangées?[^.\n]*/gi, '')
+    .replace(/les\s+articles\s+frais\s+ne\s+sont\s+ni\s+repris?\s+ni\s+échangés?[^.\n]*/gi, '')
+    .replace(/ne\s+sont\s+ni\s+repris?\s+ni\s+échangés?[^.\n]*/gi, '')
+    .replace(/sauf\s+accord\s+préalable[^.\n]*/gi, '')
+    .replace(/au-delà\s+de\s+48h[^.\n]*/gi, '')
+    .replace(/\s{2,}/g, ' ')
+    .replace(/^[ -.,;:]+/, '')
+    .replace(/[ -.,;:]+$/, '')
+    .trim();
+
+  return cleaned || 'Merci de votre visite et à bientôt !';
+};
+
+export const sanitizeLegalNotice = (text?: string): string => {
+  if (!text) return 'Facture conforme aux normes du commerce au Mali.';
+  let cleaned = text
+    .replace(/les\s+articles\s+vendus?\s+ne\s+sont\s+ni\s+repris?\s+ni\s+échangés?[^.\n]*/gi, '')
+    .replace(/les\s+marchandises\s+vendues?\s+ne\s+sont\s+ni\s+reprises?\s+ni\s+échangées?[^.\n]*/gi, '')
+    .replace(/ne\s+sont\s+ni\s+repris?\s+ni\s+échangés?[^.\n]*/gi, '')
+    .replace(/sauf\s+accord\s+préalable[^.\n]*/gi, '')
+    .replace(/au-delà\s+de\s+48h[^.\n]*/gi, '')
+    .replace(/\s{2,}/g, ' ')
+    .replace(/^[ -.,;:]+/, '')
+    .replace(/[ -.,;:]+$/, '')
+    .trim();
+
+  return cleaned || 'Facture conforme aux normes du commerce au Mali.';
+};
+
+/**
  * Generates isolated HTML string for thermal receipt (80mm or 58mm) with high-contrast bold typography
  */
 export const generateThermalReceiptHtml = (
@@ -414,7 +451,7 @@ export const generateThermalReceiptHtml = (
 
     <!-- Footer message -->
     <div class="footer-msg bold">
-      <div class="bold">${settings.receiptFooterMessage || 'Merci de votre visite et à bientôt !'}</div>
+      <div class="bold">${sanitizeReceiptFooter(settings.receiptFooterMessage)}</div>
     </div>
   </div>
 
@@ -781,9 +818,9 @@ export const generateA4InvoiceHtml = (
   </div>
 
   <div class="footer bold">
-    <div class="bold">${settings.receiptFooterMessage || 'Merci de votre confiance.'}</div>
+    <div class="bold">${sanitizeReceiptFooter(settings.receiptFooterMessage)}</div>
     <div style="margin-top: 3px;" class="bold">
-      ${settings.invoiceLegalNotice || 'Facture établie conformément aux lois en vigueur. En cas de contestation, seuls les tribunaux compétents sont habilités.'}
+      ${sanitizeLegalNotice(settings.invoiceLegalNotice)}
     </div>
   </div>
 
@@ -1257,8 +1294,7 @@ export const generateEscPosBytes = (
   center();
   boldOn();
   add(0x0a);
-  line(settings.receiptFooterMessage || 'Merci de votre confiance !');
-  line('A bientot.');
+  line(sanitizeReceiptFooter(settings.receiptFooterMessage));
   boldOff();
   add(0x0a, 0x0a, 0x0a, 0x0a);
 
