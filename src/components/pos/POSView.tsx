@@ -45,7 +45,8 @@ import {
   executeDirectPrint,
   printViaWebSerial,
   printViaWebBluetooth,
-  printViaRawBT
+  printViaRawBT,
+  autoPrintSaleReceipt
 } from '../../utils/printService';
 import confetti from 'canvas-confetti';
 
@@ -63,6 +64,7 @@ export const POSView: React.FC<POSViewProps> = () => {
     createSale,
     cancelSale,
     settings,
+    updateSettings,
     cashRegister,
   } = useStore();
 
@@ -546,6 +548,10 @@ export const POSView: React.FC<POSViewProps> = () => {
       return;
     }
 
+    const customerForPrint = selectedCustomerId
+      ? (customers || []).find((c) => c.id === selectedCustomerId)
+      : undefined;
+
     const result = createSale(
       cart,
       paymentMethod,
@@ -569,29 +575,12 @@ export const POSView: React.FC<POSViewProps> = () => {
       setShowCheckoutModal(false);
       clearCart();
 
-      // Automatic direct print if configured
+      // Trigger automatic direct print if configured
       if (settings.autoPrintReceiptOnSale) {
-        setTimeout(async () => {
-          try {
-            if (settings.printerType === 'USB_SERIAL') {
-              await printViaWebSerial(saleRecord, settings, selectedCustomer);
-            } else if (settings.printerType === 'BLUETOOTH') {
-              await printViaWebBluetooth(saleRecord, settings, selectedCustomer);
-            } else if (settings.printerType === 'RAWBT') {
-              printViaRawBT(saleRecord, settings, selectedCustomer);
-            } else {
-              const html = generateThermalReceiptHtml(
-                saleRecord,
-                settings,
-                selectedCustomer,
-                settings.directThermalWidthMm || 80
-              );
-              executeDirectPrint(html);
-            }
-          } catch (e) {
-            console.error('Auto-print error:', e);
-          }
-        }, 350);
+        // Execute immediately with robust in-page iframe printing
+        autoPrintSaleReceipt(saleRecord, settings, customerForPrint).catch((err) => {
+          console.error('Auto-print error:', err);
+        });
       }
     } else {
       setErrorMessage(result.message || 'Erreur lors de la validation de la vente.');
@@ -625,11 +614,25 @@ export const POSView: React.FC<POSViewProps> = () => {
           <div className="flex items-center gap-2">
             <button
               type="button"
+              onClick={async () => {
+                const customerForPrint = lastCompletedSale.customerId
+                  ? (customers || []).find((c) => c.id === lastCompletedSale.customerId)
+                  : undefined;
+                await autoPrintSaleReceipt(lastCompletedSale, settings, customerForPrint);
+              }}
+              className="px-3 py-1.5 bg-slate-900 hover:bg-black text-white rounded-xl font-bold text-xs flex items-center gap-1.5 shadow-xs transition-all cursor-pointer"
+              title="Envoyer immédiatement le ticket à l'imprimante"
+            >
+              <Printer className="w-3.5 h-3.5 text-emerald-400" />
+              Imprimer Direct
+            </button>
+            <button
+              type="button"
               onClick={() => setShowReceiptModal(true)}
               className="px-3 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl font-bold text-xs flex items-center gap-1.5 shadow-xs transition-all cursor-pointer"
             >
-              <Printer className="w-3.5 h-3.5" />
-              Voir / Imprimer Reçu
+              <Receipt className="w-3.5 h-3.5" />
+              Aperçu Reçu
             </button>
             <button
               type="button"
@@ -1491,6 +1494,27 @@ export const POSView: React.FC<POSViewProps> = () => {
                 />
               </div>
 
+              {/* Automatic receipt print toggle switch */}
+              <label className="flex items-center gap-3 p-2.5 bg-slate-50 border border-slate-200 rounded-xl cursor-pointer hover:bg-emerald-50/60 transition-colors">
+                <input
+                  type="checkbox"
+                  checked={settings.autoPrintReceiptOnSale ?? false}
+                  onChange={(e) => updateSettings({ autoPrintReceiptOnSale: e.target.checked })}
+                  className="h-4 w-4 rounded text-emerald-600 focus:ring-emerald-500 cursor-pointer"
+                />
+                <div className="flex-1">
+                  <span className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
+                    <Printer className="w-3.5 h-3.5 text-emerald-600" />
+                    Impression automatique du ticket de caisse
+                  </span>
+                  <span className="text-[11px] text-slate-500 block">
+                    {settings.autoPrintReceiptOnSale
+                      ? '✓ Le ticket sera automatiquement envoyé à votre imprimante.'
+                      : 'Cochez cette case pour activer l’impression automatique.'}
+                  </span>
+                </div>
+              </label>
+
               {/* Action Buttons */}
               <div className="pt-2 flex items-center justify-end gap-2">
                 <button
@@ -1503,10 +1527,10 @@ export const POSView: React.FC<POSViewProps> = () => {
                 <button
                   type="button"
                   onClick={handleValidateSale}
-                  className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold shadow-sm transition-all flex items-center gap-1.5"
+                  className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold shadow-sm transition-all flex items-center gap-1.5 cursor-pointer"
                 >
                   <CheckCircle2 className="w-4 h-4" />
-                  Confirmer & Imprimer Reçu
+                  Valider l'Encaissement
                 </button>
               </div>
             </div>

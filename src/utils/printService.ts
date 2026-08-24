@@ -1388,13 +1388,67 @@ export const printViaRawBT = (
 };
 
 /**
- * 4. Bulletproof Dedicated Tab Printing (Bypasses all iframe sandbox blocks!)
+ * 4. In-Page Hidden Iframe Printing (Bypasses popup blockers and iframe sandbox restrictions)
+ */
+export const printViaHiddenIframe = (htmlContent: string): Promise<boolean> => {
+  return new Promise((resolve) => {
+    try {
+      // Remove any existing print frame
+      const oldFrame = document.getElementById('pos-silent-print-frame');
+      if (oldFrame) {
+        oldFrame.remove();
+      }
+
+      const iframe = document.createElement('iframe');
+      iframe.id = 'pos-silent-print-frame';
+      iframe.setAttribute('style', 'position:fixed;top:-9999px;left:-9999px;width:1px;height:1px;border:0;visibility:hidden;');
+      document.body.appendChild(iframe);
+
+      const frameDoc = iframe.contentWindow?.document || iframe.contentDocument;
+      if (!frameDoc) {
+        throw new Error('Impossible d’accéder au document iframe');
+      }
+
+      frameDoc.open();
+      frameDoc.write(htmlContent);
+      frameDoc.close();
+
+      let hasPrinted = false;
+      const doPrint = () => {
+        if (hasPrinted) return;
+        hasPrinted = true;
+        try {
+          iframe.contentWindow?.focus();
+          iframe.contentWindow?.print();
+          resolve(true);
+        } catch (printErr) {
+          console.warn('Iframe print call failed, falling back to window', printErr);
+          const winOpened = openPrintWindow(htmlContent);
+          resolve(winOpened);
+        }
+      };
+
+      // Try on load with timeout fallback
+      iframe.onload = () => {
+        setTimeout(doPrint, 150);
+      };
+      setTimeout(doPrint, 350);
+    } catch (e) {
+      console.warn('Hidden iframe creation failed, using openPrintWindow', e);
+      const fallbackSuccess = openPrintWindow(htmlContent);
+      resolve(fallbackSuccess);
+    }
+  });
+};
+
+/**
+ * 5. Dedicated Tab / Window Printing Fallback
  */
 export const openPrintWindow = (htmlContent: string): boolean => {
   try {
     const blob = new Blob([htmlContent], { type: 'text/html;charset=utf-8' });
     const url = URL.createObjectURL(blob);
-    const win = window.open(url, '_blank');
+    const win = window.open(url, '_blank', 'width=450,height=700,menubar=no,toolbar=no,location=no');
     if (win) {
       win.focus();
       return true;
@@ -1404,7 +1458,7 @@ export const openPrintWindow = (htmlContent: string): boolean => {
   }
 
   try {
-    const win = window.open('', '_blank', 'width=450,height=650');
+    const win = window.open('', '_blank', 'width=450,height=700');
     if (win) {
       win.document.open();
       win.document.write(htmlContent);
@@ -1413,23 +1467,65 @@ export const openPrintWindow = (htmlContent: string): boolean => {
       return true;
     }
   } catch (e) {
-    console.error('Window open blocked', e);
+    console.error('Window open blocked by browser popup blocker', e);
   }
 
-  // Last resort: trigger window.print
-  window.print();
   return false;
 };
 
 /**
  * Universal Direct Print Dispatcher
  */
-export const executeDirectPrint = (htmlContent: string): Promise<boolean> => {
-  return new Promise((resolve) => {
-    // Open in dedicated print window (100% reliable across browsers and iframe environments)
-    const opened = openPrintWindow(htmlContent);
-    resolve(opened);
-  });
+export const executeDirectPrint = async (htmlContent: string): Promise<boolean> => {
+  // First attempt: Hidden in-page iframe (reliable, no popup blocking)
+  const printed = await printViaHiddenIframe(htmlContent);
+  if (!printed) {
+    // Second attempt: Window popup
+    return openPrintWindow(htmlContent);
+  }
+  return true;
+};
+
+/**
+ * Automatic Sale Receipt Dispatcher based on store settings
+ */
+export const autoPrintSaleReceipt = async (
+  sale: Sale,
+  settings: StoreSettings,
+  customer?: Customer
+): Promise<{ success: boolean; message: string }> => {
+  try {
+    const width = settings.directThermalWidthMm || 80;
+
+    if (settings.printerType === 'USB_SERIAL') {
+      return await printViaWebSerial(sale, settings, customer);
+    }
+
+    if (settings.printerType === 'BLUETOOTH') {
+      return await printViaWebBluetooth(sale, settings, customer);
+    }
+
+    if (settings.printerType === 'RAWBT') {
+      return printViaRawBT(sale, settings, customer);
+    }
+
+    // Default Browser / Thermal HTML direct print
+    const html = generateThermalReceiptHtml(sale, settings, customer, width);
+    const printed = await executeDirectPrint(html);
+
+    return {
+      success: printed,
+      message: printed
+        ? 'Impression automatique du ticket déclenchée avec succès !'
+        : 'Fenêtre d’impression envoyée.',
+    };
+  } catch (err: any) {
+    console.error('Auto-print sale receipt failure:', err);
+    return {
+      success: false,
+      message: `Échec impression automatique: ${err.message || 'Erreur inconnue'}`,
+    };
+  }
 };
 
 /**
