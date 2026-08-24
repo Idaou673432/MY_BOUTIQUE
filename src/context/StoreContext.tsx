@@ -49,6 +49,7 @@ import {
   DEMO_STOCK_MOVEMENTS,
   DEMO_SALES,
 } from '../data/initialData';
+import { STORE_LOGO_BASE64 } from '../assets/logoBase64';
 import { BUSINESS_PRESETS } from '../data/industryPresets';
 import { generateId, generateInvoiceNumber, generateOrderNumber, generateQuoteNumber } from '../utils/formatters';
 
@@ -317,8 +318,16 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       invoiceLegalNotice = 'Facture conforme aux normes du commerce au Mali.';
     }
 
+    const storeName = (!s.storeName || s.storeName === 'Boutique Bamako Pro' || s.storeName === 'Boutique & Négoce Pro')
+      ? 'TANE FAH COLLECTION'
+      : s.storeName;
+
+    const logoUrl = s.logoUrl || STORE_LOGO_BASE64;
+
     return {
       ...s,
+      storeName,
+      logoUrl,
       receiptFooterMessage,
       invoiceLegalNotice,
     };

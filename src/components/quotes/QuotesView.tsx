@@ -24,6 +24,7 @@ import {
 } from 'lucide-react';
 import { useStore } from '../../context/StoreContext';
 import { Quote, QuoteItem, Customer, Product } from '../../types';
+import { STORE_LOGO_BASE64 } from '../../assets/logoBase64';
 import { formatMoney, formatDate, formatDateTime } from '../../utils/formatters';
 
 export const QuotesView: React.FC = () => {
@@ -240,11 +241,14 @@ export const QuotesView: React.FC = () => {
       </head>
       <body>
         <div class="header">
-          <div>
-            <div class="shop-title">${settings.shopName || 'BOUTIQUE COMMERCIALE'}</div>
-            <div>${settings.address || ''}</div>
-            <div>Tél: ${settings.phone || ''}</div>
-            ${settings.email ? `<div>Email: ${settings.email}</div>` : ''}
+          <div style="display: flex; align-items: center; gap: 14px;">
+            <img src="${settings.logoUrl || STORE_LOGO_BASE64}" alt="Logo" style="max-height: 60px; max-width: 120px; object-fit: contain; border-radius: 6px; border: 1px solid #e2e8f0; padding: 2px;" />
+            <div>
+              <div class="shop-title">${settings.storeName || settings.shopName || 'TANE FAH COLLECTION'}</div>
+              <div>${settings.address || ''}</div>
+              <div>Tél: ${settings.phone || ''}</div>
+              ${settings.email ? `<div>Email: ${settings.email}</div>` : ''}
+            </div>
           </div>
           <div>
             <div class="doc-title">DEVIS / PROFORMA</div>

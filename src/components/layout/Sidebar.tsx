@@ -22,6 +22,7 @@ import {
 } from 'lucide-react';
 import { useStore } from '../../context/StoreContext';
 import { ROLE_PERMISSIONS } from '../../types';
+import { STORE_LOGO_BASE64 } from '../../assets/logoBase64';
 
 interface SidebarProps {
   currentTab: string;
@@ -218,15 +219,19 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentTab, onSelectTab, isOpe
       >
         {/* Header brand section */}
         <div className="p-4 sm:p-5 flex items-center gap-3 border-b border-gray-700 shrink-0">
-          <div className="w-8 h-8 bg-indigo-500 rounded-xl flex items-center justify-center font-bold text-white text-base shadow-sm">
-            {settings.storeName ? settings.storeName.charAt(0).toUpperCase() : 'B'}
+          <div className="w-10 h-10 rounded-xl overflow-hidden bg-white flex items-center justify-center p-0.5 shadow-sm shrink-0 border border-gray-600">
+            <img
+              src={settings.logoUrl || STORE_LOGO_BASE64}
+              alt={settings.storeName || 'Logo'}
+              className="w-full h-full object-contain"
+            />
           </div>
           <div className="truncate">
-            <span className="font-bold text-base sm:text-lg tracking-tight block text-white truncate">
-              {settings.storeName || 'BOUTIQUE PRO'}
+            <span className="font-bold text-sm sm:text-base tracking-tight block text-white truncate">
+              {settings.storeName || 'TANE FAH COLLECTION'}
             </span>
-            <span className="text-[10px] text-gray-400 font-medium block">
-              {isVendeur ? 'Session Caisse (Vendeur)' : 'Gestion Commerciale'}
+            <span className="text-[10px] text-amber-400 font-semibold block truncate">
+              {isVendeur ? 'Session Caisse (Vendeur)' : 'Boutique & Mode'}
             </span>
           </div>
         </div>

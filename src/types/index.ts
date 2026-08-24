@@ -470,6 +470,7 @@ export interface StoreSettings {
   storeName?: string;
   shopName?: string;
   storeTagline?: string;
+  logoUrl?: string; // URL or base64 data URI of the store logo
   businessType?: BusinessType;
   address?: string;
   shopAddress?: string;

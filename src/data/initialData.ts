@@ -14,6 +14,7 @@ import {
   ActivityLog, 
   StoreSettings 
 } from '../types';
+import { STORE_LOGO_BASE64 } from '../assets/logoBase64';
 
 export const INITIAL_USERS: User[] = [
   {
@@ -513,11 +514,12 @@ export const INITIAL_ACTIVITY_LOGS: ActivityLog[] = [
 ];
 
 export const INITIAL_SETTINGS: StoreSettings = {
-  storeName: 'Boutique Bamako Pro',
-  storeTagline: 'Commerce Général & Vente au détail - Bamako (Mali)',
+  storeName: 'TANE FAH COLLECTION',
+  storeTagline: 'Boutique de Mode & Prêt-à-Porter - Bamako (Mali)',
+  logoUrl: STORE_LOGO_BASE64,
   address: 'Grand Marché de Bamako, Rue 18 x 25, Bamako - Mali',
   phone: '+223 76 00 00 00 / +223 66 00 00 00',
-  email: 'contact@boutique-bamako.ml',
+  email: 'contact@tanefah.ml',
   taxRatePercent: 0, // Par défaut exonéré ou TTC
   taxEnabled: false,
   currency: 'FCFA',
@@ -531,5 +533,5 @@ export const INITIAL_SETTINGS: StoreSettings = {
   allowNegativeStock: false,
   lowStockThresholdDefault: 5,
   cashThresholdAlert: 200000,
-  businessType: 'COMMERCE_GENERAL',
+  businessType: 'MODE_BOUTIQUE',
 };

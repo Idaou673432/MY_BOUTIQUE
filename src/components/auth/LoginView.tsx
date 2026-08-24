@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { useStore } from '../../context/StoreContext';
 import { UserRole } from '../../types';
+import { STORE_LOGO_BASE64 } from '../../assets/logoBase64';
 
 interface LoginViewProps {
   onLoginSuccess?: (role: UserRole) => void;
@@ -117,15 +118,19 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
             <span>🇲🇱</span> Mali - Bamako
           </div>
 
-          <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-indigo-600 to-indigo-500 flex items-center justify-center text-white font-black text-2xl mx-auto mb-3 shadow-lg shadow-indigo-600/30">
-            {settings.storeName ? settings.storeName.charAt(0).toUpperCase() : <Store className="w-7 h-7" />}
+          <div className="w-24 h-24 rounded-2xl bg-white flex items-center justify-center p-1.5 mx-auto mb-3 shadow-xl border border-slate-700/60 overflow-hidden">
+            <img
+              src={settings.logoUrl || STORE_LOGO_BASE64}
+              alt={settings.storeName || 'Logo'}
+              className="w-full h-full object-contain"
+            />
           </div>
 
           <h1 className="text-lg sm:text-xl font-black text-white tracking-tight uppercase">
-            {settings.storeName || 'BOUTIQUE MALI PRO'}
+            {settings.storeName || 'TANE FAH COLLECTION'}
           </h1>
-          <p className="text-xs text-slate-400 font-medium mt-1">
-            {settings.storeTagline || 'Commerce Général & Vente au détail'}
+          <p className="text-xs text-amber-400 font-medium mt-1">
+            {settings.storeTagline || 'Boutique de Mode & Prêt-à-Porter - Bamako'}
           </p>
 
           <div className="mt-3 flex items-center justify-center gap-2 text-[11px] text-indigo-300 bg-indigo-950/40 border border-indigo-900/50 py-1.5 px-3 rounded-xl max-w-xs mx-auto">

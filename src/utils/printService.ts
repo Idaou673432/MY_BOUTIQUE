@@ -1,4 +1,5 @@
 import { Sale, StoreSettings, Customer } from '../types';
+import { STORE_LOGO_BASE64 } from '../assets/logoBase64';
 import {
   formatMoney,
   formatDateTime,
@@ -334,6 +335,9 @@ export const generateThermalReceiptHtml = (
   <div class="ticket-container">
     <!-- Store Header (ALL IN BOLD AND CLEARLY VISIBLE) -->
     <div class="store-header-box center">
+      <div style="text-align: center; margin: 0 auto 5px auto;">
+        <img src="${settings.logoUrl || STORE_LOGO_BASE64}" alt="${storeName}" style="max-height: ${is58 ? '46px' : '62px'}; max-width: ${is58 ? '130px' : '170px'}; object-fit: contain; margin: 0 auto; display: block; border-radius: 4px;" />
+      </div>
       <div class="store-name bold">${storeName}</div>
       ${storeTagline ? `<div class="store-sub bold uppercase">${storeTagline}</div>` : ''}
       ${address ? `<div class="store-info-line bold uppercase">ADRESSE: ${address}</div>` : ''}
@@ -709,15 +713,18 @@ export const generateA4InvoiceHtml = (
   </div>
 
   <div class="header">
-    <div>
-      <div class="store-title bold">${storeName}</div>
-      ${storeTagline ? `<div class="store-tagline-a4 bold">${storeTagline}</div>` : ''}
-      <div class="store-info-a4 bold">
-        ${address ? `<div><strong>ADRESSE :</strong> <span>${address.toUpperCase()}</span></div>` : ''}
-        ${phone ? `<div><strong>TÉLÉPHONE :</strong> <span>${phone}</span></div>` : ''}
-        ${email ? `<div><strong>EMAIL :</strong> <span>${email}</span></div>` : ''}
-        ${nif ? `<div><strong>NIF / RCCM :</strong> <span>${nif}</span></div>` : ''}
-        ${mobileMoney ? `<div><strong>PAIEMENT MOBILE :</strong> <span>${mobileMoney}</span></div>` : ''}
+    <div style="display: flex; align-items: center; gap: 14px;">
+      <img src="${settings.logoUrl || STORE_LOGO_BASE64}" alt="${storeName}" style="max-height: 70px; max-width: 140px; object-fit: contain; border-radius: 6px; border: 1px solid #e2e8f0; padding: 2px;" />
+      <div>
+        <div class="store-title bold">${storeName}</div>
+        ${storeTagline ? `<div class="store-tagline-a4 bold">${storeTagline}</div>` : ''}
+        <div class="store-info-a4 bold">
+          ${address ? `<div><strong>ADRESSE :</strong> <span>${address.toUpperCase()}</span></div>` : ''}
+          ${phone ? `<div><strong>TÉLÉPHONE :</strong> <span>${phone}</span></div>` : ''}
+          ${email ? `<div><strong>EMAIL :</strong> <span>${email}</span></div>` : ''}
+          ${nif ? `<div><strong>NIF / RCCM :</strong> <span>${nif}</span></div>` : ''}
+          ${mobileMoney ? `<div><strong>PAIEMENT MOBILE :</strong> <span>${mobileMoney}</span></div>` : ''}
+        </div>
       </div>
     </div>
 
@@ -998,10 +1005,13 @@ export const generateAnnualInventoryReportHtml = (
   </div>
 
   <div class="header">
-    <div>
-      <div style="font-size: 16px; font-weight: 900; text-transform: uppercase;">${storeName}</div>
-      <div style="font-size: 10px; color: #475569;">AUDIT ET BILAN ANNUEL DE VALORISATION DES STOCKS</div>
-      <div style="font-size: 9px; color: #64748b;">NIF / RCCM : ${settings.nifRccm || 'Non renseigné'} • Date d'édition : ${formatDate(new Date().toISOString())}</div>
+    <div style="display: flex; align-items: center; gap: 12px;">
+      <img src="${settings.logoUrl || STORE_LOGO_BASE64}" alt="${storeName}" style="max-height: 50px; max-width: 100px; object-fit: contain; border-radius: 4px;" />
+      <div>
+        <div style="font-size: 16px; font-weight: 900; text-transform: uppercase;">${storeName}</div>
+        <div style="font-size: 10px; color: #475569;">AUDIT ET BILAN ANNUEL DE VALORISATION DES STOCKS</div>
+        <div style="font-size: 9px; color: #64748b;">NIF / RCCM : ${settings.nifRccm || 'Non renseigné'} • Date d'édition : ${formatDate(new Date().toISOString())}</div>
+      </div>
     </div>
     <div class="right">
       <div style="background: #0f172a; color: white; padding: 4px 8px; font-weight: 900; border-radius: 4px; font-size: 11px;">

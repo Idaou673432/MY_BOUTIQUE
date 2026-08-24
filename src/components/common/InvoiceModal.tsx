@@ -52,6 +52,7 @@ import {
   sanitizeReceiptFooter,
   sanitizeLegalNotice
 } from '../../utils/printService';
+import { STORE_LOGO_BASE64 } from '../../assets/logoBase64';
 import { DirectPrinterModal } from './DirectPrinterModal';
 
 interface InvoiceModalProps {
@@ -495,14 +496,16 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
             >
               {/* Top Business Header */}
               <div className="flex flex-col sm:flex-row justify-between items-start gap-3 pb-3 border-b-2 border-slate-950">
-                <div className="space-y-1">
-                  <div className="flex items-center gap-2">
-                    <div className="w-9 h-9 rounded-lg bg-slate-950 text-white flex items-center justify-center font-black text-xl shadow-xs">
-                      {(settings.storeName || settings.shopName || 'B').charAt(0).toUpperCase()}
-                    </div>
+                <div className="flex items-start gap-3">
+                  <img
+                    src={settings.logoUrl || STORE_LOGO_BASE64}
+                    alt={settings.storeName || 'Logo'}
+                    className="w-16 h-16 sm:w-20 sm:h-20 object-contain rounded-lg border border-slate-200 p-1 shrink-0 bg-white"
+                  />
+                  <div className="space-y-1">
                     <div>
                       <h1 className="text-xl sm:text-2xl font-black tracking-tight text-slate-950 uppercase leading-tight">
-                        {settings.storeName || settings.shopName || 'BOUTIQUE MALI'}
+                        {settings.storeName || settings.shopName || 'TANE FAH COLLECTION'}
                       </h1>
                       {(settings.storeTagline || settings.businessType) && (
                         <p className="text-[11px] text-slate-950 font-black uppercase tracking-wider leading-tight">
@@ -510,37 +513,37 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
                         </p>
                       )}
                     </div>
-                  </div>
 
-                  <div className="text-[11px] text-slate-950 font-black space-y-0.5 pt-1 leading-snug">
-                    {(settings.address || settings.shopAddress) && (
-                      <p className="flex items-center gap-1.5">
-                        <MapPin className="w-3.5 h-3.5 text-slate-950 shrink-0" />
-                        <span className="font-black">ADRESSE : {settings.address || settings.shopAddress}</span>
-                      </p>
-                    )}
-                    {(settings.phone || settings.shopPhone) && (
-                      <p className="flex items-center gap-1.5">
-                        <Phone className="w-3.5 h-3.5 text-slate-950 shrink-0" />
-                        <span className="font-black">TÉL : <strong className="font-black text-slate-950">{settings.phone || settings.shopPhone}</strong></span>
-                      </p>
-                    )}
-                    {(settings.email || settings.shopEmail) && (
-                      <p className="flex items-center gap-1.5">
-                        <Mail className="w-3.5 h-3.5 text-slate-950 shrink-0" />
-                        <span className="font-black">EMAIL : <strong className="font-black text-slate-950">{settings.email || settings.shopEmail}</strong></span>
-                      </p>
-                    )}
-                    {settings.nifRccm && (
-                      <p className="text-[10.5px] font-mono text-slate-950 font-black">
-                        NIF / RCCM : <span className="font-black">{settings.nifRccm}</span>
-                      </p>
-                    )}
-                    {settings.mobileMoneyNumber && (
-                      <p className="text-[10.5px] font-mono text-slate-950 font-black">
-                        PAIEMENT MOBILE (WAVE/OM) : <span className="font-black">{settings.mobileMoneyNumber}</span>
-                      </p>
-                    )}
+                    <div className="text-[11px] text-slate-950 font-black space-y-0.5 pt-1 leading-snug">
+                      {(settings.address || settings.shopAddress) && (
+                        <p className="flex items-center gap-1.5">
+                          <MapPin className="w-3.5 h-3.5 text-slate-950 shrink-0" />
+                          <span className="font-black">ADRESSE : {settings.address || settings.shopAddress}</span>
+                        </p>
+                      )}
+                      {(settings.phone || settings.shopPhone) && (
+                        <p className="flex items-center gap-1.5">
+                          <Phone className="w-3.5 h-3.5 text-slate-950 shrink-0" />
+                          <span className="font-black">TÉL : <strong className="font-black text-slate-950">{settings.phone || settings.shopPhone}</strong></span>
+                        </p>
+                      )}
+                      {(settings.email || settings.shopEmail) && (
+                        <p className="flex items-center gap-1.5">
+                          <Mail className="w-3.5 h-3.5 text-slate-950 shrink-0" />
+                          <span className="font-black">EMAIL : <strong className="font-black text-slate-950">{settings.email || settings.shopEmail}</strong></span>
+                        </p>
+                      )}
+                      {settings.nifRccm && (
+                        <p className="text-[10.5px] font-mono text-slate-950 font-black">
+                          NIF / RCCM : <span className="font-black">{settings.nifRccm}</span>
+                        </p>
+                      )}
+                      {settings.mobileMoneyNumber && (
+                        <p className="text-[10.5px] font-mono text-slate-950 font-black">
+                          PAIEMENT MOBILE (WAVE/OM) : <span className="font-black">{settings.mobileMoneyNumber}</span>
+                        </p>
+                      )}
+                    </div>
                   </div>
                 </div>
 
@@ -715,8 +718,17 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
             >
               {/* Store Header (ULTRA BOLD & HIGH CONTRAST) */}
               <div className="text-center space-y-0.5 pb-2 border-b-2 border-dashed border-slate-950">
+                <div className="flex justify-center mb-1">
+                  <img
+                    src={settings.logoUrl || STORE_LOGO_BASE64}
+                    alt={settings.storeName || 'Logo'}
+                    className={`object-contain rounded ${
+                      printFormat === 'TICKET_58' ? 'max-h-12 max-w-[120px]' : 'max-h-14 max-w-[150px]'
+                    }`}
+                  />
+                </div>
                 <h2 className="font-black text-base text-slate-950 uppercase tracking-wide leading-tight">
-                  {settings.storeName || settings.shopName || 'BOUTIQUE MALI'}
+                  {settings.storeName || settings.shopName || 'TANE FAH COLLECTION'}
                 </h2>
                 {(settings.storeTagline || settings.businessType) && (
                   <p className="text-[11px] text-slate-950 font-black uppercase leading-tight">
