@@ -1568,14 +1568,14 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
 
   // Cash Register Management
   const openCashRegister = (openingBalance: number, notes?: string): boolean => {
-    if (cashRegister && cashRegister.isOpen) return false;
+    const numOpening = Number(openingBalance) >= 0 ? Number(openingBalance) : 0;
 
     const newReg: CashRegister = {
       id: generateId('csh_session'),
       openedAt: new Date().toISOString(),
-      openedBy: currentUser.id,
-      openedByName: currentUser.name,
-      openingBalance,
+      openedBy: currentUser?.id || 'usr_admin',
+      openedByName: currentUser?.name || 'Administrateur',
+      openingBalance: numOpening,
       isOpen: true,
       totalSales: 0,
       totalExpenses: 0,
@@ -1590,16 +1590,16 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       id: generateId('tx'),
       cashRegisterId: newReg.id,
       type: 'OUVERTURE',
-      amount: openingBalance,
+      amount: numOpening,
       reason: 'Ouverture de caisse - Fond initial',
-      userId: currentUser.id,
-      userName: currentUser.name,
+      userId: currentUser?.id || 'usr_admin',
+      userName: currentUser?.name || 'Administrateur',
       date: new Date().toISOString(),
       paymentMethod: 'ESPECES',
     };
 
-    setCashTransactions(prev => [initTx, ...prev]);
-    logActivity('Ouverture de caisse', 'CAISSE', 'Caisse', `Fond initial: ${openingBalance}`);
+    setCashTransactions(prev => [initTx, ...(prev || [])]);
+    logActivity('Ouverture de caisse', 'CAISSE', 'Caisse', `Fond initial: ${numOpening}`);
     return true;
   };
 

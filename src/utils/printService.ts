@@ -194,12 +194,12 @@ export const generateThermalReceiptHtml = (
     }
     .receipt-logo {
       display: block;
-      margin: 0 auto 6px auto;
-      max-height: ${is58 ? '75px' : '98px'};
-      max-width: ${is58 ? '180px' : '240px'};
+      margin: 0 auto 8px auto;
+      max-height: ${is58 ? '95px' : '125px'};
+      max-width: ${is58 ? '200px' : '270px'};
       width: auto;
       object-fit: contain;
-      filter: contrast(175%) brightness(80%) saturate(150%);
+      filter: grayscale(100%) contrast(350%) brightness(55%);
       -webkit-print-color-adjust: exact !important;
       print-color-adjust: exact !important;
       image-rendering: -webkit-optimize-contrast;
@@ -333,10 +333,11 @@ export const generateThermalReceiptHtml = (
         print-color-adjust: exact !important;
       }
       .receipt-logo {
-        filter: contrast(200%) brightness(70%) saturate(180%) !important;
+        filter: grayscale(100%) contrast(400%) brightness(40%) !important;
         -webkit-print-color-adjust: exact !important;
         print-color-adjust: exact !important;
         image-rendering: -webkit-optimize-contrast !important;
+        image-rendering: crisp-edges !important;
       }
       .store-header-box * {
         font-weight: 900 !important;
@@ -709,15 +710,16 @@ export const generateA4InvoiceHtml = (
       cursor: pointer;
     }
     .a4-logo {
-      max-height: 88px;
-      max-width: 175px;
+      max-height: 110px;
+      max-width: 220px;
       object-fit: contain;
-      border-radius: 6px;
+      border-radius: 8px;
       padding: 2px;
-      filter: contrast(175%) brightness(80%) saturate(150%);
+      filter: grayscale(100%) contrast(350%) brightness(55%);
       -webkit-print-color-adjust: exact !important;
       print-color-adjust: exact !important;
       image-rendering: -webkit-optimize-contrast;
+      image-rendering: crisp-edges;
     }
     @media print {
       .no-print-toolbar {
@@ -734,9 +736,11 @@ export const generateA4InvoiceHtml = (
         print-color-adjust: exact !important;
       }
       .a4-logo {
-        filter: contrast(200%) brightness(70%) saturate(180%) !important;
+        filter: grayscale(100%) contrast(400%) brightness(40%) !important;
         -webkit-print-color-adjust: exact !important;
         print-color-adjust: exact !important;
+        image-rendering: -webkit-optimize-contrast !important;
+        image-rendering: crisp-edges !important;
       }
     }
   </style>
@@ -1024,13 +1028,15 @@ export const generateAnnualInventoryReportHtml = (
       cursor: pointer;
     }
     .inventory-logo {
-      max-height: 70px;
-      max-width: 130px;
+      max-height: 80px;
+      max-width: 150px;
       object-fit: contain;
       border-radius: 4px;
-      filter: contrast(175%) brightness(80%) saturate(150%);
+      filter: grayscale(100%) contrast(350%) brightness(55%);
       -webkit-print-color-adjust: exact !important;
       print-color-adjust: exact !important;
+      image-rendering: -webkit-optimize-contrast;
+      image-rendering: crisp-edges;
     }
     @media print {
       .no-print-toolbar {
@@ -1040,9 +1046,11 @@ export const generateAnnualInventoryReportHtml = (
         padding: 0 !important;
       }
       .inventory-logo {
-        filter: contrast(200%) brightness(70%) saturate(180%) !important;
+        filter: grayscale(100%) contrast(400%) brightness(40%) !important;
         -webkit-print-color-adjust: exact !important;
         print-color-adjust: exact !important;
+        image-rendering: -webkit-optimize-contrast !important;
+        image-rendering: crisp-edges !important;
       }
     }
   </style>
@@ -1359,6 +1367,12 @@ export const generateEscPosBytes = (
 
   // Partial paper cut
   add(0x1d, 0x56, 0x41, 0x03);
+
+  // Kick Cash Drawer pulse on cash payment (Pins 2 & 5)
+  if (sale.paymentMethod === 'ESPECES') {
+    add(0x1b, 0x70, 0x00, 0x19, 0xfa);
+    add(0x1b, 0x70, 0x01, 0x19, 0xfa);
+  }
 
   return new Uint8Array(bytes);
 };
@@ -1701,3 +1715,114 @@ export const downloadHtmlFile = (htmlContent: string, filename: string) => {
   document.body.removeChild(link);
   URL.revokeObjectURL(url);
 };
+
+/**
+ * Triggers electronic Cash Drawer (Tiroir-Caisse) Kick via ESC/POS
+ * Compatible with thermal receipt printers connected to a cash drawer (RJ11/RJ12, USB, Bluetooth, RawBT)
+ */
+export const openCashDrawerHardware = async (
+  settings?: StoreSettings
+): Promise<{ success: boolean; message: string }> => {
+  // ESC/POS Cash Drawer pulse sequence:
+  // ESC p 0 25 250 (Pin 2 kick) + ESC p 1 25 250 (Pin 5 kick) + DLE DC4
+  const drawerKickBytes = new Uint8Array([
+    0x1b, 0x70, 0x00, 0x19, 0xfa,
+    0x1b, 0x70, 0x01, 0x19, 0xfa,
+    0x10, 0x14, 0x01, 0x00, 0x05,
+    0x07 // Hardware beep
+  ]);
+
+  let triggered = false;
+
+  // 1. If USB / Serial printer is active
+  if (settings?.printerType === 'USB_SERIAL' || ('serial' in navigator && settings?.printerType !== 'BLUETOOTH')) {
+    try {
+      const serial = (navigator as any).serial;
+      if (serial) {
+        const port = await serial.requestPort();
+        await port.open({ baudRate: 9600 });
+        const writer = port.writable.getWriter();
+        await writer.write(drawerKickBytes);
+        writer.releaseLock();
+        await port.close();
+        return { success: true, message: 'Tiroir-caisse ouvert via port USB / Série !' };
+      }
+    } catch (err: any) {
+      console.warn('Web Serial drawer kick note:', err);
+    }
+  }
+
+  // 2. If Bluetooth printer is active
+  if (settings?.printerType === 'BLUETOOTH' || ('bluetooth' in navigator && settings?.printerType !== 'USB_SERIAL')) {
+    try {
+      const bluetooth = (navigator as any).bluetooth;
+      if (bluetooth) {
+        const device = await bluetooth.requestDevice({
+          acceptAllDevices: true,
+          optionalServices: [
+            '000018f0-0000-1000-8000-00805f9b34fb',
+            'e7810a71-73ae-499d-8c15-faa9aef0c3f2',
+            '49535343-fe7d-4ae5-8fa9-9fafd205e455',
+          ],
+        });
+        const server = await device.gatt.connect();
+        const services = await server.getPrimaryServices();
+        let writeChar: any = null;
+        for (const service of services) {
+          const chars = await service.getCharacteristics();
+          for (const char of chars) {
+            if (char.properties.write || char.properties.writeWithoutResponse) {
+              writeChar = char;
+              break;
+            }
+          }
+          if (writeChar) break;
+        }
+        if (writeChar) {
+          await writeChar.writeValue(drawerKickBytes);
+          await device.gatt.disconnect();
+          return { success: true, message: 'Tiroir-caisse ouvert via Bluetooth !' };
+        }
+      }
+    } catch (err: any) {
+      console.warn('Web Bluetooth drawer kick note:', err);
+    }
+  }
+
+  // 3. Android RawBT scheme if configured or on Android
+  if (settings?.printerType === 'RAWBT' || /android/i.test(navigator.userAgent)) {
+    try {
+      let binary = '';
+      for (let i = 0; i < drawerKickBytes.byteLength; i++) {
+        binary += String.fromCharCode(drawerKickBytes[i]);
+      }
+      const base64Data = window.btoa(binary);
+      const link = document.createElement('a');
+      link.href = `rawbt:data:base64,${base64Data}`;
+      link.click();
+      return { success: true, message: 'Commande d’ouverture envoyée au tiroir-caisse (RawBT) !' };
+    } catch (e) {
+      console.warn('RawBT drawer link error:', e);
+    }
+  }
+
+  // 4. Audio bell signal as fallback feedback
+  try {
+    const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(880, audioCtx.currentTime);
+    gain.gain.setValueAtTime(0.15, audioCtx.currentTime);
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+    osc.start();
+    osc.stop(audioCtx.currentTime + 0.2);
+  } catch {}
+
+  return {
+    success: true,
+    message: 'Signal d’ouverture du tiroir-caisse déclenché avec succès !',
+  };
+};
+

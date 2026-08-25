@@ -229,21 +229,25 @@ export const QuotesView: React.FC = () => {
           body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; padding: 20px; color: #1e293b; max-width: 800px; margin: 0 auto; line-height: 1.25; }
           .header { display: flex; justify-content: space-between; border-bottom: 2px solid #e2e8f0; padding-bottom: 12px; margin-bottom: 14px; }
           .quote-logo {
-            max-height: 80px;
-            max-width: 160px;
+            max-height: 105px;
+            max-width: 210px;
             object-fit: contain;
-            border-radius: 6px;
-            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            border: 1px solid #cbd5e1;
             padding: 2px;
-            filter: contrast(175%) brightness(80%) saturate(150%);
+            filter: grayscale(100%) contrast(350%) brightness(55%);
             -webkit-print-color-adjust: exact !important;
             print-color-adjust: exact !important;
+            image-rendering: -webkit-optimize-contrast;
+            image-rendering: crisp-edges;
           }
           @media print {
             .quote-logo {
-              filter: contrast(200%) brightness(70%) saturate(180%) !important;
+              filter: grayscale(100%) contrast(400%) brightness(40%) !important;
               -webkit-print-color-adjust: exact !important;
               print-color-adjust: exact !important;
+              image-rendering: -webkit-optimize-contrast !important;
+              image-rendering: crisp-edges !important;
             }
           }
           .shop-title { font-size: 20px; font-weight: 800; color: #0f172a; line-height: 1.15; margin-bottom: 2px; }

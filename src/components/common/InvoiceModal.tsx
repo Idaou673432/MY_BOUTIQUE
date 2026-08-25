@@ -500,7 +500,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
                   <img
                     src={settings.logoUrl || STORE_LOGO_BASE64}
                     alt={settings.storeName || 'Logo'}
-                    className="w-20 h-20 sm:w-24 sm:h-24 object-contain rounded-xl border border-slate-300 p-1 shrink-0 bg-white shadow-xs contrast-[1.6] brightness-[0.82] saturate-[1.4] print:contrast-[1.9] print:brightness-[0.72] print:saturate-[1.7]"
+                    className="w-24 h-24 sm:w-28 sm:h-28 object-contain rounded-xl border border-slate-400 p-1 shrink-0 bg-white shadow-xs grayscale contrast-[350%] brightness-[50%] print:contrast-[400%] print:brightness-[35%]"
                   />
                   <div className="space-y-1">
                     <div>
@@ -718,12 +718,12 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
             >
               {/* Store Header (ULTRA BOLD & HIGH CONTRAST) */}
               <div className="text-center space-y-0.5 pb-2 border-b-2 border-dashed border-slate-950">
-                <div className="flex justify-center mb-1.5">
+                <div className="flex justify-center mb-2">
                   <img
                     src={settings.logoUrl || STORE_LOGO_BASE64}
                     alt={settings.storeName || 'Logo'}
-                    className={`object-contain rounded contrast-[1.75] brightness-[0.78] saturate-[1.5] print:contrast-[2.0] print:brightness-[0.70] print:saturate-[1.8] ${
-                      printFormat === 'TICKET_58' ? 'max-h-16 max-w-[160px]' : 'max-h-20 max-w-[210px]'
+                    className={`object-contain rounded grayscale contrast-[350%] brightness-[50%] print:contrast-[400%] print:brightness-[35%] ${
+                      printFormat === 'TICKET_58' ? 'max-h-24 max-w-[200px]' : 'max-h-28 max-w-[260px]'
                     }`}
                   />
                 </div>

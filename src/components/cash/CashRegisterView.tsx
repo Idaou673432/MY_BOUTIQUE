@@ -13,11 +13,15 @@ import {
   AlertTriangle,
   History,
   CheckCircle2,
-  Printer
+  Printer,
+  RotateCcw,
+  Sparkles,
+  Inbox
 } from 'lucide-react';
 import { useStore } from '../../context/StoreContext';
 import { CashTransactionType } from '../../types';
 import { formatMoney, formatDateTime, formatDate, getCashTransactionTypeBadge } from '../../utils/formatters';
+import { openCashDrawerHardware } from '../../utils/printService';
 
 interface CashRegisterViewProps {
   onNavigate?: (tab: string) => void;
@@ -36,12 +40,9 @@ export const CashRegisterView: React.FC<CashRegisterViewProps> = ({ onNavigate }
 
   // Modals
   const [showOpenModal, setShowOpenModal] = useState(false);
-  const [openingBalanceInput, setOpeningBalanceInput] = useState<number>(10000);
+  const [openingBalanceInput, setOpeningBalanceInput] = useState<number>(0);
 
   const [showCloseModal, setShowCloseModal] = useState(false);
-  const [actualClosingBalanceInput, setActualClosingBalanceInput] = useState<number>(
-    cashRegister?.currentBalance || 0
-  );
   const [closingNotes, setClosingNotes] = useState('');
 
   const [showTransactionModal, setShowTransactionModal] = useState(false);
@@ -50,8 +51,41 @@ export const CashRegisterView: React.FC<CashRegisterViewProps> = ({ onNavigate }
   const [transReason, setTransReason] = useState('');
   const [transError, setTransError] = useState<string | null>(null);
 
+  // Success Feedback
+  const [drawerStatusMessage, setDrawerStatusMessage] = useState<string | null>(null);
+
   // Filters
   const [typeFilter, setTypeFilter] = useState<string>('all');
+
+  // Real-time Session Calculations
+  const currentSessionTransactions = useMemo(() => {
+    if (!cashRegister) return [];
+    return (cashTransactions || []).filter(
+      (t) => t.cashRegisterId === cashRegister.id || (cashRegister.isOpen && !t.cashRegisterId)
+    );
+  }, [cashTransactions, cashRegister]);
+
+  const currentBalance = useMemo(() => {
+    if (!cashRegister) return 0;
+    if (!cashRegister.isOpen) {
+      return cashRegister.closingBalanceReal ?? cashRegister.closingBalanceTheoretical ?? 0;
+    }
+    return currentSessionTransactions.reduce((acc, t) => acc + (Number(t.amount) || 0), 0);
+  }, [cashRegister, currentSessionTransactions]);
+
+  const totalInflows = useMemo(() => {
+    return currentSessionTransactions
+      .filter((t) => (Number(t.amount) || 0) > 0 && t.type !== 'OUVERTURE')
+      .reduce((acc, t) => acc + Number(t.amount), 0);
+  }, [currentSessionTransactions]);
+
+  const totalOutflows = useMemo(() => {
+    return currentSessionTransactions
+      .filter((t) => (Number(t.amount) || 0) < 0)
+      .reduce((acc, t) => acc + Math.abs(Number(t.amount)), 0);
+  }, [currentSessionTransactions]);
+
+  const [actualClosingBalanceInput, setActualClosingBalanceInput] = useState<number>(0);
 
   const filteredTransactions = useMemo(() => {
     return (cashTransactions || []).filter((t) => {
@@ -62,14 +96,27 @@ export const CashRegisterView: React.FC<CashRegisterViewProps> = ({ onNavigate }
 
   const handleOpenRegister = (e: React.FormEvent) => {
     e.preventDefault();
-    openCashRegister(Number(openingBalanceInput));
+    const success = openCashRegister(Number(openingBalanceInput));
     setShowOpenModal(false);
+    if (success) {
+      setDrawerStatusMessage(`✅ Caisse ouverte avec succès ! Fond initial : ${formatMoney(Number(openingBalanceInput), settings.currency)}`);
+      setTimeout(() => setDrawerStatusMessage(null), 5000);
+    }
+  };
+
+  const handleTriggerDrawerHardware = async () => {
+    setDrawerStatusMessage("⚡ Envoi du signal d'ouverture au tiroir-caisse...");
+    const res = await openCashDrawerHardware(settings);
+    setDrawerStatusMessage(res.message);
+    setTimeout(() => setDrawerStatusMessage(null), 6000);
   };
 
   const handleCloseRegister = (e: React.FormEvent) => {
     e.preventDefault();
     closeCashRegister(Number(actualClosingBalanceInput), closingNotes);
     setShowCloseModal(false);
+    setDrawerStatusMessage('🔒 Session de caisse clôturée.');
+    setTimeout(() => setDrawerStatusMessage(null), 5000);
   };
 
   const handleSaveTransaction = (e: React.FormEvent) => {
@@ -85,17 +132,34 @@ export const CashRegisterView: React.FC<CashRegisterViewProps> = ({ onNavigate }
       return;
     }
 
-    addCashTransaction(transType, Number(transAmount), transReason.trim());
+    const signAmount = transType === 'DEPENSE' || transType === 'RETRAIT' ? -Math.abs(Number(transAmount)) : Math.abs(Number(transAmount));
+    addCashTransaction(transType, signAmount, transReason.trim(), 'ESPECES');
     setShowTransactionModal(false);
     setTransAmount(0);
     setTransReason('');
   };
 
   const isVendeur = currentUser?.role === 'VENDEUR';
-  const cashDifference = actualClosingBalanceInput - (cashRegister?.currentBalance || 0);
+  const cashDifference = actualClosingBalanceInput - currentBalance;
 
   return (
     <div className="space-y-6 pb-12">
+      {/* Toast Alert Message */}
+      {drawerStatusMessage && (
+        <div className="p-3.5 bg-slate-900 text-white text-xs font-semibold rounded-2xl shadow-lg border border-slate-700 flex items-center justify-between animate-in fade-in">
+          <div className="flex items-center gap-2">
+            <Sparkles className="w-4 h-4 text-amber-400 shrink-0" />
+            <span>{drawerStatusMessage}</span>
+          </div>
+          <button
+            onClick={() => setDrawerStatusMessage(null)}
+            className="text-slate-400 hover:text-white p-1"
+          >
+            ✕
+          </button>
+        </div>
+      )}
+
       {/* Header & Main Status Banner */}
       <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
@@ -121,15 +185,27 @@ export const CashRegisterView: React.FC<CashRegisterViewProps> = ({ onNavigate }
           </div>
           <p className="text-xs text-slate-500 mt-1">
             {cashRegister?.isOpen
-              ? `Ouverte le ${formatDateTime(cashRegister.openedAt)} par ${cashRegister.openedBy || 'Caissier'}`
-              : 'La caisse est actuellement fermée. Ouvrez une session pour démarrer la journée.'}
+              ? `Ouverte le ${formatDateTime(cashRegister.openedAt)} par ${cashRegister.openedByName || cashRegister.openedBy || 'Caissier'}`
+              : 'La caisse est actuellement fermée. Cliquez sur Ouvrir la Caisse pour démarrer la session.'}
           </p>
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
+          {/* Always accessible Hardware Cash Drawer button */}
+          <button
+            type="button"
+            onClick={handleTriggerDrawerHardware}
+            className="flex items-center gap-1.5 px-3.5 py-2 bg-amber-500 hover:bg-amber-600 active:scale-95 text-slate-950 rounded-xl text-xs font-black shadow-xs transition-all cursor-pointer"
+            title="Envoyer une impulsion électrique ESC/POS pour éjecter le tiroir-caisse physique"
+          >
+            <Inbox className="w-4 h-4" />
+            Ouvrir Tiroir-Caisse
+          </button>
+
           {cashRegister?.isOpen ? (
             <>
               <button
+                type="button"
                 onClick={() => {
                   setTransType('ENTREE_MANUELLE');
                   setShowTransactionModal(true);
@@ -137,9 +213,10 @@ export const CashRegisterView: React.FC<CashRegisterViewProps> = ({ onNavigate }
                 className="flex items-center gap-1 px-3 py-2 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 rounded-xl text-xs font-bold border border-emerald-200"
               >
                 <PlusCircle className="w-3.5 h-3.5" />
-                Apport / Entrée Cash
+                Apport Cash
               </button>
               <button
+                type="button"
                 onClick={() => {
                   setTransType('DEPENSE');
                   setShowTransactionModal(true);
@@ -147,25 +224,27 @@ export const CashRegisterView: React.FC<CashRegisterViewProps> = ({ onNavigate }
                 className="flex items-center gap-1 px-3 py-2 bg-rose-50 text-rose-700 hover:bg-rose-100 rounded-xl text-xs font-bold border border-rose-200"
               >
                 <MinusCircle className="w-3.5 h-3.5" />
-                Dépense / Sortie Cash
+                Sortie / Dépense
               </button>
               {!isVendeur && (
                 <button
+                  type="button"
                   onClick={() => {
-                    setActualClosingBalanceInput(cashRegister?.currentBalance || 0);
+                    setActualClosingBalanceInput(currentBalance);
                     setShowCloseModal(true);
                   }}
                   className="flex items-center gap-1 px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold shadow-xs"
                 >
                   <Lock className="w-3.5 h-3.5" />
-                  Clôturer la Caisse (Z)
+                  Clôturer (Z)
                 </button>
               )}
             </>
           ) : (
             <button
+              type="button"
               onClick={() => setShowOpenModal(true)}
-              className="flex items-center gap-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold shadow-xs"
+              className="flex items-center gap-1.5 px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black shadow-md transition-all cursor-pointer animate-pulse"
             >
               <Unlock className="w-4 h-4" />
               Ouvrir la Caisse
@@ -180,7 +259,7 @@ export const CashRegisterView: React.FC<CashRegisterViewProps> = ({ onNavigate }
         <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs space-y-1">
           <p className="text-xs text-slate-500 font-medium">Solde Réel en Caisse</p>
           <p className="text-2xl font-black text-slate-900">
-            {formatMoney(cashRegister?.currentBalance || 0, settings.currency)}
+            {formatMoney(currentBalance, settings.currency)}
           </p>
           <div className="flex items-center gap-1 text-[11px] text-slate-500 pt-1">
             <span>Fond de départ :</span>
@@ -194,7 +273,7 @@ export const CashRegisterView: React.FC<CashRegisterViewProps> = ({ onNavigate }
         <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs space-y-1">
           <p className="text-xs text-slate-500 font-medium">Total Entrées & Ventes Cash</p>
           <p className="text-2xl font-black text-emerald-600">
-            +{formatMoney(cashRegister?.totalInflows || 0, settings.currency)}
+            +{formatMoney(totalInflows, settings.currency)}
           </p>
           <p className="text-[11px] text-slate-400">Pendant la session courante</p>
         </div>
@@ -203,7 +282,7 @@ export const CashRegisterView: React.FC<CashRegisterViewProps> = ({ onNavigate }
         <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs space-y-1">
           <p className="text-xs text-slate-500 font-medium">Total Sorties & Dépenses Cash</p>
           <p className="text-2xl font-black text-rose-600">
-            -{formatMoney(cashRegister?.totalOutflows || 0, settings.currency)}
+            -{formatMoney(totalOutflows, settings.currency)}
           </p>
           <p className="text-[11px] text-slate-400">Pendant la session courante</p>
         </div>
@@ -212,9 +291,9 @@ export const CashRegisterView: React.FC<CashRegisterViewProps> = ({ onNavigate }
         <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs space-y-1">
           <p className="text-xs text-slate-500 font-medium">Contrôle de Caisse</p>
           <p className="text-2xl font-black text-indigo-700">
-            {cashTransactions.length}
+            {currentSessionTransactions.length}
           </p>
-          <p className="text-[11px] text-slate-500">Mouvements de trésorerie tracés</p>
+          <p className="text-[11px] text-slate-500">Mouvements dans cette session</p>
         </div>
       </div>
 
@@ -337,15 +416,15 @@ export const CashRegisterView: React.FC<CashRegisterViewProps> = ({ onNavigate }
                 />
               </div>
 
-              <div className="flex items-center gap-2">
-                {[5000, 10000, 20000, 50000].map((val) => (
+              <div className="grid grid-cols-3 gap-1.5 pt-1">
+                {[0, 5000, 10000, 25000, 50000, 100000].map((val) => (
                   <button
                     key={val}
                     type="button"
                     onClick={() => setOpeningBalanceInput(val)}
-                    className="flex-1 py-1 bg-slate-100 hover:bg-slate-200 rounded text-[10px] font-semibold text-slate-700"
+                    className="py-1.5 px-2 bg-slate-100 hover:bg-slate-200 rounded-lg text-[11px] font-bold text-slate-700 text-center"
                   >
-                    {formatMoney(val, '')}
+                    {val === 0 ? '0 FCFA' : formatMoney(val, '')}
                   </button>
                 ))}
               </div>
@@ -361,7 +440,7 @@ export const CashRegisterView: React.FC<CashRegisterViewProps> = ({ onNavigate }
               </button>
               <button
                 type="submit"
-                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold"
+                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold shadow-xs cursor-pointer"
               >
                 Confirmer l'Ouverture
               </button>
@@ -400,16 +479,16 @@ export const CashRegisterView: React.FC<CashRegisterViewProps> = ({ onNavigate }
                 </div>
                 <div className="flex justify-between text-emerald-600">
                   <span>Total Encaissements :</span>
-                  <strong>+{formatMoney(cashRegister?.totalInflows || 0, settings.currency)}</strong>
+                  <strong>+{formatMoney(totalInflows, settings.currency)}</strong>
                 </div>
                 <div className="flex justify-between text-rose-600">
                   <span>Total Décaissements :</span>
-                  <strong>-{formatMoney(cashRegister?.totalOutflows || 0, settings.currency)}</strong>
+                  <strong>-{formatMoney(totalOutflows, settings.currency)}</strong>
                 </div>
                 <div className="flex justify-between pt-2 border-t border-slate-200 font-bold text-slate-900">
                   <span>Solde Théorique attendu :</span>
                   <span className="text-sm font-black text-indigo-700">
-                    {formatMoney(cashRegister?.currentBalance || 0, settings.currency)}
+                    {formatMoney(currentBalance, settings.currency)}
                   </span>
                 </div>
               </div>

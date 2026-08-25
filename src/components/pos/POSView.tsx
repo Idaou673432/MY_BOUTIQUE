@@ -33,7 +33,9 @@ import {
   Check,
   Boxes,
   X,
-  SlidersHorizontal
+  SlidersHorizontal,
+  Inbox,
+  Unlock
 } from 'lucide-react';
 import { useStore } from '../../context/StoreContext';
 import { Product, SaleItem, PaymentMethod, Sale } from '../../types';
@@ -46,7 +48,8 @@ import {
   printViaWebSerial,
   printViaWebBluetooth,
   printViaRawBT,
-  autoPrintSaleReceipt
+  autoPrintSaleReceipt,
+  openCashDrawerHardware
 } from '../../utils/printService';
 import confetti from 'canvas-confetti';
 
@@ -54,7 +57,7 @@ interface POSViewProps {
   onNavigate?: (tab: string) => void;
 }
 
-export const POSView: React.FC<POSViewProps> = () => {
+export const POSView: React.FC<POSViewProps> = ({ onNavigate }) => {
   const {
     products,
     categories,
@@ -66,7 +69,12 @@ export const POSView: React.FC<POSViewProps> = () => {
     settings,
     updateSettings,
     cashRegister,
+    openCashRegister,
   } = useStore();
+
+  const [drawerStatus, setDrawerStatus] = useState<string | null>(null);
+  const [showQuickOpenModal, setShowQuickOpenModal] = useState(false);
+  const [quickOpeningBalance, setQuickOpeningBalance] = useState(0);
 
   // Search & Filters
   const [searchTerm, setSearchTerm] = useState('');
@@ -575,6 +583,18 @@ export const POSView: React.FC<POSViewProps> = () => {
       setShowCheckoutModal(false);
       clearCart();
 
+      // Trigger cash drawer kick automatically for cash payments
+      if (paymentMethod === 'ESPECES') {
+        openCashDrawerHardware(settings).then((res) => {
+          if (res.message) {
+            setDrawerStatus(res.message);
+            setTimeout(() => setDrawerStatus(null), 4000);
+          }
+        }).catch((err) => {
+          console.error('Cash drawer auto-kick error:', err);
+        });
+      }
+
       // Trigger automatic direct print if configured
       if (settings.autoPrintReceiptOnSale) {
         // Execute immediately with robust in-page iframe printing
@@ -602,6 +622,42 @@ export const POSView: React.FC<POSViewProps> = () => {
 
   return (
     <div className="flex flex-col gap-3 pb-2 h-[calc(100vh-5.5rem)]">
+      {/* DRAWER STATUS / FEEDBACK TOAST */}
+      {drawerStatus && (
+        <div className="p-3 bg-slate-900 text-white text-xs font-semibold rounded-2xl shadow-lg border border-slate-700 flex items-center justify-between animate-in fade-in">
+          <div className="flex items-center gap-2">
+            <Sparkles className="w-4 h-4 text-amber-400 shrink-0" />
+            <span>{drawerStatus}</span>
+          </div>
+          <button
+            onClick={() => setDrawerStatus(null)}
+            className="text-slate-400 hover:text-white p-1"
+          >
+            ✕
+          </button>
+        </div>
+      )}
+
+      {/* CASH REGISTER STATUS BANNER IF CLOSED */}
+      {!cashRegister?.isOpen && (
+        <div className="p-3 bg-amber-50 border border-amber-300 rounded-2xl flex flex-wrap items-center justify-between gap-2 text-xs shadow-xs animate-in fade-in">
+          <div className="flex items-center gap-2 text-amber-950 font-medium">
+            <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+            <span>La session de caisse est fermée. Ouvrez la caisse pour enregistrer le fond de roulement de la journée.</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setShowQuickOpenModal(true)}
+              className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white rounded-xl font-black text-xs flex items-center gap-1.5 shadow-xs transition-all cursor-pointer"
+            >
+              <Unlock className="w-3.5 h-3.5" />
+              Ouvrir la Caisse
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* QUICK BANNER FOR LAST COMPLETED SALE */}
       {lastCompletedSale && (
         <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-2xl flex flex-wrap items-center justify-between gap-2 text-xs shadow-xs animate-in fade-in">
@@ -786,6 +842,21 @@ export const POSView: React.FC<POSViewProps> = () => {
               >
                 <PackagePlus className="w-4 h-4" />
                 <span className="hidden md:inline">+ Nouveau</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={async () => {
+                  setDrawerStatus("⚡ Envoi du signal d'ouverture au tiroir-caisse...");
+                  const res = await openCashDrawerHardware(settings);
+                  setDrawerStatus(res.message);
+                  setTimeout(() => setDrawerStatus(null), 5000);
+                }}
+                className="px-2.5 py-2 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 rounded-xl text-xs font-black flex items-center gap-1 transition-colors cursor-pointer"
+                title="Éjecter le tiroir-caisse physique (ESC/POS)"
+              >
+                <Inbox className="w-4 h-4 text-amber-600" />
+                <span className="hidden sm:inline">Tiroir-Caisse</span>
               </button>
             </div>
 
@@ -2112,6 +2183,81 @@ export const POSView: React.FC<POSViewProps> = () => {
                   Enregistrer & Ajouter au Panier
                 </button>
               </div>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {/* QUICK OPEN REGISTER MODAL */}
+      {showQuickOpenModal && (
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              openCashRegister(Number(quickOpeningBalance));
+              setShowQuickOpenModal(false);
+              setDrawerStatus(`✅ Caisse ouverte avec succès ! Fond initial : ${formatMoney(Number(quickOpeningBalance), settings.currency)}`);
+              setTimeout(() => setDrawerStatus(null), 5000);
+            }}
+            className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-sm overflow-hidden animate-in fade-in"
+          >
+            <div className="p-4 bg-emerald-700 text-white flex items-center justify-between">
+              <h3 className="font-bold text-sm flex items-center gap-2">
+                <Unlock className="w-4 h-4" />
+                Ouverture de Session de Caisse
+              </h3>
+              <button
+                type="button"
+                onClick={() => setShowQuickOpenModal(false)}
+                className="text-white hover:opacity-80"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="p-5 space-y-3 text-xs">
+              <div>
+                <label className="font-semibold text-slate-700 block mb-1">
+                  Fond de caisse initial ({settings.currency})
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  required
+                  value={quickOpeningBalance}
+                  onChange={(e) => setQuickOpeningBalance(parseFloat(e.target.value) || 0)}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm font-black text-slate-900 focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                />
+              </div>
+
+              <div className="grid grid-cols-3 gap-1.5 pt-1">
+                {[0, 5000, 10000, 25000, 50000, 100000].map((val) => (
+                  <button
+                    key={val}
+                    type="button"
+                    onClick={() => setQuickOpeningBalance(val)}
+                    className="py-1.5 px-2 bg-slate-100 hover:bg-slate-200 rounded-lg text-[11px] font-bold text-slate-700 text-center"
+                  >
+                    {val === 0 ? '0 FCFA' : formatMoney(val, '')}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="p-4 bg-slate-50 border-t border-slate-200 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setShowQuickOpenModal(false)}
+                className="px-3 py-1.5 text-xs text-slate-600 hover:bg-slate-200 rounded-lg cursor-pointer"
+              >
+                Annuler
+              </button>
+              <button
+                type="submit"
+                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold shadow-xs cursor-pointer"
+              >
+                Confirmer l'Ouverture
+              </button>
             </div>
           </form>
         </div>
