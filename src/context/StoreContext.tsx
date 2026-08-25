@@ -250,6 +250,49 @@ function sanitizeForFirestore<T>(data: T): any {
   }
 }
 
+// Helper to safely load array state from primary and backup storage keys
+function loadSafeList<T>(primaryKey: string, backupKeys: string[] = [], fallback: T[] = []): T[] {
+  try {
+    const primary = localStorage.getItem(primaryKey);
+    if (primary) {
+      const parsed = JSON.parse(primary);
+      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+    }
+    for (const bKey of backupKeys) {
+      const bData = localStorage.getItem(bKey);
+      if (bData) {
+        const parsed = JSON.parse(bData);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    }
+  } catch (e) {
+    console.warn(`Error loading list for ${primaryKey}:`, e);
+  }
+  return fallback;
+}
+
+// Helper to merge remote items with local items by ID so offline/local items are never wiped out
+function mergeListById<T extends { id: string }>(remoteList?: T[], localList?: T[]): T[] {
+  if (!remoteList || !Array.isArray(remoteList) || remoteList.length === 0) {
+    return localList || [];
+  }
+  if (!localList || !Array.isArray(localList) || localList.length === 0) {
+    return remoteList;
+  }
+  const map = new Map<string, T>();
+  // 1. Put all remote items
+  remoteList.forEach((item) => {
+    if (item && item.id) map.set(item.id, item);
+  });
+  // 2. Preserve any local items not yet on remote
+  localList.forEach((item) => {
+    if (item && item.id && !map.has(item.id)) {
+      map.set(item.id, item);
+    }
+  });
+  return Array.from(map.values());
+}
+
 export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   // Local storage loader helper
   const loadState = <T,>(key: string, fallback: T): T => {
@@ -266,27 +309,11 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
 
   // Dedicated Product Loader to safely recover from backup keys if main key is empty
   const loadInitialProducts = (): Product[] => {
-    try {
-      // 1. Check primary product storage
-      const primary = localStorage.getItem(STORAGE_KEYS.PRODUCTS);
-      if (primary) {
-        const parsed = JSON.parse(primary);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-      }
-      // 2. Check backup and recovery keys
-      const backup = localStorage.getItem('bpm_products_backup') || 
-                     localStorage.getItem('bpm_products_recovery_catalog') ||
-                     localStorage.getItem('bpm_products_v2') ||
-                     localStorage.getItem('bpm_products');
-      if (backup) {
-        const parsed = JSON.parse(backup);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-      }
-    } catch (e) {
-      console.warn('Error loading initial products:', e);
-    }
-    // Default to DEMO_PRODUCTS if empty so the catalog is never lost or blank
-    return DEMO_PRODUCTS;
+    return loadSafeList<Product>(
+      STORAGE_KEYS.PRODUCTS,
+      ['bpm_products_backup', 'bpm_products_recovery_catalog', 'bpm_products_v2', 'bpm_products'],
+      DEMO_PRODUCTS
+    );
   };
 
   // Helper to remove any unwanted 'ni repris ni échangé sauf accord préalable' clauses
@@ -333,9 +360,9 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     };
   };
 
-  // States
+  // States with multi-layer safe fallback loading
   const [users, setUsers] = useState<User[]>(() => {
-    const loaded = loadState(STORAGE_KEYS.USERS, INITIAL_USERS);
+    const loaded = loadSafeList<User>(STORAGE_KEYS.USERS, ['bpm_users_backup', 'bpm_users_v2', 'bpm_users'], INITIAL_USERS);
     return loaded.map((u: User) => {
       if (u.id === 'usr_admin' && (u.username === 'mamadou.admin' || !u.username)) {
         return { ...u, username: 'MD' };
@@ -347,25 +374,49 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
   const [settings, setSettings] = useState<StoreSettings>(() => cleanSettingStrings(loadState(STORAGE_KEYS.SETTINGS, INITIAL_SETTINGS)));
   const [categories, setCategories] = useState<Category[]>(() => {
-    const cats = loadState(STORAGE_KEYS.CATEGORIES, INITIAL_CATEGORIES);
+    const cats = loadSafeList<Category>(STORAGE_KEYS.CATEGORIES, ['bpm_categories_backup', 'bpm_categories_v2', 'bpm_categories'], INITIAL_CATEGORIES);
     return cats && cats.length > 0 ? cats : INITIAL_CATEGORIES;
   });
   const [products, setProducts] = useState<Product[]>(() => loadInitialProducts());
   const [suppliers, setSuppliers] = useState<Supplier[]>(() => {
-    const sups = loadState(STORAGE_KEYS.SUPPLIERS, DEMO_SUPPLIERS);
+    const sups = loadSafeList<Supplier>(STORAGE_KEYS.SUPPLIERS, ['bpm_suppliers_backup', 'bpm_suppliers_v2', 'bpm_suppliers'], DEMO_SUPPLIERS);
     return sups && sups.length > 0 ? sups : DEMO_SUPPLIERS;
   });
-  const [customers, setCustomers] = useState<Customer[]>(() => loadState(STORAGE_KEYS.CUSTOMERS, INITIAL_CUSTOMERS));
-  const [stockMovements, setStockMovements] = useState<StockMovement[]>(() => loadState(STORAGE_KEYS.STOCK_MOVEMENTS, INITIAL_STOCK_MOVEMENTS));
-  const [sales, setSales] = useState<Sale[]>(() => loadState(STORAGE_KEYS.SALES, INITIAL_SALES));
-  const [quotes, setQuotes] = useState<Quote[]>(() => loadState(STORAGE_KEYS.QUOTES, []));
-  const [creditDebtRecords, setCreditDebtRecords] = useState<CreditDebtRecord[]>(() => loadState(STORAGE_KEYS.CREDIT_DEBT_RECORDS, []));
-  const [purchases, setPurchases] = useState<Purchase[]>(() => loadState(STORAGE_KEYS.PURCHASES, INITIAL_PURCHASES));
-  const [expenses, setExpenses] = useState<Expense[]>(() => loadState(STORAGE_KEYS.EXPENSES, INITIAL_EXPENSES));
+  const [customers, setCustomers] = useState<Customer[]>(() =>
+    loadSafeList<Customer>(STORAGE_KEYS.CUSTOMERS, ['bpm_customers_backup', 'bpm_customers_v2', 'bpm_customers'], INITIAL_CUSTOMERS)
+  );
+  const [stockMovements, setStockMovements] = useState<StockMovement[]>(() =>
+    loadSafeList<StockMovement>(STORAGE_KEYS.STOCK_MOVEMENTS, ['bpm_movements_backup', 'bpm_movements_v2', 'bpm_movements'], INITIAL_STOCK_MOVEMENTS)
+  );
+  const [sales, setSales] = useState<Sale[]>(() =>
+    loadSafeList<Sale>(STORAGE_KEYS.SALES, ['bpm_sales_backup', 'bpm_sales_recovery', 'bpm_sales_v2', 'bpm_sales'], INITIAL_SALES)
+  );
+  const [quotes, setQuotes] = useState<Quote[]>(() =>
+    loadSafeList<Quote>(STORAGE_KEYS.QUOTES, ['bpm_quotes_backup', 'bpm_quotes_v2', 'bpm_quotes'], [])
+  );
+  const [creditDebtRecords, setCreditDebtRecords] = useState<CreditDebtRecord[]>(() =>
+    loadSafeList<CreditDebtRecord>(
+      STORAGE_KEYS.CREDIT_DEBT_RECORDS,
+      ['bpm_credit_debts_backup', 'bpm_credit_debts_recovery', 'bpm_credit_debts_v2', 'bpm_credit_debts'],
+      []
+    )
+  );
+  const [purchases, setPurchases] = useState<Purchase[]>(() =>
+    loadSafeList<Purchase>(STORAGE_KEYS.PURCHASES, ['bpm_purchases_backup', 'bpm_purchases_v2', 'bpm_purchases'], INITIAL_PURCHASES)
+  );
+  const [expenses, setExpenses] = useState<Expense[]>(() =>
+    loadSafeList<Expense>(STORAGE_KEYS.EXPENSES, ['bpm_expenses_backup', 'bpm_expenses_v2', 'bpm_expenses'], INITIAL_EXPENSES)
+  );
   const [cashRegister, setCashRegister] = useState<CashRegister | null>(() => loadState(STORAGE_KEYS.CASH_REGISTER, INITIAL_CASH_REGISTER));
-  const [cashTransactions, setCashTransactions] = useState<CashTransaction[]>(() => loadState(STORAGE_KEYS.CASH_TRANSACTIONS, INITIAL_CASH_TRANSACTIONS));
-  const [inventories, setInventories] = useState<Inventory[]>(() => loadState(STORAGE_KEYS.INVENTORIES, INITIAL_PAST_INVENTORIES));
-  const [activityLogs, setActivityLogs] = useState<ActivityLog[]>(() => loadState(STORAGE_KEYS.ACTIVITY_LOGS, INITIAL_ACTIVITY_LOGS));
+  const [cashTransactions, setCashTransactions] = useState<CashTransaction[]>(() =>
+    loadSafeList<CashTransaction>(STORAGE_KEYS.CASH_TRANSACTIONS, ['bpm_cash_tx_backup', 'bpm_cash_tx_v2', 'bpm_cash_tx'], INITIAL_CASH_TRANSACTIONS)
+  );
+  const [inventories, setInventories] = useState<Inventory[]>(() =>
+    loadSafeList<Inventory>(STORAGE_KEYS.INVENTORIES, ['bpm_inventories_backup', 'bpm_inventories_v2', 'bpm_inventories'], INITIAL_PAST_INVENTORIES)
+  );
+  const [activityLogs, setActivityLogs] = useState<ActivityLog[]>(() =>
+    loadSafeList<ActivityLog>(STORAGE_KEYS.ACTIVITY_LOGS, ['bpm_activity_logs_backup', 'bpm_activity_logs_v2'], INITIAL_ACTIVITY_LOGS)
+  );
 
   // Firebase Sync status states
   const [isCloudSynced, setIsCloudSynced] = useState<boolean>(true);
@@ -373,11 +424,17 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   const isRemoteUpdate = useRef<boolean>(false);
   const debounceTimer = useRef<NodeJS.Timeout | null>(null);
 
-  // Sync to local storage & maintain permanent rolling backups
-  useEffect(() => { localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(users)); }, [users]);
+  // Sync to local storage & maintain permanent rolling multi-key backups
+  useEffect(() => { 
+    localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(users)); 
+    if (users && users.length > 0) localStorage.setItem('bpm_users_backup', JSON.stringify(users));
+  }, [users]);
   useEffect(() => { localStorage.setItem(STORAGE_KEYS.CURRENT_USER, JSON.stringify(currentUser)); }, [currentUser]);
   useEffect(() => { localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(settings)); }, [settings]);
-  useEffect(() => { localStorage.setItem(STORAGE_KEYS.CATEGORIES, JSON.stringify(categories)); }, [categories]);
+  useEffect(() => { 
+    localStorage.setItem(STORAGE_KEYS.CATEGORIES, JSON.stringify(categories)); 
+    if (categories && categories.length > 0) localStorage.setItem('bpm_categories_backup', JSON.stringify(categories));
+  }, [categories]);
   useEffect(() => { 
     localStorage.setItem(STORAGE_KEYS.PRODUCTS, JSON.stringify(products)); 
     if (products && products.length > 0) {
@@ -385,20 +442,125 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       localStorage.setItem('bpm_products_recovery_catalog', JSON.stringify(products));
     }
   }, [products]);
-  useEffect(() => { localStorage.setItem(STORAGE_KEYS.SUPPLIERS, JSON.stringify(suppliers)); }, [suppliers]);
-  useEffect(() => { localStorage.setItem(STORAGE_KEYS.CUSTOMERS, JSON.stringify(customers)); }, [customers]);
-  useEffect(() => { localStorage.setItem(STORAGE_KEYS.STOCK_MOVEMENTS, JSON.stringify(stockMovements)); }, [stockMovements]);
-  useEffect(() => { localStorage.setItem(STORAGE_KEYS.SALES, JSON.stringify(sales)); }, [sales]);
-  useEffect(() => { localStorage.setItem(STORAGE_KEYS.QUOTES, JSON.stringify(quotes)); }, [quotes]);
-  useEffect(() => { localStorage.setItem(STORAGE_KEYS.CREDIT_DEBT_RECORDS, JSON.stringify(creditDebtRecords)); }, [creditDebtRecords]);
-  useEffect(() => { localStorage.setItem(STORAGE_KEYS.PURCHASES, JSON.stringify(purchases)); }, [purchases]);
-  useEffect(() => { localStorage.setItem(STORAGE_KEYS.EXPENSES, JSON.stringify(expenses)); }, [expenses]);
+  useEffect(() => { 
+    localStorage.setItem(STORAGE_KEYS.SUPPLIERS, JSON.stringify(suppliers)); 
+    if (suppliers && suppliers.length > 0) localStorage.setItem('bpm_suppliers_backup', JSON.stringify(suppliers));
+  }, [suppliers]);
+  useEffect(() => { 
+    localStorage.setItem(STORAGE_KEYS.CUSTOMERS, JSON.stringify(customers)); 
+    if (customers && customers.length > 0) localStorage.setItem('bpm_customers_backup', JSON.stringify(customers));
+  }, [customers]);
+  useEffect(() => { 
+    localStorage.setItem(STORAGE_KEYS.STOCK_MOVEMENTS, JSON.stringify(stockMovements)); 
+    if (stockMovements && stockMovements.length > 0) localStorage.setItem('bpm_movements_backup', JSON.stringify(stockMovements));
+  }, [stockMovements]);
+  useEffect(() => { 
+    localStorage.setItem(STORAGE_KEYS.SALES, JSON.stringify(sales)); 
+    if (sales && sales.length > 0) {
+      localStorage.setItem('bpm_sales_backup', JSON.stringify(sales));
+      localStorage.setItem('bpm_sales_recovery', JSON.stringify(sales));
+    }
+  }, [sales]);
+  useEffect(() => { 
+    localStorage.setItem(STORAGE_KEYS.QUOTES, JSON.stringify(quotes)); 
+    if (quotes && quotes.length > 0) localStorage.setItem('bpm_quotes_backup', JSON.stringify(quotes));
+  }, [quotes]);
+  useEffect(() => { 
+    localStorage.setItem(STORAGE_KEYS.CREDIT_DEBT_RECORDS, JSON.stringify(creditDebtRecords)); 
+    if (creditDebtRecords && creditDebtRecords.length > 0) {
+      localStorage.setItem('bpm_credit_debts_backup', JSON.stringify(creditDebtRecords));
+      localStorage.setItem('bpm_credit_debts_recovery', JSON.stringify(creditDebtRecords));
+    }
+  }, [creditDebtRecords]);
+  useEffect(() => { 
+    localStorage.setItem(STORAGE_KEYS.PURCHASES, JSON.stringify(purchases)); 
+    if (purchases && purchases.length > 0) localStorage.setItem('bpm_purchases_backup', JSON.stringify(purchases));
+  }, [purchases]);
+  useEffect(() => { 
+    localStorage.setItem(STORAGE_KEYS.EXPENSES, JSON.stringify(expenses)); 
+    if (expenses && expenses.length > 0) localStorage.setItem('bpm_expenses_backup', JSON.stringify(expenses));
+  }, [expenses]);
   useEffect(() => { localStorage.setItem(STORAGE_KEYS.CASH_REGISTER, JSON.stringify(cashRegister)); }, [cashRegister]);
-  useEffect(() => { localStorage.setItem(STORAGE_KEYS.CASH_TRANSACTIONS, JSON.stringify(cashTransactions)); }, [cashTransactions]);
-  useEffect(() => { localStorage.setItem(STORAGE_KEYS.INVENTORIES, JSON.stringify(inventories)); }, [inventories]);
-  useEffect(() => { localStorage.setItem(STORAGE_KEYS.ACTIVITY_LOGS, JSON.stringify(activityLogs)); }, [activityLogs]);
+  useEffect(() => { 
+    localStorage.setItem(STORAGE_KEYS.CASH_TRANSACTIONS, JSON.stringify(cashTransactions)); 
+    if (cashTransactions && cashTransactions.length > 0) localStorage.setItem('bpm_cash_tx_backup', JSON.stringify(cashTransactions));
+  }, [cashTransactions]);
+  useEffect(() => { 
+    localStorage.setItem(STORAGE_KEYS.INVENTORIES, JSON.stringify(inventories)); 
+    if (inventories && inventories.length > 0) localStorage.setItem('bpm_inventories_backup', JSON.stringify(inventories));
+  }, [inventories]);
+  useEffect(() => { 
+    localStorage.setItem(STORAGE_KEYS.ACTIVITY_LOGS, JSON.stringify(activityLogs)); 
+    if (activityLogs && activityLogs.length > 0) localStorage.setItem('bpm_activity_logs_backup', JSON.stringify(activityLogs));
+  }, [activityLogs]);
 
-  // Firestore Real-Time Listener (Bi-directional sync)
+  // Startup and Cross-Reconciliation: ensure customer credits and supplier debts are tracked in creditDebtRecords
+  useEffect(() => {
+    if (!customers || customers.length === 0) return;
+    
+    const missingRecords: CreditDebtRecord[] = [];
+    customers.forEach(c => {
+      if (c.creditBalance > 0) {
+        const hasRecord = (creditDebtRecords || []).some(
+          r => r.type === 'CLIENT_CREDIT' && (r.partyId === c.id || r.partyName === c.name) && r.status === 'EN_COURS'
+        );
+        if (!hasRecord) {
+          missingRecords.push({
+            id: generateId('cd'),
+            type: 'CLIENT_CREDIT',
+            partyId: c.id,
+            partyName: c.name,
+            partyPhone: c.phone,
+            title: `Crédit client en cours (${c.name})`,
+            initialAmount: c.creditBalance,
+            paidAmount: 0,
+            remainingAmount: c.creditBalance,
+            status: 'EN_COURS',
+            payments: [],
+            dueDate: new Date(Date.now() + 15 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+            date: new Date().toISOString(),
+            notes: 'Restauré automatiquement depuis le solde client',
+            createdAt: new Date().toISOString(),
+          });
+        }
+      }
+    });
+
+    if (suppliers && suppliers.length > 0) {
+      suppliers.forEach(s => {
+        if (s.debtBalance > 0) {
+          const hasRecord = (creditDebtRecords || []).some(
+            r => r.type === 'SUPPLIER_DEBT' && (r.partyId === s.id || r.partyName === s.companyName) && r.status === 'EN_COURS'
+          );
+          if (!hasRecord) {
+            missingRecords.push({
+              id: generateId('cd'),
+              type: 'SUPPLIER_DEBT',
+              partyId: s.id,
+              partyName: s.companyName,
+              partyPhone: s.phone,
+              title: `Dette fournisseur en cours (${s.companyName})`,
+              initialAmount: s.debtBalance,
+              paidAmount: 0,
+              remainingAmount: s.debtBalance,
+              status: 'EN_COURS',
+              payments: [],
+              dueDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+              date: new Date().toISOString(),
+              notes: 'Restauré automatiquement depuis le solde fournisseur',
+              createdAt: new Date().toISOString(),
+            });
+          }
+        }
+      });
+    }
+
+    if (missingRecords.length > 0) {
+      setCreditDebtRecords(prev => [...missingRecords, ...(prev || [])]);
+    }
+  }, [customers, suppliers]);
+
+  // Firestore Real-Time Listener (Bi-directional sync with anti-loss merge)
   useEffect(() => {
     const docRef = doc(db, 'store_data', 'main_store');
     
@@ -428,9 +590,21 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       } else {
         const remote = snap.data();
         if (remote) {
-          // If Firestore remote products is empty but local has products, sync local to Firestore
-          if ((!remote.products || remote.products.length === 0) && products.length > 0) {
-            setDoc(docRef, { products }, { merge: true }).catch(console.warn);
+          // If Firestore remote has empty records but local has data, sync local to Firestore
+          const hasMissingRemoteData = 
+            ((!remote.products || remote.products.length === 0) && products.length > 0) ||
+            ((!remote.creditDebtRecords || remote.creditDebtRecords.length === 0) && creditDebtRecords.length > 0) ||
+            ((!remote.sales || remote.sales.length === 0) && sales.length > 0);
+
+          if (hasMissingRemoteData) {
+            setDoc(docRef, sanitizeForFirestore({
+              products: products.length > 0 ? products : remote.products,
+              creditDebtRecords: creditDebtRecords.length > 0 ? creditDebtRecords : remote.creditDebtRecords,
+              sales: sales.length > 0 ? sales : remote.sales,
+              customers: customers.length > 0 ? customers : remote.customers,
+              suppliers: suppliers.length > 0 ? suppliers : remote.suppliers,
+              updatedAt: new Date().toISOString(),
+            }), { merge: true }).catch(console.warn);
           }
         }
       }
@@ -442,23 +616,23 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         if (remote && !docSnap.metadata.hasPendingWrites) {
           isRemoteUpdate.current = true;
           if (remote.settings) setSettings(cleanSettingStrings(remote.settings));
-          if (remote.users) setUsers(remote.users);
-          if (remote.categories && remote.categories.length > 0) setCategories(remote.categories);
+          if (remote.users) setUsers(prev => mergeListById(remote.users, prev));
+          if (remote.categories && remote.categories.length > 0) setCategories(prev => mergeListById(remote.categories, prev));
           if (remote.products && Array.isArray(remote.products) && remote.products.length > 0) {
-            setProducts(remote.products);
+            setProducts(prev => mergeListById(remote.products, prev));
           }
-          if (remote.suppliers && remote.suppliers.length > 0) setSuppliers(remote.suppliers);
-          if (remote.customers) setCustomers(remote.customers);
-          if (remote.stockMovements) setStockMovements(remote.stockMovements);
-          if (remote.sales) setSales(remote.sales);
-          if (remote.quotes) setQuotes(remote.quotes);
-          if (remote.creditDebtRecords) setCreditDebtRecords(remote.creditDebtRecords);
-          if (remote.purchases) setPurchases(remote.purchases);
-          if (remote.expenses) setExpenses(remote.expenses);
+          if (remote.suppliers && remote.suppliers.length > 0) setSuppliers(prev => mergeListById(remote.suppliers, prev));
+          if (remote.customers) setCustomers(prev => mergeListById(remote.customers, prev));
+          if (remote.stockMovements) setStockMovements(prev => mergeListById(remote.stockMovements, prev));
+          if (remote.sales) setSales(prev => mergeListById(remote.sales, prev));
+          if (remote.quotes) setQuotes(prev => mergeListById(remote.quotes, prev));
+          if (remote.creditDebtRecords) setCreditDebtRecords(prev => mergeListById(remote.creditDebtRecords, prev));
+          if (remote.purchases) setPurchases(prev => mergeListById(remote.purchases, prev));
+          if (remote.expenses) setExpenses(prev => mergeListById(remote.expenses, prev));
           if (remote.cashRegister !== undefined) setCashRegister(remote.cashRegister);
-          if (remote.cashTransactions) setCashTransactions(remote.cashTransactions);
-          if (remote.inventories) setInventories(remote.inventories);
-          if (remote.activityLogs) setActivityLogs(remote.activityLogs);
+          if (remote.cashTransactions) setCashTransactions(prev => mergeListById(remote.cashTransactions, prev));
+          if (remote.inventories) setInventories(prev => mergeListById(remote.inventories, prev));
+          if (remote.activityLogs) setActivityLogs(prev => mergeListById(remote.activityLogs, prev));
           setIsCloudSynced(true);
           setTimeout(() => {
             isRemoteUpdate.current = false;
@@ -987,6 +1161,36 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       (prev || []).map(s => (s.id === supplierId ? { ...s, debtBalance: s.debtBalance - amount } : s))
     );
 
+    // Also deduct from active creditDebtRecords for this supplier
+    setCreditDebtRecords(prev => {
+      let remainingToDeduct = amount;
+      return (prev || []).map(r => {
+        if (r.type === 'SUPPLIER_DEBT' && r.partyId === supplierId && r.status === 'EN_COURS' && remainingToDeduct > 0) {
+          const deduct = Math.min(r.remainingAmount, remainingToDeduct);
+          remainingToDeduct -= deduct;
+          const newPaid = r.paidAmount + deduct;
+          const newRem = r.remainingAmount - deduct;
+          const payment: CreditPayment = {
+            id: generateId('pay'),
+            date: new Date().toISOString(),
+            amount: deduct,
+            paymentMethod,
+            notes: 'Règlement effectué depuis la fiche fournisseur',
+            receivedBy: currentUser.name,
+            receiptNumber: `REC-${new Date().getFullYear()}-${String(r.payments.length + 1).padStart(3, '0')}`,
+          };
+          return {
+            ...r,
+            paidAmount: newPaid,
+            remainingAmount: newRem,
+            status: newRem <= 0 ? 'SOLDE' : 'EN_COURS',
+            payments: [payment, ...r.payments],
+          };
+        }
+        return r;
+      });
+    });
+
     // If cash register open and cash paid, register cash transaction
     if (paymentMethod === 'ESPECES' && cashRegister && cashRegister.isOpen) {
       addCashTransaction(
@@ -1043,6 +1247,28 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
             : s
         )
       );
+    }
+
+    // Auto-create CreditDebtRecord for remaining unpaid balance
+    if (remainingAmount > 0) {
+      const debtRecord: CreditDebtRecord = {
+        id: generateId('cd'),
+        type: 'SUPPLIER_DEBT',
+        partyId: sup?.id || supplierId,
+        partyName: sup ? sup.companyName : (purchase.supplierName || 'Fournisseur'),
+        partyPhone: sup?.phone,
+        title: `Commande achat ${purchase.orderNumber}`,
+        initialAmount: remainingAmount,
+        paidAmount: 0,
+        remainingAmount: remainingAmount,
+        status: 'EN_COURS',
+        payments: [],
+        dueDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+        date: new Date().toISOString(),
+        notes: `Créé automatiquement pour l'achat ${purchase.orderNumber}. ${notes || ''}`,
+        createdAt: new Date().toISOString(),
+      };
+      setCreditDebtRecords(prev => [debtRecord, ...(prev || [])]);
     }
 
     // Cash transaction if paid with cash
@@ -1122,6 +1348,36 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     setCustomers(prev =>
       (prev || []).map(c => (c.id === customerId ? { ...c, creditBalance: c.creditBalance - amount } : c))
     );
+
+    // Also deduct from active creditDebtRecords for this customer
+    setCreditDebtRecords(prev => {
+      let remainingToDeduct = amount;
+      return (prev || []).map(r => {
+        if (r.type === 'CLIENT_CREDIT' && r.partyId === customerId && r.status === 'EN_COURS' && remainingToDeduct > 0) {
+          const deduct = Math.min(r.remainingAmount, remainingToDeduct);
+          remainingToDeduct -= deduct;
+          const newPaid = r.paidAmount + deduct;
+          const newRem = r.remainingAmount - deduct;
+          const payment: CreditPayment = {
+            id: generateId('pay'),
+            date: new Date().toISOString(),
+            amount: deduct,
+            paymentMethod,
+            notes: 'Règlement crédit depuis la fiche client',
+            receivedBy: currentUser.name,
+            receiptNumber: `REC-${new Date().getFullYear()}-${String(r.payments.length + 1).padStart(3, '0')}`,
+          };
+          return {
+            ...r,
+            paidAmount: newPaid,
+            remainingAmount: newRem,
+            status: newRem <= 0 ? 'SOLDE' : 'EN_COURS',
+            payments: [payment, ...r.payments],
+          };
+        }
+        return r;
+      });
+    });
 
     // Register cash entry if paid cash
     if (paymentMethod === 'ESPECES' && cashRegister && cashRegister.isOpen) {
@@ -1232,7 +1488,29 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       }
     });
 
-    // 3. Update Customer records if assigned
+    // 3. Auto-create CreditDebtRecord if credit sale
+    if (paymentMethod === 'CREDIT') {
+      const creditRecord: CreditDebtRecord = {
+        id: generateId('cd'),
+        type: 'CLIENT_CREDIT',
+        partyId: cust?.id || customerId || 'client_credit',
+        partyName: cust ? cust.name : (sale.customerName || 'Client à crédit'),
+        partyPhone: cust?.phone,
+        title: `Vente à crédit - Facture ${sale.invoiceNumber}`,
+        initialAmount: totalAmount,
+        paidAmount: 0,
+        remainingAmount: totalAmount,
+        status: 'EN_COURS',
+        payments: [],
+        dueDate: new Date(Date.now() + 15 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+        date: new Date().toISOString(),
+        notes: `Créé automatiquement lors de la vente ${sale.invoiceNumber}. ${notes || ''}`,
+        createdAt: new Date().toISOString(),
+      };
+      setCreditDebtRecords(prev => [creditRecord, ...(prev || [])]);
+    }
+
+    // 4. Update Customer records if assigned
     if (cust) {
       setCustomers(prev =>
         (prev || []).map(c =>
@@ -1248,7 +1526,7 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       );
     }
 
-    // 4. Update Cash Register if cash sale and cash register is open
+    // 5. Update Cash Register if cash sale and cash register is open
     if (paymentMethod === 'ESPECES') {
       if (cashRegister && cashRegister.isOpen) {
         addCashTransaction('VENTE', totalAmount, `Vente ${sale.invoiceNumber} (Espèces)`, 'ESPECES');
@@ -1299,6 +1577,13 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
               }
             : c
         )
+      );
+    }
+
+    // Cancel matching credit debt record if credit sale
+    if (sale.paymentMethod === 'CREDIT') {
+      setCreditDebtRecords(prev =>
+        (prev || []).filter(r => !(r.title?.includes(sale.invoiceNumber) || r.notes?.includes(sale.invoiceNumber)))
       );
     }
 

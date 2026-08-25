@@ -311,6 +311,7 @@ export interface CreditDebtRecord {
   status: 'EN_COURS' | 'SOLDE' | 'EN_RETARD';
   referenceId?: string;
   payments: CreditPayment[];
+  createdAt?: string;
 }
 
 export type CashTransactionType = 
