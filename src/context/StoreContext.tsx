@@ -1352,6 +1352,17 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         );
       });
       purchase.receivedDate = new Date().toISOString();
+    } else if (status === 'ANNULE' && purchase.status === 'RECU') {
+      // If cancelling an already received purchase, deduct the stock that was received
+      (purchase.items || []).forEach(it => {
+        createStockMovement(
+          it.productId,
+          -it.quantity,
+          'RETOUR_FOURNISSEUR',
+          `Annulation commande fournisseur reçue ${purchase.orderNumber}`,
+          purchase.id
+        );
+      });
     }
 
     setPurchases(prev =>
@@ -1592,11 +1603,11 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       );
     }
 
-    // 5. Update Cash Register if cash sale / down payment and cash register is open
-    if (paymentMethod === 'ESPECES' && cashRegister && cashRegister.isOpen) {
+    // 5. Update Cash Register if cash sale or cash down payment on credit, and cash register is open
+    if ((paymentMethod === 'ESPECES' || (paymentMethod === 'CREDIT' && amountReceived > 0)) && cashRegister && cashRegister.isOpen) {
       const cashAmountIn = Math.min(amountReceived, totalAmount);
       if (cashAmountIn > 0) {
-        addCashTransaction('VENTE', cashAmountIn, `Vente ${sale.invoiceNumber} (Espèces${effectiveRemainingDue > 0 ? ' - Acompte' : ''})`, 'ESPECES');
+        addCashTransaction('VENTE', cashAmountIn, `Vente ${sale.invoiceNumber} (${paymentMethod === 'CREDIT' ? 'Acompte espèces' : 'Espèces'}${effectiveRemainingDue > 0 && paymentMethod !== 'CREDIT' ? ' - Acompte' : ''})`, 'ESPECES');
       }
     }
 
@@ -1655,8 +1666,8 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       );
     }
 
-    // Cash transaction refund if cash sale
-    if (sale.paymentMethod === 'ESPECES' && cashRegister && cashRegister.isOpen) {
+    // Cash transaction refund if cash sale or cash advance on credit sale
+    if ((sale.paymentMethod === 'ESPECES' || (sale.paymentMethod === 'CREDIT' && sale.amountReceived > 0)) && cashRegister && cashRegister.isOpen) {
       const cashAmountRefund = Math.min(sale.amountReceived, sale.totalAmount);
       if (cashAmountRefund > 0) {
         addCashTransaction(
@@ -1890,6 +1901,20 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   const deleteCreditDebtRecord = (id: string): boolean => {
     const record = (creditDebtRecords || []).find(r => r.id === id);
     if (!record) return false;
+
+    // Revert customer credit balance or supplier debt balance if there was remaining unpaid debt
+    if (record.remainingAmount > 0 && record.partyId) {
+      if (record.type === 'CLIENT_CREDIT') {
+        setCustomers(prev =>
+          (prev || []).map(c => (c.id === record.partyId ? { ...c, creditBalance: Math.max(0, (c.creditBalance || 0) - record.remainingAmount) } : c))
+        );
+      } else if (record.type === 'SUPPLIER_DEBT') {
+        setSuppliers(prev =>
+          (prev || []).map(s => (s.id === record.partyId ? { ...s, debtBalance: Math.max(0, (s.debtBalance || 0) - record.remainingAmount) } : s))
+        );
+      }
+    }
+
     setCreditDebtRecords(prev => prev.filter(r => r.id !== id));
     logActivity('Suppression dossier dette/crédit', 'SYSTEME', record.partyName, `Dossier ${record.title} supprimé`);
     return true;
@@ -1917,6 +1942,12 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   const deleteExpense = (id: string): boolean => {
     const exp = (expenses || []).find(e => e.id === id);
     if (!exp) return false;
+
+    // If expense was paid in cash and cash register is open, reverse the cash outflow
+    if (exp.paymentMethod === 'ESPECES' && cashRegister && cashRegister.isOpen) {
+      addCashTransaction('ENTREE', exp.amount, `Annulation/Suppression dépense: ${exp.description}`, 'ESPECES');
+    }
+
     setExpenses(prev => prev.filter(e => e.id !== id));
     logActivity('Suppression dépense', 'CAISSE', exp.category, `Suppression dépense ${exp.description} (${exp.amount})`);
     return true;
@@ -2017,7 +2048,7 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       discrepancy,
       discrepancyReason: discrepancy !== 0 ? discrepancyReason || 'Écart non spécifié' : undefined,
       isOpen: false,
-      notes,
+      notes: notes || discrepancyReason,
     };
 
     setCashRegister(closedReg);

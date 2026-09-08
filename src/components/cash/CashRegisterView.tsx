@@ -113,7 +113,7 @@ export const CashRegisterView: React.FC<CashRegisterViewProps> = ({ onNavigate }
 
   const handleCloseRegister = (e: React.FormEvent) => {
     e.preventDefault();
-    closeCashRegister(Number(actualClosingBalanceInput), closingNotes);
+    closeCashRegister(Number(actualClosingBalanceInput), closingNotes || undefined, closingNotes || undefined);
     setShowCloseModal(false);
     setDrawerStatusMessage('🔒 Session de caisse clôturée.');
     setTimeout(() => setDrawerStatusMessage(null), 5000);

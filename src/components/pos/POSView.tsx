@@ -1515,7 +1515,17 @@ export const POSView: React.FC<POSViewProps> = ({ onNavigate }) => {
                       <button
                         key={m.id}
                         type="button"
-                        onClick={() => setPaymentMethod(m.id as PaymentMethod)}
+                        onClick={() => {
+                          const newMethod = m.id as PaymentMethod;
+                          setPaymentMethod(newMethod);
+                          if (newMethod === 'CREDIT') {
+                            setAmountReceived('0');
+                          } else if (newMethod === 'ESPECES' || newMethod === 'MOBILE_MONEY' || newMethod === 'VIREMENT') {
+                            if (!amountReceived || amountReceived === '0') {
+                              setAmountReceived(String(totalToPay));
+                            }
+                          }
+                        }}
                         className={`p-2.5 rounded-xl border text-left flex items-start gap-2 transition-all ${
                           isSelected
                             ? 'border-indigo-600 bg-indigo-50/60 ring-2 ring-indigo-500 font-bold text-indigo-900 shadow-xs'
@@ -1660,7 +1670,7 @@ export const POSView: React.FC<POSViewProps> = ({ onNavigate }) => {
                           <option value="">Client Comptoir (Sans fiche client)</option>
                           {customers.map((c) => (
                             <option key={c.id} value={c.id}>
-                              {c.name} ({c.phone}) {c.totalCredit ? `• Dette: ${formatMoney(c.totalCredit, settings.currency)}` : ''}
+                              {c.name} ({c.phone}) {c.creditBalance > 0 ? `• Dette: ${formatMoney(c.creditBalance, settings.currency)}` : ''}
                             </option>
                           ))}
                         </select>
@@ -2283,7 +2293,7 @@ export const POSView: React.FC<POSViewProps> = ({ onNavigate }) => {
                   </label>
                   <input
                     type="text"
-                    placeholder="Scan ou EAN"
+                    placeholder="Code-barres / EAN"
                     value={quickProdBarcode}
                     onChange={(e) => setQuickProdBarcode(e.target.value)}
                     className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs font-mono focus:ring-2 focus:ring-indigo-500 focus:outline-none"
