@@ -23,6 +23,8 @@ import {
   Sparkles,
   Database,
   RefreshCw,
+  X,
+  ArrowDownUp,
 } from 'lucide-react';
 import { useStore } from '../../context/StoreContext';
 import { Product } from '../../types';
@@ -49,6 +51,7 @@ export const ProductsView: React.FC = () => {
   const [categoryFilter, setCategoryFilter] = useState('all');
   const [supplierFilter, setSupplierFilter] = useState('all');
   const [stockFilter, setStockFilter] = useState<'all' | 'low' | 'out'>('all');
+  const [sortBy, setSortBy] = useState<'NAME_ASC' | 'NAME_DESC' | 'DATE_DESC' | 'DATE_ASC' | 'STOCK_DESC' | 'STOCK_ASC'>('NAME_ASC');
 
   // Modals
   const [showProductModal, setShowProductModal] = useState(false);
@@ -83,10 +86,10 @@ export const ProductsView: React.FC = () => {
     setTimeout(() => setToastMessage(null), 4000);
   };
 
-  // Filtered Products
+  // Filtered & Sorted Products
   const filteredProducts = useMemo(() => {
     const q = (searchTerm || '').toLowerCase().trim();
-    return (products || []).filter((p) => {
+    const list = (products || []).filter((p) => {
       if (!p) return false;
       const name = (p.name || '').toLowerCase();
       const code = (p.code || '').toLowerCase();
@@ -107,7 +110,26 @@ export const ProductsView: React.FC = () => {
 
       return matchesSearch && matchesCategory && matchesSupplier && matchesStock;
     });
-  }, [products, searchTerm, categoryFilter, supplierFilter, stockFilter]);
+
+    return list.sort((a, b) => {
+      switch (sortBy) {
+        case 'NAME_ASC':
+          return (a.name || '').localeCompare(b.name || '', 'fr', { sensitivity: 'base' });
+        case 'NAME_DESC':
+          return (b.name || '').localeCompare(a.name || '', 'fr', { sensitivity: 'base' });
+        case 'DATE_DESC':
+          return new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime();
+        case 'DATE_ASC':
+          return new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime();
+        case 'STOCK_DESC':
+          return (b.currentStock || 0) - (a.currentStock || 0);
+        case 'STOCK_ASC':
+          return (a.currentStock || 0) - (b.currentStock || 0);
+        default:
+          return 0;
+      }
+    });
+  }, [products, searchTerm, categoryFilter, supplierFilter, stockFilter, sortBy]);
 
   const handleOpenAddModal = () => {
     setEditingProduct(null);
@@ -337,24 +359,50 @@ export const ProductsView: React.FC = () => {
 
       {/* Filter & Search Bar */}
       <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs space-y-3">
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-          {/* Search */}
-          <div className="relative">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+          {/* Search Bar - Responsive, High Contrast and Clear Button */}
+          <div className="relative sm:col-span-2 lg:col-span-1">
             <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
             <input
               type="text"
-              placeholder="Recherche par nom, code, code-barres..."
+              placeholder="Recherche par nom, code..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+              className="w-full pl-9 pr-8 py-2 bg-white border border-slate-300 rounded-xl text-xs font-semibold text-slate-900 placeholder:text-slate-400 placeholder:font-normal focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 focus:outline-none shadow-2xs"
             />
+            {searchTerm && (
+              <button
+                type="button"
+                onClick={() => setSearchTerm('')}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 p-0.5"
+                title="Effacer la recherche"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
+
+          {/* Tri des articles */}
+          <div className="relative">
+            <select
+              value={sortBy}
+              onChange={(e) => setSortBy(e.target.value as any)}
+              className="w-full py-2 px-3 bg-white border border-slate-300 rounded-xl text-xs font-semibold text-slate-800 focus:ring-2 focus:ring-indigo-500 focus:outline-none shadow-2xs"
+            >
+              <option value="NAME_ASC">Trier: Nom (A → Z)</option>
+              <option value="NAME_DESC">Trier: Nom (Z → A)</option>
+              <option value="DATE_DESC">Trier: Date d'ajout (Récent)</option>
+              <option value="DATE_ASC">Trier: Date d'ajout (Ancien)</option>
+              <option value="STOCK_DESC">Trier: Stock (Plus élevé)</option>
+              <option value="STOCK_ASC">Trier: Stock (Plus faible)</option>
+            </select>
           </div>
 
           {/* Category Filter */}
           <select
             value={categoryFilter}
             onChange={(e) => setCategoryFilter(e.target.value)}
-            className="py-2 px-3 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-700 focus:outline-none"
+            className="py-2 px-3 bg-white border border-slate-300 rounded-xl text-xs font-semibold text-slate-700 focus:ring-2 focus:ring-indigo-500 focus:outline-none shadow-2xs"
           >
             <option value="all">Toutes les catégories</option>
             {categories.map((c) => (
@@ -368,7 +416,7 @@ export const ProductsView: React.FC = () => {
           <select
             value={supplierFilter}
             onChange={(e) => setSupplierFilter(e.target.value)}
-            className="py-2 px-3 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-700 focus:outline-none"
+            className="py-2 px-3 bg-white border border-slate-300 rounded-xl text-xs font-semibold text-slate-700 focus:ring-2 focus:ring-indigo-500 focus:outline-none shadow-2xs"
           >
             <option value="all">Tous les fournisseurs</option>
             {suppliers.map((s) => (

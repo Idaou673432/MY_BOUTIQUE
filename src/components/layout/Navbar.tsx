@@ -25,7 +25,7 @@ interface NavbarProps {
 }
 
 export const Navbar: React.FC<NavbarProps> = ({ onToggleSidebar, isSidebarOpen, onNavigate }) => {
-  const { currentUser, settings, metrics, cashRegister, isCloudSynced, isSyncing, syncToCloudNow, lockSession } = useStore();
+  const { currentUser, settings, metrics, cashRegister, isCloudSynced, isSyncing, lastSyncTime, cloudSyncError, syncToCloudNow, lockSession } = useStore();
   const [showUserDropdown, setShowUserDropdown] = useState(false);
   const [showAlertsDropdown, setShowAlertsDropdown] = useState(false);
   const [globalSearch, setGlobalSearch] = useState('');
@@ -91,20 +91,22 @@ export const Navbar: React.FC<NavbarProps> = ({ onToggleSidebar, isSidebarOpen, 
         <button
           onClick={() => syncToCloudNow()}
           disabled={isSyncing}
-          className={`hidden lg:flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs font-semibold transition-all ${
+          className={`hidden md:flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs font-semibold transition-all cursor-pointer ${
             isCloudSynced
-              ? 'bg-sky-50 text-sky-800 border-sky-200 hover:bg-sky-100'
-              : 'bg-amber-50 text-amber-800 border-amber-200 hover:bg-amber-100'
+              ? 'bg-emerald-50 text-emerald-800 border-emerald-200 hover:bg-emerald-100'
+              : cloudSyncError
+              ? 'bg-amber-50 text-amber-800 border-amber-200 hover:bg-amber-100'
+              : 'bg-sky-50 text-sky-800 border-sky-200 hover:bg-sky-100'
           }`}
-          title="Synchronisation en temps réel Firebase Firestore"
+          title={cloudSyncError || `Cloud synchronisé ${lastSyncTime ? `à ${lastSyncTime}` : 'en temps réel'}. Cliquer pour forcer la synchronisation.`}
         >
           {isSyncing ? (
             <RefreshCw className="w-3.5 h-3.5 animate-spin text-sky-600" />
           ) : (
-            <Cloud className="w-3.5 h-3.5 text-sky-600" />
+            <Cloud className={`w-3.5 h-3.5 ${isCloudSynced ? 'text-emerald-600' : 'text-amber-600'}`} />
           )}
-          <span className="text-[11px]">
-            {isSyncing ? 'Synchronisation...' : isCloudSynced ? 'Firebase Cloud' : 'En attente'}
+          <span className="text-[11px] whitespace-nowrap">
+            {isSyncing ? 'Synchronisation...' : isCloudSynced ? `Cloud Sync ${lastSyncTime ? `(${lastSyncTime})` : 'OK'}` : 'Sauvegarde locale'}
           </span>
           <span className={`w-1.5 h-1.5 rounded-full ${isCloudSynced ? 'bg-emerald-500' : 'bg-amber-500'}`} />
         </button>

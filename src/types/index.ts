@@ -236,6 +236,7 @@ export interface Sale {
   paymentMethod: PaymentMethod;
   amountReceived: number;
   changeGiven: number;
+  remainingDue?: number; // Montant restant en dette / reste à payer
   customerId?: string;
   customerName?: string;
   userId: string;

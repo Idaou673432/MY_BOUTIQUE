@@ -676,6 +676,27 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
                       {formatMoney(sale.totalAmount, settings.currency)}
                     </span>
                   </div>
+
+                  {sale.amountReceived > 0 && (
+                    <div className="flex justify-between text-black font-black text-xs pt-1">
+                      <span>Montant Versé :</span>
+                      <span className="font-mono">{formatMoney(sale.amountReceived, settings.currency)}</span>
+                    </div>
+                  )}
+
+                  {sale.remainingDue !== undefined && sale.remainingDue > 0 && (
+                    <div className="flex justify-between items-center pt-1 border-t border-dashed border-red-500 font-black text-xs text-red-700">
+                      <span className="uppercase">Reste en Dette (À Payer) :</span>
+                      <span className="font-mono font-black text-sm">{formatMoney(sale.remainingDue, settings.currency)}</span>
+                    </div>
+                  )}
+
+                  {sale.changeGiven > 0 && (
+                    <div className="flex justify-between text-black font-black text-xs pt-0.5">
+                      <span>Monnaie Rendue :</span>
+                      <span className="font-mono">{formatMoney(sale.changeGiven, settings.currency)}</span>
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -857,6 +878,12 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
                   <div className="flex justify-between">
                     <span>Montant reçu:</span>
                     <span className="font-black">{formatMoney(sale.amountReceived, settings.currency)}</span>
+                  </div>
+                )}
+                {sale.remainingDue !== undefined && sale.remainingDue > 0 && (
+                  <div className="flex justify-between text-rose-700 font-black pt-0.5 border-t border-dashed border-rose-500">
+                    <span>RESTE EN DETTE:</span>
+                    <span className="font-mono">{formatMoney(sale.remainingDue, settings.currency)}</span>
                   </div>
                 )}
                 {sale.changeGiven > 0 && (

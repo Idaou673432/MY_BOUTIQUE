@@ -457,6 +457,12 @@ export const generateThermalReceiptHtml = (
         <span class="bold">${formatMoney(sale.amountReceived, currency)}</span>
       </div>
       ` : ''}
+      ${sale.remainingDue && sale.remainingDue > 0 ? `
+      <div class="meta-row" style="color: #b91c1c; font-weight: 900; border-top: 1px dashed #000; padding-top: 2px;">
+        <span class="bold">RESTE EN DETTE:</span>
+        <span class="bold font-mono">${formatMoney(sale.remainingDue, currency)}</span>
+      </div>
+      ` : ''}
       ${sale.changeGiven > 0 ? `
       <div class="meta-row">
         <span class="bold">MONNAIE RENDUE:</span>
@@ -849,6 +855,24 @@ export const generateA4InvoiceHtml = (
         <span class="bold uppercase">Net à Payer :</span>
         <span class="bold">${formatMoney(sale.totalAmount, currency)}</span>
       </div>
+      ${sale.amountReceived > 0 ? `
+      <div class="total-line">
+        <span class="bold">Montant Versé :</span>
+        <span class="bold">${formatMoney(sale.amountReceived, currency)}</span>
+      </div>
+      ` : ''}
+      ${sale.remainingDue && sale.remainingDue > 0 ? `
+      <div class="total-line" style="color: #b91c1c; font-size: 13px; border-top: 1px dashed #000; padding-top: 4px;">
+        <span class="bold uppercase">Reste en Dette (À Payer) :</span>
+        <span class="bold font-mono">${formatMoney(sale.remainingDue, currency)}</span>
+      </div>
+      ` : ''}
+      ${sale.changeGiven > 0 ? `
+      <div class="total-line">
+        <span class="bold">Monnaie Rendue :</span>
+        <span class="bold">${formatMoney(sale.changeGiven, currency)}</span>
+      </div>
+      ` : ''}
     </div>
   </div>
 
@@ -1351,6 +1375,9 @@ export const generateEscPosBytes = (
   line(`Paiement: ${getPaymentMethodLabel(sale.paymentMethod)}`);
   if (sale.amountReceived > 0) {
     line(`Montant Recu: ${formatMoney(sale.amountReceived, currency)}`);
+  }
+  if (sale.remainingDue && sale.remainingDue > 0) {
+    line(`RESTE EN DETTE: ${formatMoney(sale.remainingDue, currency)}`);
   }
   if (sale.changeGiven > 0) {
     line(`Monnaie Rendue: ${formatMoney(sale.changeGiven, currency)}`);

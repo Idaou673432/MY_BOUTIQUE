@@ -148,12 +148,11 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigate }) => {
     return { days, maxAmount };
   }, [sales]);
 
-  // Ruptures & low stock items list for stock health widget
+  // Ruptures & low stock items list for stock health widget and visual alert banner
   const criticalStockItems = useMemo(() => {
     return products
       .filter(p => p.currentStock <= p.minStock)
-      .sort((a, b) => a.currentStock - b.currentStock)
-      .slice(0, 5);
+      .sort((a, b) => a.currentStock - b.currentStock);
   }, [products]);
 
   // Recent 5 sales
@@ -205,6 +204,91 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigate }) => {
           ))}
         </div>
       </div>
+
+      {/* SECTION NOTIFICATION VISUELLE : ALERTE STOCK CRITIQUE */}
+      {criticalStockItems.length > 0 && (
+        <div className="bg-gradient-to-r from-red-50 via-amber-50 to-orange-50 border-2 border-red-200/90 rounded-2xl p-4 sm:p-5 shadow-sm transition-all">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-red-200/60">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-red-600 text-white flex items-center justify-center shadow-sm shrink-0">
+                <AlertTriangle className="w-5 h-5 animate-pulse" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h2 className="text-base font-black text-red-950 tracking-tight">
+                    Alerte Stock Critique : {criticalStockItems.length} article(s) sous le seuil
+                  </h2>
+                  <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full bg-red-600 text-white">
+                    Action requise
+                  </span>
+                </div>
+                <p className="text-xs text-red-800 font-medium">
+                  {metrics.outOfStockCount > 0 ? `${metrics.outOfStockCount} produit(s) en rupture totale (0 unité)` : ''}
+                  {metrics.outOfStockCount > 0 && metrics.lowStockCount > 0 ? ' et ' : ''}
+                  {metrics.lowStockCount > 0 ? `${metrics.lowStockCount} produit(s) sous le stock minimum d'alerte` : ''}
+                </p>
+              </div>
+            </div>
+
+            <button
+              onClick={() => onNavigate('stock')}
+              className="inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl bg-red-600 hover:bg-red-700 text-white text-xs font-bold shadow-xs transition-colors shrink-0 cursor-pointer self-start sm:self-auto"
+            >
+              <span>Gérer le stock / Commander</span>
+              <ArrowRight className="w-3.5 h-3.5" />
+            </button>
+          </div>
+
+          {/* Quick grid of critical items */}
+          <div className="mt-3.5 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-2.5">
+            {criticalStockItems.slice(0, 8).map(prod => {
+              const isRupture = prod.currentStock <= 0;
+              return (
+                <div
+                  key={prod.id}
+                  onClick={() => onNavigate('stock')}
+                  className={`p-3 rounded-xl border transition-all cursor-pointer flex items-center justify-between gap-2.5 ${
+                    isRupture
+                      ? 'bg-red-100/80 border-red-300 hover:bg-red-100'
+                      : 'bg-amber-100/70 border-amber-300 hover:bg-amber-100'
+                  }`}
+                >
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs font-bold text-gray-900 truncate">
+                      {prod.name}
+                    </p>
+                    <p className="text-[11px] text-gray-600 truncate">
+                      {prod.category || 'Article'} • Seuil min : {prod.minStock}
+                    </p>
+                  </div>
+                  <div className="text-right shrink-0">
+                    <span
+                      className={`inline-block px-2 py-0.5 rounded-md text-[11px] font-black ${
+                        isRupture
+                          ? 'bg-red-600 text-white'
+                          : 'bg-amber-600 text-white'
+                      }`}
+                    >
+                      {isRupture ? 'RUPTURE (0)' : `${prod.currentStock} / ${prod.minStock}`}
+                    </span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {criticalStockItems.length > 8 && (
+            <div className="mt-2.5 text-center sm:text-right">
+              <button
+                onClick={() => onNavigate('stock')}
+                className="text-xs font-bold text-red-800 hover:text-red-950 underline underline-offset-2 cursor-pointer"
+              >
+                + Voir les {criticalStockItems.length - 8} autres articles critiques dans l'onglet Stock →
+              </button>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* 4 PRIMARY METRIC CARDS (High Density Design Theme) */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">

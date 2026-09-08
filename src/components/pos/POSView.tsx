@@ -1,7 +1,6 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import {
   Search,
-  Barcode,
   Trash2,
   Plus,
   Minus,
@@ -35,7 +34,8 @@ import {
   X,
   SlidersHorizontal,
   Inbox,
-  Unlock
+  Unlock,
+  ArrowDownUp,
 } from 'lucide-react';
 import { useStore } from '../../context/StoreContext';
 import { Product, SaleItem, PaymentMethod, Sale } from '../../types';
@@ -80,7 +80,6 @@ export const POSView: React.FC<POSViewProps> = ({ onNavigate }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [showSearchSuggestions, setShowSearchSuggestions] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
-  const [barcodeInput, setBarcodeInput] = useState('');
   const [viewMode, setViewMode] = useState<'grid' | 'table'>('grid');
   const [stockFilter, setStockFilter] = useState<'all' | 'in_stock' | 'low_stock'>('all');
 
@@ -123,9 +122,10 @@ export const POSView: React.FC<POSViewProps> = ({ onNavigate }) => {
   const [showReceiptModal, setShowReceiptModal] = useState(false);
   const [showPrinterSettings, setShowPrinterSettings] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [posSortBy, setPosSortBy] = useState<'NAME_ASC' | 'NAME_DESC' | 'DATE_DESC' | 'DATE_ASC' | 'STOCK_DESC' | 'STOCK_ASC'>('NAME_ASC');
 
-  const barcodeInputRef = useRef<HTMLInputElement>(null);
   const searchContainerRef = useRef<HTMLDivElement>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
 
   // Close search suggestions on click outside
   useEffect(() => {
@@ -136,11 +136,6 @@ export const POSView: React.FC<POSViewProps> = ({ onNavigate }) => {
     };
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
-
-  // Focus barcode input on mount
-  useEffect(() => {
-    barcodeInputRef.current?.focus();
   }, []);
 
   // Live Auto-suggest list for the search bar
@@ -158,10 +153,10 @@ export const POSView: React.FC<POSViewProps> = ({ onNavigate }) => {
       .slice(0, 8);
   }, [products, searchTerm]);
 
-  // Filter products for catalog grid / quick list
+  // Filter & Sort products for catalog grid / quick list
   const filteredProducts = useMemo(() => {
     const q = (searchTerm || '').toLowerCase().trim();
-    return (products || []).filter((p) => {
+    const list = (products || []).filter((p) => {
       if (!p || !p.active) return false;
       const name = (p.name || '').toLowerCase();
       const code = (p.code || '').toLowerCase();
@@ -179,12 +174,31 @@ export const POSView: React.FC<POSViewProps> = ({ onNavigate }) => {
 
       return matchesSearch && matchesCategory && matchesStock;
     });
-  }, [products, searchTerm, selectedCategory, stockFilter]);
+
+    return list.sort((a, b) => {
+      switch (posSortBy) {
+        case 'NAME_ASC':
+          return (a.name || '').localeCompare(b.name || '', 'fr', { sensitivity: 'base' });
+        case 'NAME_DESC':
+          return (b.name || '').localeCompare(a.name || '', 'fr', { sensitivity: 'base' });
+        case 'DATE_DESC':
+          return new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime();
+        case 'DATE_ASC':
+          return new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime();
+        case 'STOCK_DESC':
+          return (b.currentStock || 0) - (a.currentStock || 0);
+        case 'STOCK_ASC':
+          return (a.currentStock || 0) - (b.currentStock || 0);
+        default:
+          return 0;
+      }
+    });
+  }, [products, searchTerm, selectedCategory, stockFilter, posSortBy]);
 
   // Filter products inside the Multi-Select Catalog Modal
   const modalFilteredProducts = useMemo(() => {
     const q = (modalSearchTerm || '').toLowerCase().trim();
-    return (products || []).filter((p) => {
+    const list = (products || []).filter((p) => {
       if (!p || !p.active) return false;
       const name = (p.name || '').toLowerCase();
       const code = (p.code || '').toLowerCase();
@@ -193,7 +207,26 @@ export const POSView: React.FC<POSViewProps> = ({ onNavigate }) => {
       const matchesCat = modalCategory === 'all' || p.categoryId === modalCategory;
       return matchesSearch && matchesCat;
     });
-  }, [products, modalSearchTerm, modalCategory]);
+
+    return list.sort((a, b) => {
+      switch (posSortBy) {
+        case 'NAME_ASC':
+          return (a.name || '').localeCompare(b.name || '', 'fr', { sensitivity: 'base' });
+        case 'NAME_DESC':
+          return (b.name || '').localeCompare(a.name || '', 'fr', { sensitivity: 'base' });
+        case 'DATE_DESC':
+          return new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime();
+        case 'DATE_ASC':
+          return new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime();
+        case 'STOCK_DESC':
+          return (b.currentStock || 0) - (a.currentStock || 0);
+        case 'STOCK_ASC':
+          return (a.currentStock || 0) - (b.currentStock || 0);
+        default:
+          return 0;
+      }
+    });
+  }, [products, modalSearchTerm, modalCategory, posSortBy]);
 
   // Open Multi-Select Modal and synchronize with current cart
   const handleOpenSelectProductsModal = () => {
@@ -478,28 +511,6 @@ export const POSView: React.FC<POSViewProps> = ({ onNavigate }) => {
     setErrorMessage(null);
   };
 
-  // Barcode scanner simulation / Enter key handler
-  const handleBarcodeSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!barcodeInput.trim()) return;
-
-    const rawInput = barcodeInput.trim();
-    const cleanInput = rawInput.toLowerCase();
-    const matched = (products || []).find(
-      (p) =>
-        p.active &&
-        ((p.barcode && p.barcode.trim().toLowerCase() === cleanInput) ||
-         (p.code && p.code.toLowerCase().trim() === cleanInput))
-    );
-
-    if (matched) {
-      addToCart(matched);
-      setBarcodeInput('');
-    } else {
-      setErrorMessage(`Aucun produit trouvé avec le code: ${barcodeInput}`);
-    }
-  };
-
   // Cart Calculations
   const subtotal = useMemo(() => cart.reduce((sum, it) => sum + it.total, 0), [cart]);
   const totalCost = useMemo(() => cart.reduce((sum, it) => sum + (it.unitCost * it.quantity), 0), [cart]);
@@ -523,6 +534,7 @@ export const POSView: React.FC<POSViewProps> = ({ onNavigate }) => {
 
   const numReceived = parseFloat(amountReceived) || 0;
   const changeDue = Math.max(0, numReceived - totalToPay);
+  const remainingDebt = Math.max(0, totalToPay - numReceived);
 
   // Quick Add Customer
   const handleCreateCustomer = (e: React.FormEvent) => {
@@ -546,26 +558,23 @@ export const POSView: React.FC<POSViewProps> = ({ onNavigate }) => {
       return;
     }
 
-    if (paymentMethod === 'ESPECES' && numReceived < totalToPay) {
-      setErrorMessage(`Montant reçu insuffisant (${formatMoney(numReceived, settings.currency)} sur ${formatMoney(totalToPay, settings.currency)}).`);
-      return;
-    }
-
-    if (paymentMethod === 'CREDIT' && !selectedCustomerId) {
-      setErrorMessage('Une vente à crédit nécessite obligatoirement de sélectionner un client.');
-      return;
-    }
+    const numGiven = parseFloat(amountReceived) || 0;
+    const remainingDebt = paymentMethod === 'CREDIT' && numGiven === 0 ? totalToPay : Math.max(0, totalToPay - numGiven);
 
     const customerForPrint = selectedCustomerId
       ? (customers || []).find((c) => c.id === selectedCustomerId)
       : undefined;
 
+    const effectiveMethod = (remainingDebt > 0 && numGiven === 0) ? 'CREDIT' : paymentMethod;
+    const effectiveReceived = effectiveMethod === 'CREDIT' ? 0 : numGiven;
+
     const result = createSale(
       cart,
-      paymentMethod,
-      paymentMethod === 'ESPECES' ? numReceived : totalToPay,
+      effectiveMethod,
+      effectiveReceived,
       selectedCustomerId || undefined,
-      notes || undefined
+      notes || undefined,
+      remainingDebt
     );
 
     if (result.success && result.sale) {
@@ -722,32 +731,53 @@ export const POSView: React.FC<POSViewProps> = ({ onNavigate }) => {
       )}
 
       <div className="flex-1 flex flex-col lg:flex-row gap-4 min-h-0 overflow-hidden">
-        {/* LEFT COLUMN: PRODUCTS CATALOG & BARCODE SCANNER */}
+        {/* LEFT COLUMN: PRODUCTS CATALOG */}
       <div className="flex-1 flex flex-col bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
-        {/* Search, Barcode, Selection & Category Bar */}
+        {/* Search, Selection & Category Bar */}
         <div className="p-3.5 border-b border-slate-200 bg-slate-50/70 space-y-2.5">
           <div className="flex flex-col sm:flex-row gap-2">
             {/* Search Input with Live Autocomplete Suggestions */}
             <div ref={searchContainerRef} className="relative flex-1">
               <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
               <input
+                ref={searchInputRef}
                 type="text"
-                placeholder="Rechercher par nom, code, marque..."
+                placeholder="Rechercher par nom, code, marque, catégorie..."
                 value={searchTerm}
                 onFocus={() => setShowSearchSuggestions(true)}
                 onChange={(e) => {
                   setSearchTerm(e.target.value);
                   setShowSearchSuggestions(true);
                 }}
-                className="w-full pl-9 pr-3 py-2 bg-white border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    if (autocompleteSuggestions.length > 0) {
+                      addToCart(autocompleteSuggestions[0]);
+                      setShowSearchSuggestions(false);
+                      setSearchTerm('');
+                    }
+                  }
+                }}
+                className="w-full pl-9 pr-8 py-2.5 bg-white border border-slate-300 rounded-xl text-xs font-semibold text-slate-900 placeholder:text-slate-400 placeholder:font-normal focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 focus:outline-none shadow-2xs"
               />
+              {searchTerm && (
+                <button
+                  type="button"
+                  onClick={() => setSearchTerm('')}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 p-0.5"
+                  title="Effacer la recherche"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
 
               {/* Autocomplete Suggestions Popup */}
               {showSearchSuggestions && autocompleteSuggestions.length > 0 && (
                 <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-xl z-30 max-h-72 overflow-y-auto divide-y divide-slate-100 animate-in fade-in">
                   <div className="p-2 bg-slate-50 text-[11px] font-bold text-slate-500 flex items-center justify-between">
                     <span>Résultats rapides ({autocompleteSuggestions.length})</span>
-                    <span className="text-[10px] text-slate-400 font-normal">Cliquez pour ajouter au panier</span>
+                    <span className="text-[10px] text-slate-400 font-normal">Appuyez sur Entrée ou cliquez pour ajouter</span>
                   </div>
                   {autocompleteSuggestions.map((prod) => {
                     const isOutOfStock = prod.currentStock <= 0;
@@ -760,6 +790,7 @@ export const POSView: React.FC<POSViewProps> = ({ onNavigate }) => {
                         onClick={() => {
                           addToCart(prod);
                           setShowSearchSuggestions(false);
+                          setSearchTerm('');
                         }}
                         className="p-2.5 hover:bg-indigo-50/70 cursor-pointer flex items-center justify-between gap-2 transition-colors"
                       >
@@ -767,7 +798,6 @@ export const POSView: React.FC<POSViewProps> = ({ onNavigate }) => {
                           <p className="text-xs font-bold text-slate-800 truncate">{prod.name}</p>
                           <div className="flex items-center gap-2 text-[10px] text-slate-400">
                             <span className="font-mono">{prod.code}</span>
-                            {prod.barcode && <span>• {prod.barcode}</span>}
                             <span
                               className={`font-bold ${
                                 isOutOfStock
@@ -799,27 +829,6 @@ export const POSView: React.FC<POSViewProps> = ({ onNavigate }) => {
                 </div>
               )}
             </div>
-
-            {/* Barcode Quick Scanner Form */}
-            <form onSubmit={handleBarcodeSubmit} className="flex items-center gap-1.5 sm:w-56">
-              <div className="relative flex-1">
-                <Barcode className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-                <input
-                  ref={barcodeInputRef}
-                  type="text"
-                  placeholder="Scan code..."
-                  value={barcodeInput}
-                  onChange={(e) => setBarcodeInput(e.target.value)}
-                  className="w-full pl-9 pr-2 py-2 bg-white border border-indigo-200 rounded-xl text-xs font-mono focus:ring-2 focus:ring-indigo-500 focus:outline-none text-slate-800"
-                />
-              </div>
-              <button
-                type="submit"
-                className="px-3 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-semibold shadow-xs cursor-pointer"
-              >
-                Scan
-              </button>
-            </form>
 
             {/* Multi-Selection & Quick Add Buttons */}
             <div className="flex items-center gap-1.5 shrink-0">
@@ -924,43 +933,63 @@ export const POSView: React.FC<POSViewProps> = ({ onNavigate }) => {
             </div>
 
             {/* Quick Stock Filters */}
-            <div className="flex items-center gap-1 shrink-0 bg-white border border-slate-200 p-0.5 rounded-lg text-[11px]">
-              <button
-                type="button"
-                onClick={() => setStockFilter('all')}
-                className={`px-2 py-0.5 rounded font-medium transition-colors cursor-pointer ${
-                  stockFilter === 'all'
-                    ? 'bg-slate-800 text-white font-bold'
-                    : 'text-slate-600 hover:bg-slate-50'
-                }`}
-              >
-                Tous
-              </button>
-              <button
-                type="button"
-                onClick={() => setStockFilter('in_stock')}
-                className={`px-2 py-0.5 rounded font-medium flex items-center gap-1 transition-colors cursor-pointer ${
-                  stockFilter === 'in_stock'
-                    ? 'bg-emerald-600 text-white font-bold'
-                    : 'text-emerald-700 hover:bg-emerald-50'
-                }`}
-                title="Afficher uniquement les articles ayant du stock disponible"
-              >
-                <PackageCheck className="w-3 h-3" />
-                En Stock ({products.filter((p) => p.active && p.currentStock > 0).length})
-              </button>
-              <button
-                type="button"
-                onClick={() => setStockFilter('low_stock')}
-                className={`px-2 py-0.5 rounded font-medium transition-colors cursor-pointer ${
-                  stockFilter === 'low_stock'
-                    ? 'bg-amber-600 text-white font-bold'
-                    : 'text-amber-700 hover:bg-amber-50'
-                }`}
-                title="Afficher les articles proches de la rupture"
-              >
-                Faible ({products.filter((p) => p.active && p.currentStock <= p.minStock && p.currentStock > 0).length})
-              </button>
+            <div className="flex items-center gap-1.5 flex-wrap shrink-0">
+              <div className="flex items-center gap-1 bg-white border border-slate-200 p-0.5 rounded-lg text-[11px]">
+                <button
+                  type="button"
+                  onClick={() => setStockFilter('all')}
+                  className={`px-2 py-0.5 rounded font-medium transition-colors cursor-pointer ${
+                    stockFilter === 'all'
+                      ? 'bg-slate-800 text-white font-bold'
+                      : 'text-slate-600 hover:bg-slate-50'
+                  }`}
+                >
+                  Tous
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setStockFilter('in_stock')}
+                  className={`px-2 py-0.5 rounded font-medium flex items-center gap-1 transition-colors cursor-pointer ${
+                    stockFilter === 'in_stock'
+                      ? 'bg-emerald-600 text-white font-bold'
+                      : 'text-emerald-700 hover:bg-emerald-50'
+                  }`}
+                  title="Afficher uniquement les articles ayant du stock disponible"
+                >
+                  <PackageCheck className="w-3 h-3" />
+                  En Stock ({products.filter((p) => p.active && p.currentStock > 0).length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setStockFilter('low_stock')}
+                  className={`px-2 py-0.5 rounded font-medium transition-colors cursor-pointer ${
+                    stockFilter === 'low_stock'
+                      ? 'bg-amber-600 text-white font-bold'
+                      : 'text-amber-700 hover:bg-amber-50'
+                  }`}
+                  title="Afficher les articles proches de la rupture"
+                >
+                  Faible ({products.filter((p) => p.active && p.currentStock <= p.minStock && p.currentStock > 0).length})
+                </button>
+              </div>
+
+              {/* Sort By Dropdown */}
+              <div className="flex items-center gap-1 bg-white border border-slate-200 px-2 py-1 rounded-lg text-xs shadow-2xs">
+                <ArrowDownUp className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+                <span className="text-[11px] font-bold text-slate-500 hidden sm:inline">Trier :</span>
+                <select
+                  value={posSortBy}
+                  onChange={(e) => setPosSortBy(e.target.value as any)}
+                  className="bg-transparent text-xs font-bold text-slate-800 focus:outline-none cursor-pointer"
+                >
+                  <option value="NAME_ASC">Nom (A → Z)</option>
+                  <option value="NAME_DESC">Nom (Z → A)</option>
+                  <option value="DATE_DESC">Date d'ajout (Récent)</option>
+                  <option value="DATE_ASC">Date d'ajout (Ancien)</option>
+                  <option value="STOCK_DESC">Nombre de stock (Max)</option>
+                  <option value="STOCK_ASC">Nombre de stock (Min)</option>
+                </select>
+              </div>
             </div>
           </div>
         </div>
@@ -1378,7 +1407,7 @@ export const POSView: React.FC<POSViewProps> = ({ onNavigate }) => {
               <ShoppingBag className="w-8 h-8 text-slate-300 mb-2" />
               <p className="text-xs font-medium">Votre ticket de caisse est vide.</p>
               <p className="text-[10px] text-slate-400 mt-1">
-                Scannez un code-barres ou cliquez sur un article en stock à gauche.
+                Cliquez sur un article en stock à gauche ou utilisez la recherche pour l'ajouter.
               </p>
             </div>
           )}
@@ -1504,55 +1533,150 @@ export const POSView: React.FC<POSViewProps> = ({ onNavigate }) => {
                 </div>
               </div>
 
-              {/* Cash Calculation for Espèces */}
-              {paymentMethod === 'ESPECES' && (
-                <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-2">
+              {/* Payment Details: Montant Donné & Reste en Dette */}
+              <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-2xl space-y-3">
+                <div className="grid grid-cols-2 gap-2.5">
+                  {/* Montant Donné / Versé */}
                   <div>
-                    <label className="text-xs font-semibold text-slate-700 block mb-1">
-                      Montant reçu du client ({settings.currency})
+                    <label className="text-xs font-bold text-slate-800 flex items-center justify-between mb-1">
+                      <span>Montant Donné / Versé</span>
+                      <span className="text-[10px] text-slate-500 font-normal">({settings.currency})</span>
                     </label>
                     <input
                       type="number"
                       value={amountReceived}
                       onChange={(e) => setAmountReceived(e.target.value)}
-                      placeholder={String(totalToPay)}
-                      className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                      placeholder="0"
+                      className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-sm font-black text-slate-900 focus:ring-2 focus:ring-indigo-500 focus:outline-none shadow-2xs"
                     />
                   </div>
 
-                  {/* Fast shortcut buttons */}
-                  <div className="flex items-center gap-1.5">
-                    {[totalToPay, 5000, 10000, 20000].map((val) => (
-                      <button
-                        key={val}
-                        type="button"
-                        onClick={() => setAmountReceived(String(val))}
-                        className="px-2 py-1 bg-white border border-slate-200 rounded text-[10px] font-semibold text-slate-700 hover:bg-slate-100"
-                      >
-                        {formatMoney(val, '')}
-                      </button>
-                    ))}
+                  {/* Reste en Dette */}
+                  <div>
+                    <label className="text-xs font-bold text-slate-800 flex items-center justify-between mb-1">
+                      <span className={remainingDebt > 0 ? 'text-rose-700 font-black' : 'text-slate-700'}>
+                        Reste en Dette
+                      </span>
+                      <span className="text-[10px] text-slate-500 font-normal">({settings.currency})</span>
+                    </label>
+                    <input
+                      type="number"
+                      value={remainingDebt > 0 ? remainingDebt : ''}
+                      onChange={(e) => {
+                        const debtVal = parseFloat(e.target.value) || 0;
+                        const newGiven = Math.max(0, totalToPay - debtVal);
+                        setAmountReceived(String(newGiven));
+                      }}
+                      placeholder="0"
+                      className={`w-full px-3 py-2 rounded-xl text-sm font-black focus:ring-2 focus:outline-none shadow-2xs ${
+                        remainingDebt > 0
+                          ? 'bg-rose-50 border-2 border-rose-300 text-rose-800 focus:ring-rose-500'
+                          : 'bg-white border border-slate-300 text-slate-900 focus:ring-indigo-500'
+                      }`}
+                    />
                   </div>
+                </div>
 
-                  <div className="pt-2 border-t border-slate-200 flex items-center justify-between text-xs">
-                    <span className="font-medium text-slate-600">Monnaie à rendre :</span>
-                    <strong className="text-sm font-black text-emerald-700">
+                {/* Fast shortcut buttons */}
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAmountReceived(String(totalToPay));
+                      if (paymentMethod === 'CREDIT') setPaymentMethod('ESPECES');
+                    }}
+                    className={`px-2.5 py-1 rounded-lg text-xs font-bold border transition-all cursor-pointer ${
+                      numReceived === totalToPay
+                        ? 'bg-emerald-600 text-white border-emerald-700'
+                        : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
+                    }`}
+                  >
+                    Payé 100% ({formatMoney(totalToPay, '')})
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const half = Math.round(totalToPay / 2);
+                      setAmountReceived(String(half));
+                    }}
+                    className="px-2 py-1 rounded-lg text-xs font-bold bg-white text-indigo-700 border border-indigo-200 hover:bg-indigo-50 transition-all cursor-pointer"
+                  >
+                    Acompte 50%
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAmountReceived('0');
+                      setPaymentMethod('CREDIT');
+                    }}
+                    className={`px-2.5 py-1 rounded-lg text-xs font-bold border transition-all cursor-pointer ${
+                      remainingDebt === totalToPay
+                        ? 'bg-rose-600 text-white border-rose-700'
+                        : 'bg-white text-rose-700 border-rose-200 hover:bg-rose-50'
+                    }`}
+                  >
+                    Tout à Crédit (100% Dette)
+                  </button>
+                </div>
+
+                {/* Monnaie à rendre si le montant donné dépasse le total */}
+                {changeDue > 0 && (
+                  <div className="pt-2 border-t border-slate-200 flex items-center justify-between text-xs bg-emerald-50/70 p-2.5 rounded-xl border border-emerald-200">
+                    <span className="font-bold text-emerald-950">Monnaie à rendre au client :</span>
+                    <strong className="text-base font-black text-emerald-700">
                       {formatMoney(changeDue, settings.currency)}
                     </strong>
                   </div>
-                </div>
-              )}
+                )}
 
-              {/* Credit Notice */}
-              {paymentMethod === 'CREDIT' && (
-                <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-800 space-y-1">
-                  <p className="font-bold">⚠️ Vente à Crédit</p>
-                  <p className="text-[11px]">
-                    Cette somme sera automatiquement ajoutée aux créances dues par le client{' '}
-                    <strong>{selectedCustomer ? selectedCustomer.name : 'Sélectionnez un client'}</strong>.
-                  </p>
-                </div>
-              )}
+                {/* Alert and client attribution if there is remaining debt or CREDIT */}
+                {(remainingDebt > 0 || paymentMethod === 'CREDIT') && (
+                  <div className="p-3 bg-amber-50 border border-amber-300 rounded-xl space-y-2">
+                    <div className="flex items-start gap-2">
+                      <Building className="w-4 h-4 text-amber-700 mt-0.5 shrink-0" />
+                      <div className="text-xs">
+                        <p className="font-bold text-amber-950">
+                          {paymentMethod === 'CREDIT' ? 'Vente à Crédit' : 'Reste en dette'} : {formatMoney(remainingDebt > 0 ? remainingDebt : totalToPay, settings.currency)}
+                        </p>
+                        <p className="text-[11px] text-amber-900 leading-tight">
+                          Cette dette sera inscrite sur la facture et enregistrée dans le suivi des créances.
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Customer selector inside checkout modal - OPTIONNEL */}
+                    <div className="pt-1">
+                      <label className="text-[11px] font-bold text-slate-700 block mb-1">
+                        Client (Optionnel) :
+                      </label>
+                      <div className="flex items-center gap-1.5">
+                        <select
+                          value={selectedCustomerId}
+                          onChange={(e) => setSelectedCustomerId(e.target.value)}
+                          className="flex-1 py-1.5 px-2 bg-white border border-slate-300 rounded-lg text-xs font-semibold text-slate-900 focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                        >
+                          <option value="">Client Comptoir (Sans fiche client)</option>
+                          {customers.map((c) => (
+                            <option key={c.id} value={c.id}>
+                              {c.name} ({c.phone}) {c.totalCredit ? `• Dette: ${formatMoney(c.totalCredit, settings.currency)}` : ''}
+                            </option>
+                          ))}
+                        </select>
+                        <button
+                          type="button"
+                          onClick={() => setShowCustomerModal(true)}
+                          className="px-2.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-bold shadow-xs whitespace-nowrap cursor-pointer"
+                          title="Créer un nouveau client"
+                        >
+                          + Nouveau
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
 
               {/* Notes */}
               <div>
@@ -1709,7 +1833,7 @@ export const POSView: React.FC<POSViewProps> = ({ onNavigate }) => {
 
       {/* QUICK ADD CUSTOMER MODAL */}
       {showCustomerModal && (
-        <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-60 overflow-y-auto bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
           <form
             onSubmit={handleCreateCustomer}
             className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-sm overflow-hidden animate-in fade-in"

@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useMemo, useRef, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, useMemo, useCallback, useRef, ReactNode } from 'react';
 import { doc, onSnapshot, setDoc, getDoc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import {
@@ -57,7 +57,9 @@ interface StoreContextType {
   // Firebase Sync State
   isCloudSynced: boolean;
   isSyncing: boolean;
-  syncToCloudNow: () => Promise<void>;
+  lastSyncTime?: string;
+  cloudSyncError?: string | null;
+  syncToCloudNow: (forceInit?: boolean) => Promise<void>;
 
   // Current user & authentication
   currentUser: User;
@@ -132,7 +134,8 @@ interface StoreContextType {
     paymentMethod: PaymentMethod,
     amountReceived: number,
     customerId?: string,
-    notes?: string
+    notes?: string,
+    remainingDebt?: number
   ) => { success: boolean; sale?: Sale; message?: string };
   cancelSale: (saleId: string, reason: string) => { success: boolean; message?: string };
 
@@ -418,10 +421,16 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     loadSafeList<ActivityLog>(STORAGE_KEYS.ACTIVITY_LOGS, ['bpm_activity_logs_backup', 'bpm_activity_logs_v2'], INITIAL_ACTIVITY_LOGS)
   );
 
-  // Firebase Sync status states
+  // Firebase Sync status states & anti-quota loops
   const [isCloudSynced, setIsCloudSynced] = useState<boolean>(true);
   const [isSyncing, setIsSyncing] = useState<boolean>(false);
+  const [lastSyncTime, setLastSyncTime] = useState<string>('');
+  const [cloudSyncError, setCloudSyncError] = useState<string | null>(null);
   const isRemoteUpdate = useRef<boolean>(false);
+  const isCloudHydrated = useRef<boolean>(false);
+  const hasLocalMutations = useRef<boolean>(false);
+  const lastSyncedFingerprint = useRef<string>('');
+  const hasReconciledRef = useRef<boolean>(false);
   const debounceTimer = useRef<NodeJS.Timeout | null>(null);
 
   // Sync to local storage & maintain permanent rolling multi-key backups
@@ -494,8 +503,47 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     if (activityLogs && activityLogs.length > 0) localStorage.setItem('bpm_activity_logs_backup', JSON.stringify(activityLogs));
   }, [activityLogs]);
 
+  // Fingerprint calculation to detect genuine data changes and avoid quota-wasting write loops
+  const computeFingerprint = useCallback(() => {
+    return JSON.stringify({
+      products: products.map(p => `${p.id}:${p.currentStock}:${p.salePrice}`),
+      salesCount: sales.length,
+      salesLatestId: sales[0]?.id || '',
+      customersCount: customers.length,
+      customerBalances: customers.map(c => `${c.id}:${c.creditBalance}`),
+      creditDebts: creditDebtRecords.map(r => `${r.id}:${r.remainingAmount}:${r.status}`),
+      suppliersCount: suppliers.length,
+      supplierDebts: suppliers.map(s => `${s.id}:${s.debtBalance}`),
+      purchasesCount: purchases.length,
+      expensesCount: expenses.length,
+      cashRegId: cashRegister?.id || '',
+      cashRegOpen: cashRegister?.isOpen || false,
+      cashTxCount: cashTransactions.length,
+      inventoriesCount: inventories.length,
+      categoriesCount: categories.length,
+      usersCount: users.length,
+      settingsStore: settings.storeName,
+    });
+  }, [
+    products,
+    sales,
+    customers,
+    creditDebtRecords,
+    suppliers,
+    purchases,
+    expenses,
+    cashRegister,
+    cashTransactions,
+    inventories,
+    categories,
+    users,
+    settings.storeName,
+  ]);
+
   // Startup and Cross-Reconciliation: ensure customer credits and supplier debts are tracked in creditDebtRecords
+  // Run ONLY ONCE when data is ready to prevent infinite render loops
   useEffect(() => {
+    if (hasReconciledRef.current || !isCloudHydrated.current) return;
     if (!customers || customers.length === 0) return;
     
     const missingRecords: CreditDebtRecord[] = [];
@@ -556,99 +604,78 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     }
 
     if (missingRecords.length > 0) {
+      hasReconciledRef.current = true;
       setCreditDebtRecords(prev => [...missingRecords, ...(prev || [])]);
+    } else {
+      hasReconciledRef.current = true;
     }
   }, [customers, suppliers]);
 
-  // Firestore Real-Time Listener (Bi-directional sync with anti-loss merge)
+  // Firestore Real-Time Listener (Bi-directional sync with anti-loss merge & anti-overwrite guard)
   useEffect(() => {
     const docRef = doc(db, 'store_data', 'main_store');
-    
-    // Initial fetch / check if Firestore has existing state
-    getDoc(docRef).then((snap) => {
-      if (!snap.exists()) {
-        const initialPayload = sanitizeForFirestore({
-          settings: INITIAL_SETTINGS,
-          users: INITIAL_USERS,
-          categories: INITIAL_CATEGORIES,
-          products: products.length > 0 ? products : DEMO_PRODUCTS,
-          suppliers: suppliers.length > 0 ? suppliers : DEMO_SUPPLIERS,
-          customers: customers,
-          stockMovements: stockMovements,
-          sales: sales,
-          quotes: quotes,
-          creditDebtRecords: creditDebtRecords,
-          purchases: purchases,
-          expenses: expenses,
-          cashRegister: cashRegister,
-          cashTransactions: cashTransactions,
-          inventories: inventories,
-          activityLogs: activityLogs,
-          updatedAt: new Date().toISOString(),
-        });
-        setDoc(docRef, initialPayload).catch(err => console.warn('Init doc failed:', err));
-      } else {
-        const remote = snap.data();
-        if (remote) {
-          // If Firestore remote has empty records but local has data, sync local to Firestore
-          const hasMissingRemoteData = 
-            ((!remote.products || remote.products.length === 0) && products.length > 0) ||
-            ((!remote.creditDebtRecords || remote.creditDebtRecords.length === 0) && creditDebtRecords.length > 0) ||
-            ((!remote.sales || remote.sales.length === 0) && sales.length > 0);
-
-          if (hasMissingRemoteData) {
-            setDoc(docRef, sanitizeForFirestore({
-              products: products.length > 0 ? products : remote.products,
-              creditDebtRecords: creditDebtRecords.length > 0 ? creditDebtRecords : remote.creditDebtRecords,
-              sales: sales.length > 0 ? sales : remote.sales,
-              customers: customers.length > 0 ? customers : remote.customers,
-              suppliers: suppliers.length > 0 ? suppliers : remote.suppliers,
-              updatedAt: new Date().toISOString(),
-            }), { merge: true }).catch(console.warn);
-          }
-        }
-      }
-    }).catch(err => console.warn('Firestore initial check error:', err));
 
     const unsubscribe = onSnapshot(docRef, (docSnap) => {
       if (docSnap.exists()) {
         const remote = docSnap.data();
         if (remote && !docSnap.metadata.hasPendingWrites) {
           isRemoteUpdate.current = true;
+          isCloudHydrated.current = true;
+          setIsCloudSynced(true);
+          setCloudSyncError(null);
+          setLastSyncTime(new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }));
+
           if (remote.settings) setSettings(cleanSettingStrings(remote.settings));
-          if (remote.users) setUsers(prev => mergeListById(remote.users, prev));
-          if (remote.categories && remote.categories.length > 0) setCategories(prev => mergeListById(remote.categories, prev));
+          if (remote.users && Array.isArray(remote.users) && remote.users.length > 0) setUsers(prev => mergeListById(remote.users, prev));
+          if (remote.categories && Array.isArray(remote.categories) && remote.categories.length > 0) setCategories(prev => mergeListById(remote.categories, prev));
           if (remote.products && Array.isArray(remote.products) && remote.products.length > 0) {
             setProducts(prev => mergeListById(remote.products, prev));
           }
-          if (remote.suppliers && remote.suppliers.length > 0) setSuppliers(prev => mergeListById(remote.suppliers, prev));
-          if (remote.customers) setCustomers(prev => mergeListById(remote.customers, prev));
-          if (remote.stockMovements) setStockMovements(prev => mergeListById(remote.stockMovements, prev));
-          if (remote.sales) setSales(prev => mergeListById(remote.sales, prev));
-          if (remote.quotes) setQuotes(prev => mergeListById(remote.quotes, prev));
-          if (remote.creditDebtRecords) setCreditDebtRecords(prev => mergeListById(remote.creditDebtRecords, prev));
-          if (remote.purchases) setPurchases(prev => mergeListById(remote.purchases, prev));
-          if (remote.expenses) setExpenses(prev => mergeListById(remote.expenses, prev));
-          if (remote.cashRegister !== undefined) setCashRegister(remote.cashRegister);
-          if (remote.cashTransactions) setCashTransactions(prev => mergeListById(remote.cashTransactions, prev));
-          if (remote.inventories) setInventories(prev => mergeListById(remote.inventories, prev));
-          if (remote.activityLogs) setActivityLogs(prev => mergeListById(remote.activityLogs, prev));
-          setIsCloudSynced(true);
+          if (remote.suppliers && Array.isArray(remote.suppliers) && remote.suppliers.length > 0) setSuppliers(prev => mergeListById(remote.suppliers, prev));
+          if (remote.customers && Array.isArray(remote.customers) && remote.customers.length > 0) setCustomers(prev => mergeListById(remote.customers, prev));
+          if (remote.stockMovements && Array.isArray(remote.stockMovements) && remote.stockMovements.length > 0) setStockMovements(prev => mergeListById(remote.stockMovements, prev));
+          if (remote.sales && Array.isArray(remote.sales) && remote.sales.length > 0) setSales(prev => mergeListById(remote.sales, prev));
+          if (remote.quotes && Array.isArray(remote.quotes) && remote.quotes.length > 0) setQuotes(prev => mergeListById(remote.quotes, prev));
+          if (remote.creditDebtRecords && Array.isArray(remote.creditDebtRecords) && remote.creditDebtRecords.length > 0) setCreditDebtRecords(prev => mergeListById(remote.creditDebtRecords, prev));
+          if (remote.purchases && Array.isArray(remote.purchases) && remote.purchases.length > 0) setPurchases(prev => mergeListById(remote.purchases, prev));
+          if (remote.expenses && Array.isArray(remote.expenses) && remote.expenses.length > 0) setExpenses(prev => mergeListById(remote.expenses, prev));
+          if (remote.cashRegister !== undefined && remote.cashRegister !== null) setCashRegister(remote.cashRegister);
+          if (remote.cashTransactions && Array.isArray(remote.cashTransactions) && remote.cashTransactions.length > 0) setCashTransactions(prev => mergeListById(remote.cashTransactions, prev));
+          if (remote.inventories && Array.isArray(remote.inventories) && remote.inventories.length > 0) setInventories(prev => mergeListById(remote.inventories, prev));
+          if (remote.activityLogs && Array.isArray(remote.activityLogs) && remote.activityLogs.length > 0) setActivityLogs(prev => mergeListById(remote.activityLogs, prev));
+
           setTimeout(() => {
             isRemoteUpdate.current = false;
-          }, 300);
+          }, 800);
         }
+      } else {
+        // Document does not exist yet on remote: safe initial seed
+        isCloudHydrated.current = true;
+        syncToCloudNow(true);
       }
     }, (error) => {
       console.warn('Firestore snapshot error:', error);
       setIsCloudSynced(false);
+      isCloudHydrated.current = true;
+      if (error?.message?.includes('resource-exhausted') || (error as any)?.code === 'resource-exhausted') {
+        setCloudSyncError('Quota quotidien Firebase temporairement atteint. Toutes vos données sont sauvegardées en local sur cet appareil.');
+      } else {
+        setCloudSyncError('Mode hors-ligne. Vos données sont conservées localement.');
+      }
     });
 
     return () => unsubscribe();
   }, []);
 
-  // Function to explicitly push state to Firebase Firestore
-  const syncToCloudNow = async () => {
+  // Explicit or debounced push to Firestore with quota protection
+  const syncToCloudNow = async (forceInit = false) => {
+    // Critical Guard: never push to cloud before initial remote hydration,
+    // protecting another machine from overwriting existing cloud data on boot
+    if (!isCloudHydrated.current && !forceInit) {
+      console.log('[Sync] Attente de la première lecture cloud...');
+      return;
+    }
+
     try {
       setIsSyncing(true);
       const docRef = doc(db, 'store_data', 'main_store');
@@ -672,26 +699,49 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         updatedAt: new Date().toISOString(),
       });
       await setDoc(docRef, payload, { merge: true });
+      lastSyncedFingerprint.current = computeFingerprint();
+      hasLocalMutations.current = false;
       setIsCloudSynced(true);
-    } catch (e) {
-      console.error('Failed to sync state to Firestore:', e);
+      setCloudSyncError(null);
+      setLastSyncTime(new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }));
+    } catch (e: any) {
+      console.warn('Firestore write warning:', e);
       setIsCloudSynced(false);
+      if (e?.code === 'resource-exhausted' || e?.message?.includes('resource-exhausted')) {
+        setCloudSyncError('Quota Firebase quotidien atteint. Sauvegarde locale active.');
+      } else {
+        setCloudSyncError('Sauvegarde locale active (Cloud non accessible).');
+      }
     } finally {
       setIsSyncing(false);
     }
   };
 
-  // Auto push to Firestore with debouncing whenever state changes locally
+  // Auto push to Firestore ONLY when real user mutation occurs on this machine
   useEffect(() => {
+    // Skip if incoming from remote snapshot
     if (isRemoteUpdate.current) return;
+
+    // Skip if cloud hasn't hydrated yet (prevents blank/demo overwriting real cloud)
+    if (!isCloudHydrated.current) return;
+
+    const currentFp = computeFingerprint();
+    // Skip if data is identical to what was last synced/received
+    if (currentFp === lastSyncedFingerprint.current) return;
+
+    // Real change detected!
+    hasLocalMutations.current = true;
+    setIsCloudSynced(false);
 
     if (debounceTimer.current) {
       clearTimeout(debounceTimer.current);
     }
 
     debounceTimer.current = setTimeout(() => {
-      syncToCloudNow();
-    }, 1200);
+      if (hasLocalMutations.current && isCloudHydrated.current) {
+        syncToCloudNow();
+      }
+    }, 2000);
 
     return () => {
       if (debounceTimer.current) {
@@ -699,6 +749,7 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       }
     };
   }, [
+    computeFingerprint,
     users,
     settings,
     categories,
@@ -1399,7 +1450,8 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     paymentMethod: PaymentMethod,
     amountReceived: number,
     customerId?: string,
-    notes?: string
+    notes?: string,
+    remainingDebt?: number
   ): { success: boolean; sale?: Sale; message?: string } => {
     if (!items || items.length === 0) {
       return { success: false, message: 'Le panier est vide. Veuillez ajouter au moins un produit.' };
@@ -1428,6 +1480,15 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     const totalAmount = Math.round(subtotal + taxAmount);
     const totalCost = items.reduce((sum, it) => sum + it.unitCost * it.quantity, 0);
     const totalMargin = totalAmount - totalCost;
+
+    // Calcul précis de la dette restante et de la monnaie rendue
+    const computedDebt = remainingDebt !== undefined
+      ? Math.max(0, remainingDebt)
+      : (paymentMethod === 'CREDIT'
+          ? Math.max(0, totalAmount - (amountReceived || 0))
+          : Math.max(0, totalAmount - (amountReceived || 0)));
+
+    const effectiveRemainingDue = computedDebt;
     const changeGiven = paymentMethod === 'ESPECES' ? Math.max(0, amountReceived - totalAmount) : 0;
 
     const cust = customerId ? (customers || []).find(c => c.id === customerId) : undefined;
@@ -1461,6 +1522,7 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       paymentMethod,
       amountReceived,
       changeGiven,
+      remainingDue: effectiveRemainingDue,
       customerId,
       customerName: cust ? cust.name : undefined,
       userId: currentUser.id,
@@ -1488,23 +1550,26 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       }
     });
 
-    // 3. Auto-create CreditDebtRecord if credit sale
-    if (paymentMethod === 'CREDIT') {
+    // 3. Auto-create CreditDebtRecord if there is a debt (remainingDue > 0 or CREDIT sale)
+    if (effectiveRemainingDue > 0 || paymentMethod === 'CREDIT') {
+      const debtAmountToTrack = effectiveRemainingDue > 0 ? effectiveRemainingDue : totalAmount;
       const creditRecord: CreditDebtRecord = {
         id: generateId('cd'),
         type: 'CLIENT_CREDIT',
         partyId: cust?.id || customerId || 'client_credit',
         partyName: cust ? cust.name : (sale.customerName || 'Client à crédit'),
         partyPhone: cust?.phone,
-        title: `Vente à crédit - Facture ${sale.invoiceNumber}`,
-        initialAmount: totalAmount,
+        partyAddress: cust?.address,
+        title: `Dette Vente ${sale.invoiceNumber} (Reste à payer)`,
+        initialAmount: debtAmountToTrack,
         paidAmount: 0,
-        remainingAmount: totalAmount,
+        remainingAmount: debtAmountToTrack,
         status: 'EN_COURS',
         payments: [],
         dueDate: new Date(Date.now() + 15 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
         date: new Date().toISOString(),
-        notes: `Créé automatiquement lors de la vente ${sale.invoiceNumber}. ${notes || ''}`,
+        notes: `Reste à payer vente ${sale.invoiceNumber}. Total: ${totalAmount}, Donné: ${amountReceived}, Reste en dette: ${debtAmountToTrack}. ${notes || ''}`,
+        referenceId: sale.id,
         createdAt: new Date().toISOString(),
       };
       setCreditDebtRecords(prev => [creditRecord, ...(prev || [])]);
@@ -1512,6 +1577,7 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
 
     // 4. Update Customer records if assigned
     if (cust) {
+      const addedDebt = effectiveRemainingDue > 0 ? effectiveRemainingDue : (paymentMethod === 'CREDIT' ? totalAmount : 0);
       setCustomers(prev =>
         (prev || []).map(c =>
           c.id === cust.id
@@ -1519,17 +1585,18 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
                 ...c,
                 totalSpent: c.totalSpent + totalAmount,
                 salesCount: c.salesCount + 1,
-                creditBalance: paymentMethod === 'CREDIT' ? c.creditBalance + totalAmount : c.creditBalance,
+                creditBalance: (c.creditBalance || 0) + addedDebt,
               }
             : c
         )
       );
     }
 
-    // 5. Update Cash Register if cash sale and cash register is open
-    if (paymentMethod === 'ESPECES') {
-      if (cashRegister && cashRegister.isOpen) {
-        addCashTransaction('VENTE', totalAmount, `Vente ${sale.invoiceNumber} (Espèces)`, 'ESPECES');
+    // 5. Update Cash Register if cash sale / down payment and cash register is open
+    if (paymentMethod === 'ESPECES' && cashRegister && cashRegister.isOpen) {
+      const cashAmountIn = Math.min(amountReceived, totalAmount);
+      if (cashAmountIn > 0) {
+        addCashTransaction('VENTE', cashAmountIn, `Vente ${sale.invoiceNumber} (Espèces${effectiveRemainingDue > 0 ? ' - Acompte' : ''})`, 'ESPECES');
       }
     }
 
@@ -1537,7 +1604,7 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       'Vente validée',
       'VENTE',
       sale.invoiceNumber,
-      `Montant: ${totalAmount}, Mode: ${paymentMethod}, Articles: ${items.length}`
+      `Montant: ${totalAmount}, Donné: ${amountReceived}, Dette: ${effectiveRemainingDue}, Mode: ${paymentMethod}, Articles: ${items.length}`
     );
 
     return { success: true, sale };
@@ -1566,6 +1633,7 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
 
     // Revert customer credit or total spent
     if (sale.customerId) {
+      const debtAmount = sale.remainingDue ?? (sale.paymentMethod === 'CREDIT' ? sale.totalAmount : 0);
       setCustomers(prev =>
         prev.map(c =>
           c.id === sale.customerId
@@ -1573,28 +1641,31 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
                 ...c,
                 totalSpent: Math.max(0, c.totalSpent - sale.totalAmount),
                 salesCount: Math.max(0, c.salesCount - 1),
-                creditBalance: sale.paymentMethod === 'CREDIT' ? Math.max(0, c.creditBalance - sale.totalAmount) : c.creditBalance,
+                creditBalance: Math.max(0, (c.creditBalance || 0) - debtAmount),
               }
             : c
         )
       );
     }
 
-    // Cancel matching credit debt record if credit sale
-    if (sale.paymentMethod === 'CREDIT') {
+    // Cancel matching credit debt record if credit sale or had remaining debt
+    if ((sale.remainingDue && sale.remainingDue > 0) || sale.paymentMethod === 'CREDIT') {
       setCreditDebtRecords(prev =>
-        (prev || []).filter(r => !(r.title?.includes(sale.invoiceNumber) || r.notes?.includes(sale.invoiceNumber)))
+        (prev || []).filter(r => !(r.referenceId === sale.id || r.title?.includes(sale.invoiceNumber) || r.notes?.includes(sale.invoiceNumber)))
       );
     }
 
     // Cash transaction refund if cash sale
     if (sale.paymentMethod === 'ESPECES' && cashRegister && cashRegister.isOpen) {
-      addCashTransaction(
-        'REMBOURSEMENT_CLIENT',
-        -sale.totalAmount,
-        `Remboursement annulation vente ${sale.invoiceNumber}`,
-        'ESPECES'
-      );
+      const cashAmountRefund = Math.min(sale.amountReceived, sale.totalAmount);
+      if (cashAmountRefund > 0) {
+        addCashTransaction(
+          'REMBOURSEMENT_CLIENT',
+          -cashAmountRefund,
+          `Remboursement annulation vente ${sale.invoiceNumber}`,
+          'ESPECES'
+        );
+      }
     }
 
     setSales(prev => prev.map(s => (s.id === saleId ? { ...s, status: 'ANNULEE' } : s)));
@@ -2410,6 +2481,8 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       value={{
         isCloudSynced,
         isSyncing,
+        lastSyncTime,
+        cloudSyncError,
         syncToCloudNow,
         currentUser,
         users,
