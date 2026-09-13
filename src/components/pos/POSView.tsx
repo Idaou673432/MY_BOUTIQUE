@@ -35,6 +35,7 @@ import {
   SlidersHorizontal,
   Inbox,
   Unlock,
+  Lock,
   ArrowDownUp,
 } from 'lucide-react';
 import { useStore } from '../../context/StoreContext';
@@ -70,11 +71,23 @@ export const POSView: React.FC<POSViewProps> = ({ onNavigate }) => {
     updateSettings,
     cashRegister,
     openCashRegister,
+    closeCashRegister,
+    cashTransactions,
   } = useStore();
 
   const [drawerStatus, setDrawerStatus] = useState<string | null>(null);
   const [showQuickOpenModal, setShowQuickOpenModal] = useState(false);
   const [quickOpeningBalance, setQuickOpeningBalance] = useState(0);
+  const [showQuickCloseModal, setShowQuickCloseModal] = useState(false);
+  const [quickClosingBalance, setQuickClosingBalance] = useState(0);
+  const [quickClosingNotes, setQuickClosingNotes] = useState('');
+
+  // Calculate current session cash balance for display and quick close
+  const currentCashSessionBalance = useMemo(() => {
+    if (!cashRegister || !cashRegister.isOpen) return 0;
+    const sessionTx = (cashTransactions || []).filter(tx => tx.cashRegisterId === cashRegister.id);
+    return sessionTx.reduce((sum, tx) => sum + tx.amount, 0);
+  }, [cashRegister, cashTransactions]);
 
   // Search & Filters
   const [searchTerm, setSearchTerm] = useState('');
@@ -647,8 +660,8 @@ export const POSView: React.FC<POSViewProps> = ({ onNavigate }) => {
         </div>
       )}
 
-      {/* CASH REGISTER STATUS BANNER IF CLOSED */}
-      {!cashRegister?.isOpen && (
+      {/* CASH REGISTER STATUS BANNER */}
+      {!cashRegister?.isOpen ? (
         <div className="p-3 bg-amber-50 border border-amber-300 rounded-2xl flex flex-wrap items-center justify-between gap-2 text-xs shadow-xs animate-in fade-in">
           <div className="flex items-center gap-2 text-amber-950 font-medium">
             <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
@@ -662,6 +675,30 @@ export const POSView: React.FC<POSViewProps> = ({ onNavigate }) => {
             >
               <Unlock className="w-3.5 h-3.5" />
               Ouvrir la Caisse
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div className="p-2.5 bg-emerald-50/90 border border-emerald-200 rounded-2xl flex flex-wrap items-center justify-between gap-2 text-xs shadow-xs">
+          <div className="flex items-center gap-2 text-emerald-950 font-medium">
+            <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse shrink-0" />
+            <span>
+              Session active ({cashRegister.openedByName || 'Caissier'}) • Solde estimé en caisse : <strong className="text-emerald-900 font-black">{formatMoney(currentCashSessionBalance, settings.currency)}</strong>
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                setQuickClosingBalance(currentCashSessionBalance);
+                setQuickClosingNotes('');
+                setShowQuickCloseModal(true);
+              }}
+              className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 active:scale-95 text-white rounded-xl font-bold text-xs flex items-center gap-1.5 shadow-xs transition-all cursor-pointer"
+              title="Clôturer la session de caisse"
+            >
+              <Lock className="w-3.5 h-3.5 text-amber-400" />
+              <span>Clôturer Caisse (Z)</span>
             </button>
           </div>
         </div>
@@ -2391,6 +2428,124 @@ export const POSView: React.FC<POSViewProps> = ({ onNavigate }) => {
                 className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold shadow-xs cursor-pointer"
               >
                 Confirmer l'Ouverture
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {/* QUICK CLOSE REGISTER MODAL (FIN DE JOURNEE) */}
+      {showQuickCloseModal && (
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              const discrepancy = Number(quickClosingBalance) - currentCashSessionBalance;
+              const reason = discrepancy !== 0 ? (quickClosingNotes || 'Écart de clôture fin de journée') : undefined;
+              const success = closeCashRegister(
+                Number(quickClosingBalance),
+                reason,
+                quickClosingNotes || undefined
+              );
+              if (success) {
+                setShowQuickCloseModal(false);
+                setDrawerStatus(`🔒 Caisse clôturée avec succès ! Solde réel compté : ${formatMoney(Number(quickClosingBalance), settings.currency)}`);
+                setTimeout(() => setDrawerStatus(null), 6000);
+              } else {
+                setDrawerStatus("⚠️ Impossible de clôturer la caisse : aucune session active.");
+              }
+            }}
+            className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-sm overflow-hidden animate-in fade-in"
+          >
+            <div className="p-4 bg-slate-900 text-white flex items-center justify-between">
+              <h3 className="font-bold text-sm flex items-center gap-2">
+                <Lock className="w-4 h-4 text-amber-400" />
+                Clôture de Session de Caisse
+              </h3>
+              <button
+                type="button"
+                onClick={() => setShowQuickCloseModal(false)}
+                className="text-white hover:opacity-80 p-1"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="p-5 space-y-3.5 text-xs">
+              <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-1.5">
+                <div className="flex justify-between text-slate-600">
+                  <span>Fond initial d'ouverture :</span>
+                  <strong className="text-slate-800">{formatMoney(cashRegister?.openingBalance || 0, settings.currency)}</strong>
+                </div>
+                <div className="flex justify-between text-slate-800 font-bold pt-1.5 border-t border-slate-200">
+                  <span>Solde théorique attendu en caisse :</span>
+                  <span className="text-indigo-700 font-black text-sm">
+                    {formatMoney(currentCashSessionBalance, settings.currency)}
+                  </span>
+                </div>
+              </div>
+
+              <div>
+                <label className="font-bold text-slate-800 block mb-1">
+                  Montant réellement compté en caisse ({settings.currency}) *
+                </label>
+                <input
+                  type="number"
+                  required
+                  value={quickClosingBalance}
+                  onChange={(e) => setQuickClosingBalance(parseFloat(e.target.value) || 0)}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-xl text-base font-black text-slate-900 focus:ring-2 focus:ring-slate-900 focus:outline-none"
+                />
+              </div>
+
+              {/* Écart de caisse */}
+              <div
+                className={`p-2.5 rounded-xl border text-xs font-semibold flex items-center justify-between ${
+                  Number(quickClosingBalance) - currentCashSessionBalance === 0
+                    ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
+                    : Number(quickClosingBalance) - currentCashSessionBalance < 0
+                    ? 'bg-rose-50 border-rose-200 text-rose-800'
+                    : 'bg-amber-50 border-amber-200 text-amber-800'
+                }`}
+              >
+                <span>Écart de caisse :</span>
+                <span className="font-black text-xs">
+                  {Number(quickClosingBalance) - currentCashSessionBalance === 0
+                    ? '0 FCFA (Conforme)'
+                    : `${Number(quickClosingBalance) - currentCashSessionBalance > 0 ? '+' : ''}${formatMoney(
+                        Number(quickClosingBalance) - currentCashSessionBalance,
+                        settings.currency
+                      )}`}
+                </span>
+              </div>
+
+              <div>
+                <label className="font-semibold text-slate-700 block mb-1">
+                  Remarques de clôture (facultatif)
+                </label>
+                <textarea
+                  rows={2}
+                  value={quickClosingNotes}
+                  onChange={(e) => setQuickClosingNotes(e.target.value)}
+                  placeholder="Notes de fin de journée..."
+                  className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none text-xs"
+                />
+              </div>
+            </div>
+
+            <div className="p-4 bg-slate-50 border-t border-slate-200 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setShowQuickCloseModal(false)}
+                className="px-3.5 py-1.5 text-xs text-slate-600 hover:bg-slate-200 rounded-xl cursor-pointer"
+              >
+                Annuler
+              </button>
+              <button
+                type="submit"
+                className="px-4 py-2 bg-slate-900 hover:bg-black active:scale-95 text-white rounded-xl text-xs font-black shadow-xs cursor-pointer transition-all"
+              >
+                Valider & Clôturer la Caisse
               </button>
             </div>
           </form>

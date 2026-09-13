@@ -639,7 +639,25 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
           if (remote.creditDebtRecords && Array.isArray(remote.creditDebtRecords) && remote.creditDebtRecords.length > 0) setCreditDebtRecords(prev => mergeListById(remote.creditDebtRecords, prev));
           if (remote.purchases && Array.isArray(remote.purchases) && remote.purchases.length > 0) setPurchases(prev => mergeListById(remote.purchases, prev));
           if (remote.expenses && Array.isArray(remote.expenses) && remote.expenses.length > 0) setExpenses(prev => mergeListById(remote.expenses, prev));
-          if (remote.cashRegister !== undefined && remote.cashRegister !== null) setCashRegister(remote.cashRegister);
+          if (remote.cashRegister !== undefined && remote.cashRegister !== null) {
+            setCashRegister(prev => {
+              if (!prev) return remote.cashRegister;
+              const remoteTime = new Date(remote.cashRegister.closedAt || remote.cashRegister.openedAt || 0).getTime();
+              const localTime = new Date(prev.closedAt || prev.openedAt || 0).getTime();
+
+              // Anti-reopening guard: If locally closed and remote is open with older or equal timestamp, retain closed
+              if (!prev.isOpen && remote.cashRegister.isOpen) {
+                if (localTime >= remoteTime) {
+                  return prev;
+                }
+              }
+              // If remote has a newer timestamp or both are open/closed, accept remote
+              if (remoteTime >= localTime) {
+                return remote.cashRegister;
+              }
+              return prev;
+            });
+          }
           if (remote.cashTransactions && Array.isArray(remote.cashTransactions) && remote.cashTransactions.length > 0) setCashTransactions(prev => mergeListById(remote.cashTransactions, prev));
           if (remote.inventories && Array.isArray(remote.inventories) && remote.inventories.length > 0) setInventories(prev => mergeListById(remote.inventories, prev));
           if (remote.activityLogs && Array.isArray(remote.activityLogs) && remote.activityLogs.length > 0) setActivityLogs(prev => mergeListById(remote.activityLogs, prev));
@@ -1972,6 +1990,11 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     };
 
     setCashRegister(newReg);
+    try {
+      localStorage.setItem(STORAGE_KEYS.CASH_REGISTER, JSON.stringify(newReg));
+    } catch (e) {
+      console.warn('LocalStorage error on openCashRegister:', e);
+    }
 
     const initTx: CashTransaction = {
       id: generateId('tx'),
@@ -1985,8 +2008,28 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       paymentMethod: 'ESPECES',
     };
 
-    setCashTransactions(prev => [initTx, ...(prev || [])]);
+    const nextTx = [initTx, ...(cashTransactions || [])];
+    setCashTransactions(nextTx);
+    try {
+      localStorage.setItem(STORAGE_KEYS.CASH_TRANSACTIONS, JSON.stringify(nextTx));
+    } catch (e) {
+      console.warn('LocalStorage error on openCashRegister tx:', e);
+    }
+
     logActivity('Ouverture de caisse', 'CAISSE', 'Caisse', `Fond initial: ${numOpening}`);
+
+    // Direct and immediate cloud push to lock state and prevent stale snapshot race
+    try {
+      const docRef = doc(db, 'store_data', 'main_store');
+      setDoc(docRef, {
+        cashRegister: sanitizeForFirestore(newReg),
+        cashTransactions: sanitizeForFirestore(nextTx),
+        updatedAt: new Date().toISOString(),
+      }, { merge: true }).catch(err => console.warn('Firestore open register sync warning:', err));
+    } catch (e) {
+      console.warn('Error pushing open cash register to cloud:', e);
+    }
+
     return true;
   };
 
@@ -2041,8 +2084,8 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     const closedReg: CashRegister = {
       ...cashRegister,
       closedAt: new Date().toISOString(),
-      closedBy: currentUser.id,
-      closedByName: currentUser.name,
+      closedBy: currentUser?.id || 'usr_admin',
+      closedByName: currentUser?.name || 'Administrateur',
       closingBalanceTheoretical: theoreticalBalance,
       closingBalanceReal: realClosingBalance,
       discrepancy,
@@ -2052,6 +2095,11 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     };
 
     setCashRegister(closedReg);
+    try {
+      localStorage.setItem(STORAGE_KEYS.CASH_REGISTER, JSON.stringify(closedReg));
+    } catch (e) {
+      console.warn('LocalStorage error on closeCashRegister:', e);
+    }
 
     const closeTx: CashTransaction = {
       id: generateId('tx'),
@@ -2059,18 +2107,37 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       type: 'FERMETURE',
       amount: 0,
       reason: `Clôture de caisse. Réel: ${realClosingBalance}, Théorique: ${theoreticalBalance}, Écart: ${discrepancy}`,
-      userId: currentUser.id,
-      userName: currentUser.name,
+      userId: currentUser?.id || 'usr_admin',
+      userName: currentUser?.name || 'Administrateur',
       date: new Date().toISOString(),
     };
 
-    setCashTransactions(prev => [closeTx, ...prev]);
+    const nextTx = [closeTx, ...cashTransactions];
+    setCashTransactions(nextTx);
+    try {
+      localStorage.setItem(STORAGE_KEYS.CASH_TRANSACTIONS, JSON.stringify(nextTx));
+    } catch (e) {
+      console.warn('LocalStorage error on closeCashRegister tx:', e);
+    }
+
     logActivity(
       'Fermeture de caisse',
       'CAISSE',
       'Caisse',
       `Solde réel: ${realClosingBalance}, Théorique: ${theoreticalBalance}, Écart: ${discrepancy}`
     );
+
+    // Direct and immediate cloud push to lock closed state and prevent stale snapshot race
+    try {
+      const docRef = doc(db, 'store_data', 'main_store');
+      setDoc(docRef, {
+        cashRegister: sanitizeForFirestore(closedReg),
+        cashTransactions: sanitizeForFirestore(nextTx),
+        updatedAt: new Date().toISOString(),
+      }, { merge: true }).catch(err => console.warn('Firestore close register sync warning:', err));
+    } catch (e) {
+      console.warn('Error pushing closed cash register to cloud:', e);
+    }
 
     return true;
   };

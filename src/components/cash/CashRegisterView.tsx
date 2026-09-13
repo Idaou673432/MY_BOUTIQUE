@@ -113,10 +113,17 @@ export const CashRegisterView: React.FC<CashRegisterViewProps> = ({ onNavigate }
 
   const handleCloseRegister = (e: React.FormEvent) => {
     e.preventDefault();
-    closeCashRegister(Number(actualClosingBalanceInput), closingNotes || undefined, closingNotes || undefined);
-    setShowCloseModal(false);
-    setDrawerStatusMessage('🔒 Session de caisse clôturée.');
-    setTimeout(() => setDrawerStatusMessage(null), 5000);
+    const discrepancy = Number(actualClosingBalanceInput) - currentBalance;
+    const reason = discrepancy !== 0 ? (closingNotes || 'Écart de clôture') : undefined;
+    const success = closeCashRegister(Number(actualClosingBalanceInput), reason, closingNotes || undefined);
+    if (success) {
+      setShowCloseModal(false);
+      setDrawerStatusMessage(`🔒 Session de caisse clôturée avec succès. Solde réel compté : ${formatMoney(Number(actualClosingBalanceInput), settings.currency)}`);
+      setTimeout(() => setDrawerStatusMessage(null), 6000);
+    } else {
+      setDrawerStatusMessage("⚠️ Impossible de clôturer la caisse : aucune session active ou déjà clôturée.");
+      setTimeout(() => setDrawerStatusMessage(null), 6000);
+    }
   };
 
   const handleSaveTransaction = (e: React.FormEvent) => {
@@ -226,19 +233,18 @@ export const CashRegisterView: React.FC<CashRegisterViewProps> = ({ onNavigate }
                 <MinusCircle className="w-3.5 h-3.5" />
                 Sortie / Dépense
               </button>
-              {!isVendeur && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setActualClosingBalanceInput(currentBalance);
-                    setShowCloseModal(true);
-                  }}
-                  className="flex items-center gap-1 px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold shadow-xs"
-                >
-                  <Lock className="w-3.5 h-3.5" />
-                  Clôturer (Z)
-                </button>
-              )}
+              <button
+                type="button"
+                onClick={() => {
+                  setActualClosingBalanceInput(currentBalance);
+                  setShowCloseModal(true);
+                }}
+                className="flex items-center gap-1.5 px-4 py-2 bg-slate-900 hover:bg-slate-800 active:scale-95 text-white rounded-xl text-xs font-bold shadow-xs cursor-pointer transition-all"
+                title="Clôturer la session de caisse et générer le rapport Z"
+              >
+                <Lock className="w-3.5 h-3.5 text-amber-400" />
+                Clôturer la Caisse (Z)
+              </button>
             </>
           ) : (
             <button
@@ -252,6 +258,53 @@ export const CashRegisterView: React.FC<CashRegisterViewProps> = ({ onNavigate }
           )}
         </div>
       </div>
+
+      {/* RECAP BANNER IF CLOSED */}
+      {!cashRegister?.isOpen && cashRegister?.closedAt && (
+        <div className="p-4 bg-slate-900 text-white rounded-2xl border border-slate-800 shadow-md flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-slate-800 flex items-center justify-center text-amber-400 shrink-0">
+              <Lock className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-bold uppercase tracking-wider text-slate-400">Dernière clôture de caisse validée</span>
+                <span className="px-2 py-0.5 bg-emerald-950 text-emerald-400 border border-emerald-800 rounded-full text-[10px] font-bold">Session Clôturée</span>
+              </div>
+              <p className="text-sm font-semibold text-slate-200 mt-0.5">
+                Clôturée le {formatDateTime(cashRegister.closedAt)} par <strong className="text-white">{cashRegister.closedByName || 'Administrateur'}</strong>
+              </p>
+              {cashRegister.notes && (
+                <p className="text-xs text-slate-400 mt-1 italic">
+                  Note : "{cashRegister.notes}"
+                </p>
+              )}
+            </div>
+          </div>
+          <div className="flex items-center gap-4 bg-slate-800/80 p-3 rounded-xl border border-slate-700 text-xs">
+            <div>
+              <span className="text-slate-400 block text-[10px]">Solde réel compté</span>
+              <strong className="text-sm font-black text-white">
+                {formatMoney(cashRegister.closingBalanceReal || 0, settings.currency)}
+              </strong>
+            </div>
+            <div className="h-7 w-px bg-slate-700" />
+            <div>
+              <span className="text-slate-400 block text-[10px]">Solde théorique</span>
+              <span className="text-sm font-bold text-slate-300">
+                {formatMoney(cashRegister.closingBalanceTheoretical || 0, settings.currency)}
+              </span>
+            </div>
+            <div className="h-7 w-px bg-slate-700" />
+            <div>
+              <span className="text-slate-400 block text-[10px]">Écart final</span>
+              <span className={`text-sm font-black ${(cashRegister.discrepancy || 0) === 0 ? 'text-emerald-400' : (cashRegister.discrepancy || 0) < 0 ? 'text-rose-400' : 'text-amber-400'}`}>
+                {(cashRegister.discrepancy || 0) === 0 ? '0 FCFA' : `${(cashRegister.discrepancy || 0) > 0 ? '+' : ''}${formatMoney(cashRegister.discrepancy || 0, settings.currency)}`}
+              </span>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* KPI METRIC CARDS */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -316,7 +369,7 @@ export const CashRegisterView: React.FC<CashRegisterViewProps> = ({ onNavigate }
             <option value="RETRAIT">Retraits propriétaire</option>
             <option value="ENTREE_MANUELLE">Apports / Entrées manuelles</option>
             <option value="OUVERTURE">Fonds d'ouverture</option>
-            <option value="CLOTURE">Clôtures de caisse</option>
+            <option value="FERMETURE">Clôtures de caisse (Rapports Z)</option>
           </select>
         </div>
 
