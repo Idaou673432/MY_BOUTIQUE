@@ -109,7 +109,12 @@ interface StoreContextType {
   addSupplier: (supplier: Omit<Supplier, 'id' | 'createdAt' | 'totalPurchased' | 'debtBalance'>) => void;
   updateSupplier: (id: string, supplier: Partial<Supplier>) => void;
   deleteSupplier: (id: string) => { success: boolean; message?: string };
-  paySupplierDebt: (supplierId: string, amount: number, paymentMethod: PaymentMethod) => boolean;
+  paySupplierDebt: (
+    supplierId: string,
+    amount: number,
+    paymentMethod: PaymentMethod,
+    notes?: string
+  ) => { success: boolean; message?: string; receipt?: CreditPayment; remainingBalance?: number };
 
   purchases: Purchase[];
   createPurchase: (
@@ -126,7 +131,12 @@ interface StoreContextType {
   addCustomer: (customer: Omit<Customer, 'id' | 'createdAt' | 'totalSpent' | 'creditBalance' | 'salesCount'>) => Customer;
   updateCustomer: (id: string, customer: Partial<Customer>) => void;
   deleteCustomer: (id: string) => { success: boolean; message?: string };
-  payCustomerCredit: (customerId: string, amount: number, paymentMethod: PaymentMethod) => boolean;
+  payCustomerCredit: (
+    customerId: string,
+    amount: number,
+    paymentMethod: PaymentMethod,
+    notes?: string
+  ) => { success: boolean; message?: string; receipt?: CreditPayment };
 
   sales: Sale[];
   createSale: (
@@ -160,7 +170,7 @@ interface StoreContextType {
     amount: number,
     paymentMethod: PaymentMethod,
     notes?: string
-  ) => { success: boolean; message?: string };
+  ) => { success: boolean; message?: string; receipt?: CreditPayment };
   updateCreditDebtRecord: (id: string, updates: Partial<CreditDebtRecord>) => void;
   deleteCreditDebtRecord: (id: string) => boolean;
 
@@ -275,7 +285,7 @@ function loadSafeList<T>(primaryKey: string, backupKeys: string[] = [], fallback
 }
 
 // Helper to merge remote items with local items by ID so offline/local items are never wiped out
-function mergeListById<T extends { id: string }>(remoteList?: T[], localList?: T[]): T[] {
+function mergeListById<T extends { id: string }>(remoteList?: T[], localList?: T[], preferLocal = false): T[] {
   if (!remoteList || !Array.isArray(remoteList) || remoteList.length === 0) {
     return localList || [];
   }
@@ -283,16 +293,27 @@ function mergeListById<T extends { id: string }>(remoteList?: T[], localList?: T
     return remoteList;
   }
   const map = new Map<string, T>();
-  // 1. Put all remote items
-  remoteList.forEach((item) => {
-    if (item && item.id) map.set(item.id, item);
-  });
-  // 2. Preserve any local items not yet on remote
-  localList.forEach((item) => {
-    if (item && item.id && !map.has(item.id)) {
-      map.set(item.id, item);
-    }
-  });
+  if (preferLocal) {
+    // If local changes are authoritatively pending, keep local records for existing IDs
+    localList.forEach((item) => {
+      if (item && item.id) map.set(item.id, item);
+    });
+    remoteList.forEach((item) => {
+      if (item && item.id && !map.has(item.id)) {
+        map.set(item.id, item);
+      }
+    });
+  } else {
+    // Standard merge: remote values override local unless absent
+    remoteList.forEach((item) => {
+      if (item && item.id) map.set(item.id, item);
+    });
+    localList.forEach((item) => {
+      if (item && item.id && !map.has(item.id)) {
+        map.set(item.id, item);
+      }
+    });
+  }
   return Array.from(map.values());
 }
 
@@ -619,6 +640,7 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       if (docSnap.exists()) {
         const remote = docSnap.data();
         if (remote && !docSnap.metadata.hasPendingWrites) {
+          const preferLocal = hasLocalMutations.current;
           isRemoteUpdate.current = true;
           isCloudHydrated.current = true;
           setIsCloudSynced(true);
@@ -626,19 +648,19 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
           setLastSyncTime(new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }));
 
           if (remote.settings) setSettings(cleanSettingStrings(remote.settings));
-          if (remote.users && Array.isArray(remote.users) && remote.users.length > 0) setUsers(prev => mergeListById(remote.users, prev));
-          if (remote.categories && Array.isArray(remote.categories) && remote.categories.length > 0) setCategories(prev => mergeListById(remote.categories, prev));
+          if (remote.users && Array.isArray(remote.users) && remote.users.length > 0) setUsers(prev => mergeListById(remote.users, prev, preferLocal));
+          if (remote.categories && Array.isArray(remote.categories) && remote.categories.length > 0) setCategories(prev => mergeListById(remote.categories, prev, preferLocal));
           if (remote.products && Array.isArray(remote.products) && remote.products.length > 0) {
-            setProducts(prev => mergeListById(remote.products, prev));
+            setProducts(prev => mergeListById(remote.products, prev, preferLocal));
           }
-          if (remote.suppliers && Array.isArray(remote.suppliers) && remote.suppliers.length > 0) setSuppliers(prev => mergeListById(remote.suppliers, prev));
-          if (remote.customers && Array.isArray(remote.customers) && remote.customers.length > 0) setCustomers(prev => mergeListById(remote.customers, prev));
-          if (remote.stockMovements && Array.isArray(remote.stockMovements) && remote.stockMovements.length > 0) setStockMovements(prev => mergeListById(remote.stockMovements, prev));
-          if (remote.sales && Array.isArray(remote.sales) && remote.sales.length > 0) setSales(prev => mergeListById(remote.sales, prev));
-          if (remote.quotes && Array.isArray(remote.quotes) && remote.quotes.length > 0) setQuotes(prev => mergeListById(remote.quotes, prev));
-          if (remote.creditDebtRecords && Array.isArray(remote.creditDebtRecords) && remote.creditDebtRecords.length > 0) setCreditDebtRecords(prev => mergeListById(remote.creditDebtRecords, prev));
-          if (remote.purchases && Array.isArray(remote.purchases) && remote.purchases.length > 0) setPurchases(prev => mergeListById(remote.purchases, prev));
-          if (remote.expenses && Array.isArray(remote.expenses) && remote.expenses.length > 0) setExpenses(prev => mergeListById(remote.expenses, prev));
+          if (remote.suppliers && Array.isArray(remote.suppliers) && remote.suppliers.length > 0) setSuppliers(prev => mergeListById(remote.suppliers, prev, preferLocal));
+          if (remote.customers && Array.isArray(remote.customers) && remote.customers.length > 0) setCustomers(prev => mergeListById(remote.customers, prev, preferLocal));
+          if (remote.stockMovements && Array.isArray(remote.stockMovements) && remote.stockMovements.length > 0) setStockMovements(prev => mergeListById(remote.stockMovements, prev, preferLocal));
+          if (remote.sales && Array.isArray(remote.sales) && remote.sales.length > 0) setSales(prev => mergeListById(remote.sales, prev, preferLocal));
+          if (remote.quotes && Array.isArray(remote.quotes) && remote.quotes.length > 0) setQuotes(prev => mergeListById(remote.quotes, prev, preferLocal));
+          if (remote.creditDebtRecords && Array.isArray(remote.creditDebtRecords) && remote.creditDebtRecords.length > 0) setCreditDebtRecords(prev => mergeListById(remote.creditDebtRecords, prev, preferLocal));
+          if (remote.purchases && Array.isArray(remote.purchases) && remote.purchases.length > 0) setPurchases(prev => mergeListById(remote.purchases, prev, preferLocal));
+          if (remote.expenses && Array.isArray(remote.expenses) && remote.expenses.length > 0) setExpenses(prev => mergeListById(remote.expenses, prev, preferLocal));
           if (remote.cashRegister !== undefined && remote.cashRegister !== null) {
             setCashRegister(prev => {
               if (!prev) return remote.cashRegister;
@@ -686,7 +708,7 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   }, []);
 
   // Explicit or debounced push to Firestore with quota protection
-  const syncToCloudNow = async (forceInit = false) => {
+  const syncToCloudNow = async (forceInit = false, overrideData?: Record<string, any>) => {
     // Critical Guard: never push to cloud before initial remote hydration,
     // protecting another machine from overwriting existing cloud data on boot
     if (!isCloudHydrated.current && !forceInit) {
@@ -714,6 +736,7 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         cashTransactions,
         inventories,
         activityLogs,
+        ...(overrideData || {}),
         updatedAt: new Date().toISOString(),
       });
       await setDoc(docRef, payload, { merge: true });
@@ -1222,56 +1245,95 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     return { success: true };
   };
 
-  const paySupplierDebt = (supplierId: string, amount: number, paymentMethod: PaymentMethod): boolean => {
+  const paySupplierDebt = (
+    supplierId: string,
+    amount: number,
+    paymentMethod: PaymentMethod,
+    notes?: string
+  ): { success: boolean; message?: string; receipt?: CreditPayment; remainingBalance?: number } => {
     const sup = (suppliers || []).find(s => s.id === supplierId);
-    if (!sup || amount <= 0 || amount > sup.debtBalance) return false;
+    if (!sup) return { success: false, message: 'Fournisseur introuvable.' };
+    if (amount <= 0) return { success: false, message: 'Le montant du versement doit être supérieur à zéro.' };
+    if (sup.debtBalance <= 0) return { success: false, message: 'Aucune dette en cours pour ce fournisseur.' };
 
-    setSuppliers(prev =>
-      (prev || []).map(s => (s.id === supplierId ? { ...s, debtBalance: s.debtBalance - amount } : s))
+    const actualAmount = Math.min(amount, sup.debtBalance);
+    const newDebtBalance = Math.max(0, Math.round(((sup.debtBalance || 0) - actualAmount) * 100) / 100);
+
+    const newSuppliers = (suppliers || []).map(s =>
+      s.id === supplierId ? { ...s, debtBalance: newDebtBalance } : s
     );
+    setSuppliers(newSuppliers);
+    localStorage.setItem(STORAGE_KEYS.SUPPLIERS, JSON.stringify(newSuppliers));
 
     // Also deduct from active creditDebtRecords for this supplier
-    setCreditDebtRecords(prev => {
-      let remainingToDeduct = amount;
-      return (prev || []).map(r => {
-        if (r.type === 'SUPPLIER_DEBT' && r.partyId === supplierId && r.status === 'EN_COURS' && remainingToDeduct > 0) {
-          const deduct = Math.min(r.remainingAmount, remainingToDeduct);
-          remainingToDeduct -= deduct;
-          const newPaid = r.paidAmount + deduct;
-          const newRem = r.remainingAmount - deduct;
-          const payment: CreditPayment = {
-            id: generateId('pay'),
-            date: new Date().toISOString(),
-            amount: deduct,
-            paymentMethod,
-            notes: 'Règlement effectué depuis la fiche fournisseur',
-            receivedBy: currentUser.name,
-            receiptNumber: `REC-${new Date().getFullYear()}-${String(r.payments.length + 1).padStart(3, '0')}`,
-          };
-          return {
-            ...r,
-            paidAmount: newPaid,
-            remainingAmount: newRem,
-            status: newRem <= 0 ? 'SOLDE' : 'EN_COURS',
-            payments: [payment, ...r.payments],
-          };
-        }
-        return r;
-      });
+    let remainingToDeduct = actualAmount;
+    const newCreditDebtRecords = (creditDebtRecords || []).map(r => {
+      const isMatch =
+        r.type === 'SUPPLIER_DEBT' &&
+        (r.partyId === supplierId || (r.partyName && sup.companyName && r.partyName.trim().toLowerCase() === sup.companyName.trim().toLowerCase())) &&
+        r.status === 'EN_COURS';
+
+      if (isMatch && remainingToDeduct > 0) {
+        const deduct = Math.min(r.remainingAmount, remainingToDeduct);
+        remainingToDeduct -= deduct;
+        const newPaid = (r.paidAmount || 0) + deduct;
+        const newRem = Math.max(0, Math.round((r.remainingAmount - deduct) * 100) / 100);
+        const payment: CreditPayment = {
+          id: generateId('pay'),
+          date: new Date().toISOString(),
+          amount: deduct,
+          paymentMethod,
+          notes: notes || 'Règlement effectué depuis la fiche fournisseur',
+          receivedBy: currentUser.name,
+          receiptNumber: `REC-${new Date().getFullYear()}-${String((r.payments?.length || 0) + 1).padStart(3, '0')}`,
+        };
+        return {
+          ...r,
+          paidAmount: newPaid,
+          remainingAmount: newRem,
+          status: (newRem <= 0.001 ? 'SOLDE' : 'EN_COURS') as 'SOLDE' | 'EN_COURS',
+          payments: [payment, ...(r.payments || [])],
+        };
+      }
+      return r;
     });
+    setCreditDebtRecords(newCreditDebtRecords);
+    localStorage.setItem(STORAGE_KEYS.CREDIT_DEBT_RECORDS, JSON.stringify(newCreditDebtRecords));
 
     // If cash register open and cash paid, register cash transaction
     if (paymentMethod === 'ESPECES' && cashRegister && cashRegister.isOpen) {
       addCashTransaction(
         'PAIEMENT_DETTE_FOURNISSEUR',
-        -amount,
+        -actualAmount,
         `Règlement dette fournisseur: ${sup.companyName}`,
         paymentMethod
       );
     }
 
-    logActivity('Règlement dette fournisseur', 'FOURNISSEUR', sup.companyName, `Montant versé: ${amount}`);
-    return true;
+    logActivity('Règlement dette fournisseur', 'FOURNISSEUR', sup.companyName, `Montant versé: ${actualAmount}, Nouveau solde dette: ${newDebtBalance}`);
+
+    hasLocalMutations.current = true;
+    syncToCloudNow(false, {
+      suppliers: newSuppliers,
+      creditDebtRecords: newCreditDebtRecords,
+    });
+
+    const supplierReceipt: CreditPayment = {
+      id: generateId('pay'),
+      date: new Date().toISOString(),
+      amount: actualAmount,
+      paymentMethod,
+      notes: notes || 'Règlement effectué depuis la fiche fournisseur',
+      receivedBy: currentUser.name,
+      receiptNumber: `REC-${new Date().getFullYear()}-${String(Date.now()).slice(-4)}`,
+    };
+
+    return {
+      success: true,
+      message: `Paiement de ${actualAmount} enregistré avec succès ! Nouveau solde dette: ${newDebtBalance}`,
+      receipt: supplierReceipt,
+      remainingBalance: newDebtBalance,
+    };
   };
 
   const createPurchase = (
@@ -1421,56 +1483,139 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     return { success: true };
   };
 
-  const payCustomerCredit = (customerId: string, amount: number, paymentMethod: PaymentMethod): boolean => {
+  const payCustomerCredit = (
+    customerId: string,
+    amount: number,
+    paymentMethod: PaymentMethod,
+    notes?: string
+  ): { success: boolean; message?: string; receipt?: CreditPayment } => {
     const cust = (customers || []).find(c => c.id === customerId);
-    if (!cust || amount <= 0 || amount > cust.creditBalance) return false;
+    if (!cust) return { success: false, message: 'Client introuvable.' };
+    if (amount <= 0) return { success: false, message: 'Le montant du versement doit être supérieur à zéro.' };
 
-    setCustomers(prev =>
-      (prev || []).map(c => (c.id === customerId ? { ...c, creditBalance: c.creditBalance - amount } : c))
+    // Find active creditDebtRecords for this customer (match by customerId OR partyName)
+    const activeRecords = (creditDebtRecords || []).filter(
+      r =>
+        r.type === 'CLIENT_CREDIT' &&
+        (r.partyId === customerId || (r.partyName && cust.name && r.partyName.trim().toLowerCase() === cust.name.trim().toLowerCase())) &&
+        r.status === 'EN_COURS'
     );
+    const totalActiveRecordDebt = activeRecords.reduce((sum, r) => sum + (r.remainingAmount || 0), 0);
+    const maxPayable = Math.max(cust.creditBalance || 0, totalActiveRecordDebt);
 
-    // Also deduct from active creditDebtRecords for this customer
-    setCreditDebtRecords(prev => {
-      let remainingToDeduct = amount;
-      return (prev || []).map(r => {
-        if (r.type === 'CLIENT_CREDIT' && r.partyId === customerId && r.status === 'EN_COURS' && remainingToDeduct > 0) {
-          const deduct = Math.min(r.remainingAmount, remainingToDeduct);
-          remainingToDeduct -= deduct;
-          const newPaid = r.paidAmount + deduct;
-          const newRem = r.remainingAmount - deduct;
-          const payment: CreditPayment = {
-            id: generateId('pay'),
-            date: new Date().toISOString(),
-            amount: deduct,
-            paymentMethod,
-            notes: 'Règlement crédit depuis la fiche client',
-            receivedBy: currentUser.name,
-            receiptNumber: `REC-${new Date().getFullYear()}-${String(r.payments.length + 1).padStart(3, '0')}`,
-          };
-          return {
-            ...r,
-            paidAmount: newPaid,
-            remainingAmount: newRem,
-            status: newRem <= 0 ? 'SOLDE' : 'EN_COURS',
-            payments: [payment, ...r.payments],
-          };
-        }
-        return r;
-      });
+    if (maxPayable <= 0) {
+      return { success: false, message: 'Ce client n\'a aucune dette en cours.' };
+    }
+
+    const actualAmount = Math.min(amount, maxPayable);
+    const newCustomerBalance = Math.max(0, Math.round(((cust.creditBalance || 0) - actualAmount) * 100) / 100);
+
+    const newCustomers = (customers || []).map(c =>
+      c.id === customerId ? { ...c, creditBalance: newCustomerBalance } : c
+    );
+    setCustomers(newCustomers);
+    localStorage.setItem(STORAGE_KEYS.CUSTOMERS, JSON.stringify(newCustomers));
+
+    // Generate receipt
+    const receiptNumber = `REC-${new Date().getFullYear()}-${String(Date.now()).slice(-4)}`;
+    const payment: CreditPayment = {
+      id: generateId('pay'),
+      date: new Date().toISOString(),
+      amount: actualAmount,
+      paymentMethod,
+      notes: notes || 'Règlement crédit depuis la fiche client',
+      receivedBy: currentUser.name,
+      receiptNumber,
+    };
+
+    // Deduct from creditDebtRecords
+    let remainingToDeduct = actualAmount;
+    let matchedAnyRecord = false;
+
+    const newCreditDebtRecords = (creditDebtRecords || []).map(r => {
+      const isMatch =
+        r.type === 'CLIENT_CREDIT' &&
+        (r.partyId === customerId || (r.partyName && cust.name && r.partyName.trim().toLowerCase() === cust.name.trim().toLowerCase())) &&
+        r.status === 'EN_COURS';
+
+      if (isMatch && remainingToDeduct > 0) {
+        matchedAnyRecord = true;
+        const deduct = Math.min(r.remainingAmount, remainingToDeduct);
+        remainingToDeduct -= deduct;
+        const newPaid = (r.paidAmount || 0) + deduct;
+        const newRem = Math.max(0, Math.round((r.remainingAmount - deduct) * 100) / 100);
+        return {
+          ...r,
+          paidAmount: newPaid,
+          remainingAmount: newRem,
+          status: (newRem <= 0.001 ? 'SOLDE' : 'EN_COURS') as 'SOLDE' | 'EN_COURS',
+          payments: [
+            {
+              ...payment,
+              amount: deduct,
+            },
+            ...(r.payments || []),
+          ],
+        };
+      }
+      return r;
     });
+
+    // If customer had debt on profile but no active record existed in creditDebtRecords, create an archive record so payment is tracked
+    let finalCreditRecords = newCreditDebtRecords;
+    if (!matchedAnyRecord) {
+      const archiveRecord: CreditDebtRecord = {
+        id: generateId('cd'),
+        type: 'CLIENT_CREDIT',
+        partyId: customerId,
+        partyName: cust.name,
+        partyPhone: cust.phone,
+        title: `Règlement dette client (${cust.name})`,
+        initialAmount: actualAmount,
+        paidAmount: actualAmount,
+        remainingAmount: 0,
+        status: 'SOLDE',
+        payments: [payment],
+        dueDate: new Date().toISOString().split('T')[0],
+        date: new Date().toISOString(),
+        notes: notes || 'Règlement enregistré depuis la fiche client',
+        createdAt: new Date().toISOString(),
+      };
+      finalCreditRecords = [archiveRecord, ...newCreditDebtRecords];
+    }
+
+    setCreditDebtRecords(finalCreditRecords);
+    localStorage.setItem(STORAGE_KEYS.CREDIT_DEBT_RECORDS, JSON.stringify(finalCreditRecords));
 
     // Register cash entry if paid cash
     if (paymentMethod === 'ESPECES' && cashRegister && cashRegister.isOpen) {
       addCashTransaction(
         'PAIEMENT_DETTE_CLIENT',
-        amount,
+        actualAmount,
         `Règlement crédit client: ${cust.name}`,
         paymentMethod
       );
     }
 
-    logActivity('Encaissement crédit client', 'CLIENT', cust.name, `Montant réglé: ${amount}`);
-    return true;
+    logActivity(
+      'Encaissement crédit client',
+      'CLIENT',
+      cust.name,
+      `Montant réglé: ${actualAmount}, Nouveau solde dette: ${newCustomerBalance}`
+    );
+
+    // Immediate Cloud push & local mutations flag
+    hasLocalMutations.current = true;
+    syncToCloudNow(false, {
+      customers: newCustomers,
+      creditDebtRecords: finalCreditRecords,
+    });
+
+    return {
+      success: true,
+      message: `Règlement de ${actualAmount} validé avec succès ! Nouveau solde: ${newCustomerBalance}`,
+      receipt: payment,
+    };
   };
 
   // Sale Core Execution
@@ -1579,16 +1724,55 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       }
     });
 
-    // 3. Auto-create CreditDebtRecord if there is a debt (remainingDue > 0 or CREDIT sale)
-    if (effectiveRemainingDue > 0 || paymentMethod === 'CREDIT') {
-      const debtAmountToTrack = effectiveRemainingDue > 0 ? effectiveRemainingDue : totalAmount;
+    // 3. Auto-create CreditDebtRecord & synchronize Customer credit balance
+    let updatedCustomers = customers || [];
+    let updatedCreditDebtRecords = creditDebtRecords || [];
+    const debtAmountToTrack = effectiveRemainingDue > 0 ? effectiveRemainingDue : (paymentMethod === 'CREDIT' ? totalAmount : 0);
+
+    if (debtAmountToTrack > 0) {
+      let linkedCust = cust;
+      if (!linkedCust && sale.customerName && sale.customerName !== 'Client au comptant') {
+        const foundByName = (customers || []).find(
+          c => c.name.trim().toLowerCase() === sale.customerName!.trim().toLowerCase()
+        );
+        if (foundByName) {
+          linkedCust = foundByName;
+        } else {
+          // Auto-create customer so the credit is attached to a real client in the directory
+          linkedCust = {
+            id: generateId('cust'),
+            name: sale.customerName.trim(),
+            phone: '',
+            creditBalance: 0,
+            creditLimit: 0,
+            salesCount: 0,
+            totalSpent: 0,
+            createdAt: new Date().toISOString(),
+          };
+          updatedCustomers = [linkedCust, ...updatedCustomers];
+        }
+      }
+
+      if (linkedCust) {
+        updatedCustomers = updatedCustomers.map(c =>
+          c.id === linkedCust!.id
+            ? {
+                ...c,
+                totalSpent: (c.totalSpent || 0) + totalAmount,
+                salesCount: (c.salesCount || 0) + 1,
+                creditBalance: Math.round(((c.creditBalance || 0) + debtAmountToTrack) * 100) / 100,
+              }
+            : c
+        );
+      }
+
       const creditRecord: CreditDebtRecord = {
         id: generateId('cd'),
         type: 'CLIENT_CREDIT',
-        partyId: cust?.id || customerId || 'client_credit',
-        partyName: cust ? cust.name : (sale.customerName || 'Client à crédit'),
-        partyPhone: cust?.phone,
-        partyAddress: cust?.address,
+        partyId: linkedCust ? linkedCust.id : (customerId || 'client_credit'),
+        partyName: linkedCust ? linkedCust.name : (sale.customerName || 'Client à crédit'),
+        partyPhone: linkedCust?.phone,
+        partyAddress: linkedCust?.address,
         title: `Dette Vente ${sale.invoiceNumber} (Reste à payer)`,
         initialAmount: debtAmountToTrack,
         paidAmount: 0,
@@ -1601,27 +1785,28 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         referenceId: sale.id,
         createdAt: new Date().toISOString(),
       };
-      setCreditDebtRecords(prev => [creditRecord, ...(prev || [])]);
-    }
 
-    // 4. Update Customer records if assigned
-    if (cust) {
-      const addedDebt = effectiveRemainingDue > 0 ? effectiveRemainingDue : (paymentMethod === 'CREDIT' ? totalAmount : 0);
-      setCustomers(prev =>
-        (prev || []).map(c =>
-          c.id === cust.id
-            ? {
-                ...c,
-                totalSpent: c.totalSpent + totalAmount,
-                salesCount: c.salesCount + 1,
-                creditBalance: (c.creditBalance || 0) + addedDebt,
-              }
-            : c
-        )
+      updatedCreditDebtRecords = [creditRecord, ...updatedCreditDebtRecords];
+      setCreditDebtRecords(updatedCreditDebtRecords);
+      localStorage.setItem(STORAGE_KEYS.CREDIT_DEBT_RECORDS, JSON.stringify(updatedCreditDebtRecords));
+      setCustomers(updatedCustomers);
+      localStorage.setItem(STORAGE_KEYS.CUSTOMERS, JSON.stringify(updatedCustomers));
+    } else if (cust) {
+      // Normal paid sale with known customer: update salesCount and totalSpent
+      updatedCustomers = (customers || []).map(c =>
+        c.id === cust.id
+          ? {
+              ...c,
+              totalSpent: (c.totalSpent || 0) + totalAmount,
+              salesCount: (c.salesCount || 0) + 1,
+            }
+          : c
       );
+      setCustomers(updatedCustomers);
+      localStorage.setItem(STORAGE_KEYS.CUSTOMERS, JSON.stringify(updatedCustomers));
     }
 
-    // 5. Update Cash Register if cash sale or cash down payment on credit, and cash register is open
+    // 4. Update Cash Register if cash sale or cash down payment on credit, and cash register is open
     if ((paymentMethod === 'ESPECES' || (paymentMethod === 'CREDIT' && amountReceived > 0)) && cashRegister && cashRegister.isOpen) {
       const cashAmountIn = Math.min(amountReceived, totalAmount);
       if (cashAmountIn > 0) {
@@ -1635,6 +1820,14 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       sale.invoiceNumber,
       `Montant: ${totalAmount}, Donné: ${amountReceived}, Dette: ${effectiveRemainingDue}, Mode: ${paymentMethod}, Articles: ${items.length}`
     );
+
+    // Sync all affected entities to cloud
+    hasLocalMutations.current = true;
+    syncToCloudNow(false, {
+      sales: [sale, ...(sales || [])],
+      customers: updatedCustomers,
+      creditDebtRecords: updatedCreditDebtRecords,
+    });
 
     return { success: true, sale };
   };
@@ -1785,38 +1978,103 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   const addCreditDebtRecord = (
     record: Omit<CreditDebtRecord, 'id' | 'payments' | 'paidAmount' | 'remainingAmount' | 'status'>
   ): CreditDebtRecord => {
+    let finalPartyId = record.partyId;
+    let finalPartyName = record.partyName;
+    let updatedCustomers = customers || [];
+    let updatedSuppliers = suppliers || [];
+
+    // 1. If CLIENT_CREDIT:
+    if (record.type === 'CLIENT_CREDIT') {
+      const cust = (customers || []).find(
+        c => (record.partyId && c.id === record.partyId) ||
+             (c.name && record.partyName && c.name.trim().toLowerCase() === record.partyName.trim().toLowerCase())
+      );
+      if (cust) {
+        finalPartyId = cust.id;
+        finalPartyName = cust.name;
+        updatedCustomers = (customers || []).map(c =>
+          c.id === cust.id
+            ? { ...c, creditBalance: Math.round(((c.creditBalance || 0) + record.initialAmount) * 100) / 100 }
+            : c
+        );
+      } else {
+        // Auto-create customer so they appear in customers directory with their credit balance!
+        const newCust: Customer = {
+          id: generateId('cust'),
+          name: record.partyName.trim(),
+          phone: record.partyPhone?.trim() || '',
+          address: record.partyAddress?.trim() || '',
+          creditBalance: record.initialAmount,
+          creditLimit: 0,
+          salesCount: 0,
+          totalSpent: 0,
+          createdAt: new Date().toISOString(),
+        };
+        finalPartyId = newCust.id;
+        updatedCustomers = [newCust, ...updatedCustomers];
+      }
+      setCustomers(updatedCustomers);
+      localStorage.setItem(STORAGE_KEYS.CUSTOMERS, JSON.stringify(updatedCustomers));
+    } else {
+      // 2. If SUPPLIER_DEBT:
+      const sup = (suppliers || []).find(
+        s => (record.partyId && s.id === record.partyId) ||
+             (s.companyName && record.partyName && s.companyName.trim().toLowerCase() === record.partyName.trim().toLowerCase())
+      );
+      if (sup) {
+        finalPartyId = sup.id;
+        finalPartyName = sup.companyName;
+        updatedSuppliers = (suppliers || []).map(s =>
+          s.id === sup.id
+            ? { ...s, debtBalance: Math.round(((s.debtBalance || 0) + record.initialAmount) * 100) / 100 }
+            : s
+        );
+      } else {
+        // Auto-create supplier so they appear in suppliers directory with their debt balance!
+        const newSup: Supplier = {
+          id: generateId('sup'),
+          companyName: record.partyName.trim(),
+          contactName: record.partyName.trim(),
+          phone: record.partyPhone?.trim() || '',
+          address: record.partyAddress?.trim() || '',
+          debtBalance: record.initialAmount,
+          totalPurchased: 0,
+          createdAt: new Date().toISOString(),
+        };
+        finalPartyId = newSup.id;
+        updatedSuppliers = [newSup, ...updatedSuppliers];
+      }
+      setSuppliers(updatedSuppliers);
+      localStorage.setItem(STORAGE_KEYS.SUPPLIERS, JSON.stringify(updatedSuppliers));
+    }
+
     const newRecord: CreditDebtRecord = {
       ...record,
       id: generateId('cd'),
+      partyId: finalPartyId || generateId('party'),
+      partyName: finalPartyName,
       paidAmount: 0,
       remainingAmount: record.initialAmount,
       status: 'EN_COURS',
       payments: [],
+      createdAt: record.createdAt || new Date().toISOString(),
     };
 
-    setCreditDebtRecords(prev => [newRecord, ...(prev || [])]);
+    const newRecords = [newRecord, ...(creditDebtRecords || [])];
+    setCreditDebtRecords(newRecords);
+    localStorage.setItem(STORAGE_KEYS.CREDIT_DEBT_RECORDS, JSON.stringify(newRecords));
 
-    // Update customer / supplier balance if applicable
-    if (record.type === 'CLIENT_CREDIT') {
-      const cust = (customers || []).find(c => c.id === record.partyId);
-      if (cust) {
-        setCustomers(prev =>
-          prev.map(c => (c.id === cust.id ? { ...c, creditBalance: c.creditBalance + record.initialAmount } : c))
-        );
-      }
-    } else {
-      const sup = (suppliers || []).find(s => s.id === record.partyId);
-      if (sup) {
-        setSuppliers(prev =>
-          prev.map(s => (s.id === sup.id ? { ...s, debtBalance: s.debtBalance + record.initialAmount } : s))
-        );
-      }
-    }
+    hasLocalMutations.current = true;
+    syncToCloudNow(false, {
+      creditDebtRecords: newRecords,
+      customers: updatedCustomers,
+      suppliers: updatedSuppliers,
+    });
 
     logActivity(
       record.type === 'CLIENT_CREDIT' ? 'Nouveau Crédit Client' : 'Nouvelle Dette Fournisseur',
       record.type === 'CLIENT_CREDIT' ? 'CLIENT' : 'FOURNISSEUR',
-      record.partyName,
+      newRecord.partyName,
       `Montant: ${record.initialAmount}, Titre: ${record.title}`
     );
 
@@ -1828,74 +2086,93 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     amount: number,
     paymentMethod: PaymentMethod,
     notes?: string
-  ): { success: boolean; message?: string } => {
+  ): { success: boolean; message?: string; receipt?: CreditPayment } => {
     const record = (creditDebtRecords || []).find(r => r.id === recordId);
     if (!record) return { success: false, message: 'Dossier de crédit introuvable.' };
     if (amount <= 0) return { success: false, message: 'Le montant de versement doit être supérieur à zéro.' };
-    if (amount > record.remainingAmount) {
+    if (record.remainingAmount <= 0) {
+      return { success: false, message: 'Ce dossier de crédit est déjà totalement soldé.' };
+    }
+    if (amount > record.remainingAmount + 0.01) {
       return {
         success: false,
         message: `Le versement (${amount}) ne peut pas dépasser le solde restant (${record.remainingAmount}).`,
       };
     }
 
-    const receiptNumber = `REC-${new Date().getFullYear()}-${String(record.payments.length + 1).padStart(3, '0')}`;
+    const actualAmount = Math.min(amount, record.remainingAmount);
+    const receiptNumber = `REC-${new Date().getFullYear()}-${String((record.payments?.length || 0) + 1).padStart(3, '0')}`;
     const newPayment: CreditPayment = {
       id: generateId('pay'),
       date: new Date().toISOString(),
-      amount,
+      amount: actualAmount,
       paymentMethod,
       notes,
       receivedBy: currentUser.name,
       receiptNumber,
     };
 
-    const newPaidAmount = record.paidAmount + amount;
-    const newRemainingAmount = record.initialAmount - newPaidAmount;
-    const newStatus = newRemainingAmount <= 0 ? 'SOLDE' : 'EN_COURS';
+    const newPaidAmount = (record.paidAmount || 0) + actualAmount;
+    const newRemainingAmount = Math.max(0, Math.round(((record.remainingAmount || 0) - actualAmount) * 100) / 100);
+    const newStatus: 'SOLDE' | 'EN_COURS' = newRemainingAmount <= 0.001 ? 'SOLDE' : 'EN_COURS';
 
-    setCreditDebtRecords(prev =>
-      prev.map(r =>
-        r.id === recordId
-          ? {
-              ...r,
-              paidAmount: newPaidAmount,
-              remainingAmount: newRemainingAmount,
-              status: newStatus,
-              payments: [newPayment, ...r.payments],
-            }
-          : r
-      )
+    const newCreditDebtRecords = (creditDebtRecords || []).map(r =>
+      r.id === recordId
+        ? {
+            ...r,
+            paidAmount: newPaidAmount,
+            remainingAmount: newRemainingAmount,
+            status: newStatus,
+            payments: [newPayment, ...(r.payments || [])],
+          }
+        : r
     );
+    setCreditDebtRecords(newCreditDebtRecords);
+    localStorage.setItem(STORAGE_KEYS.CREDIT_DEBT_RECORDS, JSON.stringify(newCreditDebtRecords));
 
-    // If client credit payment, update customer creditBalance and add cash transaction if cash
+    let updatedCustomers = customers;
+    let updatedSuppliers = suppliers;
+
+    // If client credit payment, update customer creditBalance (match by partyId OR by partyName)
     if (record.type === 'CLIENT_CREDIT') {
-      const cust = (customers || []).find(c => c.id === record.partyId);
+      const cust = (customers || []).find(
+        c => (record.partyId && c.id === record.partyId) ||
+             (c.name && record.partyName && c.name.trim().toLowerCase() === record.partyName.trim().toLowerCase())
+      );
       if (cust) {
-        setCustomers(prev =>
-          prev.map(c => (c.id === cust.id ? { ...c, creditBalance: Math.max(0, c.creditBalance - amount) } : c))
+        const newCustBalance = Math.max(0, Math.round(((cust.creditBalance || 0) - actualAmount) * 100) / 100);
+        updatedCustomers = (customers || []).map(c =>
+          c.id === cust.id ? { ...c, creditBalance: newCustBalance } : c
         );
+        setCustomers(updatedCustomers);
+        localStorage.setItem(STORAGE_KEYS.CUSTOMERS, JSON.stringify(updatedCustomers));
       }
       if (paymentMethod === 'ESPECES' && cashRegister && cashRegister.isOpen) {
         addCashTransaction(
           'PAIEMENT_DETTE_CLIENT',
-          amount,
+          actualAmount,
           `Encaissement crédit client : ${record.partyName} (${record.title})`,
           paymentMethod
         );
       }
     } else {
       // Supplier debt payment: update supplier debtBalance and register cash out if paid in cash
-      const sup = (suppliers || []).find(s => s.id === record.partyId);
+      const sup = (suppliers || []).find(
+        s => (record.partyId && s.id === record.partyId) ||
+             (s.companyName && record.partyName && s.companyName.trim().toLowerCase() === record.partyName.trim().toLowerCase())
+      );
       if (sup) {
-        setSuppliers(prev =>
-          prev.map(s => (s.id === sup.id ? { ...s, debtBalance: Math.max(0, s.debtBalance - amount) } : s))
+        const newSupBalance = Math.max(0, Math.round(((sup.debtBalance || 0) - actualAmount) * 100) / 100);
+        updatedSuppliers = (suppliers || []).map(s =>
+          s.id === sup.id ? { ...s, debtBalance: newSupBalance } : s
         );
+        setSuppliers(updatedSuppliers);
+        localStorage.setItem(STORAGE_KEYS.SUPPLIERS, JSON.stringify(updatedSuppliers));
       }
       if (paymentMethod === 'ESPECES' && cashRegister && cashRegister.isOpen) {
         addCashTransaction(
           'PAIEMENT_DETTE_FOURNISSEUR',
-          -amount,
+          -actualAmount,
           `Règlement dette fournisseur : ${record.partyName} (${record.title})`,
           paymentMethod
         );
@@ -1906,34 +2183,77 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       record.type === 'CLIENT_CREDIT' ? 'Règlement Crédit Client' : 'Règlement Dette Fournisseur',
       record.type === 'CLIENT_CREDIT' ? 'CLIENT' : 'FOURNISSEUR',
       record.partyName,
-      `Versement: ${amount}, Solde restant: ${newRemainingAmount}`
+      `Versement: ${actualAmount}, Solde restant: ${newRemainingAmount}`
     );
 
-    return { success: true };
+    // Immediate cloud push
+    hasLocalMutations.current = true;
+    syncToCloudNow(false, {
+      creditDebtRecords: newCreditDebtRecords,
+      customers: updatedCustomers,
+      suppliers: updatedSuppliers,
+    });
+
+    return {
+      success: true,
+      message: `Versement de ${actualAmount} enregistré avec succès ! Solde restant: ${newRemainingAmount}`,
+      receipt: newPayment,
+    };
   };
 
   const updateCreditDebtRecord = (id: string, updates: Partial<CreditDebtRecord>) => {
-    setCreditDebtRecords(prev => prev.map(r => (r.id === id ? { ...r, ...updates } : r)));
+    const newRecords = (creditDebtRecords || []).map(r => (r.id === id ? { ...r, ...updates } : r));
+    setCreditDebtRecords(newRecords);
+    localStorage.setItem(STORAGE_KEYS.CREDIT_DEBT_RECORDS, JSON.stringify(newRecords));
+    hasLocalMutations.current = true;
+    syncToCloudNow(false, { creditDebtRecords: newRecords });
   };
 
   const deleteCreditDebtRecord = (id: string): boolean => {
     const record = (creditDebtRecords || []).find(r => r.id === id);
     if (!record) return false;
 
+    let updatedCustomers = customers || [];
+    let updatedSuppliers = suppliers || [];
+
     // Revert customer credit balance or supplier debt balance if there was remaining unpaid debt
-    if (record.remainingAmount > 0 && record.partyId) {
+    if (record.remainingAmount > 0) {
       if (record.type === 'CLIENT_CREDIT') {
-        setCustomers(prev =>
-          (prev || []).map(c => (c.id === record.partyId ? { ...c, creditBalance: Math.max(0, (c.creditBalance || 0) - record.remainingAmount) } : c))
+        const cust = (customers || []).find(
+          c => (record.partyId && c.id === record.partyId) ||
+               (c.name && record.partyName && c.name.trim().toLowerCase() === record.partyName.trim().toLowerCase())
         );
+        if (cust) {
+          const newBal = Math.max(0, Math.round(((cust.creditBalance || 0) - record.remainingAmount) * 100) / 100);
+          updatedCustomers = (customers || []).map(c => (c.id === cust.id ? { ...c, creditBalance: newBal } : c));
+          setCustomers(updatedCustomers);
+          localStorage.setItem(STORAGE_KEYS.CUSTOMERS, JSON.stringify(updatedCustomers));
+        }
       } else if (record.type === 'SUPPLIER_DEBT') {
-        setSuppliers(prev =>
-          (prev || []).map(s => (s.id === record.partyId ? { ...s, debtBalance: Math.max(0, (s.debtBalance || 0) - record.remainingAmount) } : s))
+        const sup = (suppliers || []).find(
+          s => (record.partyId && s.id === record.partyId) ||
+               (s.companyName && record.partyName && s.companyName.trim().toLowerCase() === record.partyName.trim().toLowerCase())
         );
+        if (sup) {
+          const newBal = Math.max(0, Math.round(((sup.debtBalance || 0) - record.remainingAmount) * 100) / 100);
+          updatedSuppliers = (suppliers || []).map(s => (s.id === sup.id ? { ...s, debtBalance: newBal } : s));
+          setSuppliers(updatedSuppliers);
+          localStorage.setItem(STORAGE_KEYS.SUPPLIERS, JSON.stringify(updatedSuppliers));
+        }
       }
     }
 
-    setCreditDebtRecords(prev => prev.filter(r => r.id !== id));
+    const newRecords = (creditDebtRecords || []).filter(r => r.id !== id);
+    setCreditDebtRecords(newRecords);
+    localStorage.setItem(STORAGE_KEYS.CREDIT_DEBT_RECORDS, JSON.stringify(newRecords));
+
+    hasLocalMutations.current = true;
+    syncToCloudNow(false, {
+      creditDebtRecords: newRecords,
+      customers: updatedCustomers,
+      suppliers: updatedSuppliers,
+    });
+
     logActivity('Suppression dossier dette/crédit', 'SYSTEME', record.partyName, `Dossier ${record.title} supprimé`);
     return true;
   };

@@ -13,10 +13,13 @@ import {
   AlertCircle,
   FileText,
   CreditCard,
-  Banknote
+  Banknote,
+  Printer,
+  Check,
+  RotateCcw
 } from 'lucide-react';
 import { useStore } from '../../context/StoreContext';
-import { Customer, Supplier, PaymentMethod } from '../../types';
+import { Customer, Supplier, PaymentMethod, CreditPayment } from '../../types';
 import { formatMoney, formatDate } from '../../utils/formatters';
 
 interface ThirdPartiesViewProps {
@@ -27,6 +30,7 @@ export const ThirdPartiesView: React.FC<ThirdPartiesViewProps> = ({ initialTab =
   const {
     customers,
     suppliers,
+    creditDebtRecords,
     addCustomer,
     updateCustomer,
     addSupplier,
@@ -57,6 +61,14 @@ export const ThirdPartiesView: React.FC<ThirdPartiesViewProps> = ({ initialTab =
   const [selectedCustomerForPay, setSelectedCustomerForPay] = useState<Customer | null>(null);
   const [creditPayAmount, setCreditPayAmount] = useState<number>(0);
   const [creditPayMethod, setCreditPayMethod] = useState<PaymentMethod>('ESPECES');
+  const [creditPayNotes, setCreditPayNotes] = useState('');
+  const [creditFeedback, setCreditFeedback] = useState<{
+    type: 'success' | 'error';
+    message: string;
+    receipt?: CreditPayment;
+    customerName?: string;
+    newBalance?: number;
+  } | null>(null);
 
   // Supplier Modals
   const [showSupplierModal, setShowSupplierModal] = useState(false);
@@ -75,6 +87,14 @@ export const ThirdPartiesView: React.FC<ThirdPartiesViewProps> = ({ initialTab =
   const [selectedSupplierForPay, setSelectedSupplierForPay] = useState<Supplier | null>(null);
   const [supplierPayAmount, setSupplierPayAmount] = useState<number>(0);
   const [supplierPayMethod, setSupplierPayMethod] = useState<PaymentMethod>('VIREMENT');
+  const [supplierPayNotes, setSupplierPayNotes] = useState('');
+  const [supplierFeedback, setSupplierFeedback] = useState<{
+    type: 'success' | 'error';
+    message: string;
+    receipt?: CreditPayment;
+    supplierName?: string;
+    newBalance?: number;
+  } | null>(null);
 
   // Filtered lists
   const filteredCustomers = useMemo(() => {
@@ -144,11 +164,206 @@ export const ThirdPartiesView: React.FC<ThirdPartiesViewProps> = ({ initialTab =
     setShowCustomerModal(false);
   };
 
+  // Precise debt calculation helper (checks customer.creditBalance AND creditDebtRecords)
+  const getCustomerTotalDebt = (cust: Customer) => {
+    const recordDebt = (creditDebtRecords || [])
+      .filter(
+        r =>
+          r.type === 'CLIENT_CREDIT' &&
+          (r.partyId === cust.id || (r.partyName && cust.name && r.partyName.trim().toLowerCase() === cust.name.trim().toLowerCase())) &&
+          r.status === 'EN_COURS'
+      )
+      .reduce((sum, r) => sum + (r.remainingAmount || 0), 0);
+    return Math.max(cust.creditBalance || 0, recordDebt);
+  };
+
+  const getSupplierTotalDebt = (sup: Supplier) => {
+    const recordDebt = (creditDebtRecords || [])
+      .filter(
+        r =>
+          r.type === 'SUPPLIER_DEBT' &&
+          (r.partyId === sup.id || (r.partyName && sup.companyName && r.partyName.trim().toLowerCase() === sup.companyName.trim().toLowerCase())) &&
+          r.status === 'EN_COURS'
+      )
+      .reduce((sum, r) => sum + (r.remainingAmount || 0), 0);
+    return Math.max(sup.debtBalance || (sup as any).balanceDue || 0, recordDebt);
+  };
+
+  const printCustomerPaymentReceipt = (payment: CreditPayment, partyName: string, remainingDebt: number) => {
+    const receiptHtml = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="utf-8">
+        <title>Reçu de Règlement - ${payment.receiptNumber || 'REC'}</title>
+        <style>
+          body { font-family: 'Courier New', Courier, monospace; padding: 20px; color: #111; max-width: 380px; margin: 0 auto; font-size: 13px; line-height: 1.4; }
+          .header { text-align: center; border-bottom: 1px dashed #444; padding-bottom: 12px; margin-bottom: 12px; }
+          .shop-name { font-size: 16px; font-weight: bold; text-transform: uppercase; }
+          .title { font-size: 13px; font-weight: bold; margin: 8px 0 4px; text-transform: uppercase; }
+          .row { display: flex; justify-content: space-between; margin: 4px 0; }
+          .total-box { border-top: 1px dashed #444; border-bottom: 1px dashed #444; padding: 10px 0; margin: 12px 0; }
+          .footer { text-align: center; font-size: 11px; margin-top: 18px; color: #555; }
+        </style>
+      </head>
+      <body>
+        <div class="header">
+          <div class="shop-name">${settings.shopName || 'COMMERCE GESTION'}</div>
+          <div>${settings.address || ''}</div>
+          <div>Tél: ${settings.phone || ''}</div>
+          <div class="title">REÇU DE RÈGLEMENT CLIENT</div>
+          <div>N°: ${payment.receiptNumber || 'REC-001'}</div>
+          <div>Date: ${new Date(payment.date).toLocaleString('fr-FR')}</div>
+        </div>
+        <div class="row"><span>Client:</span> <strong>${partyName}</strong></div>
+        <div class="row"><span>Mode de paiement:</span> <strong>${payment.paymentMethod}</strong></div>
+        ${payment.receivedBy ? `<div class="row"><span>Encaissé par:</span> <span>${payment.receivedBy}</span></div>` : ''}
+        
+        <div class="total-box">
+          <div class="row" style="font-size: 15px; font-weight: bold;">
+            <span>MONTANT VERSÉ:</span>
+            <span>${formatMoney(payment.amount, settings.currency)}</span>
+          </div>
+          <div class="row" style="font-size: 12px; margin-top: 6px;">
+            <span>Solde restant dû:</span>
+            <span>${formatMoney(remainingDebt, settings.currency)}</span>
+          </div>
+        </div>
+
+        ${payment.notes ? `<div style="font-size: 11px; font-style: italic; margin-bottom: 10px;">Note: ${payment.notes}</div>` : ''}
+
+        <div class="footer">
+          Merci pour votre confiance !<br>
+          Ce document officiel atteste du versement effectué.
+        </div>
+      </body>
+      </html>
+    `;
+
+    const printWin = window.open('', '_blank', 'width=450,height=600');
+    if (printWin) {
+      printWin.document.write(receiptHtml);
+      printWin.document.close();
+      printWin.focus();
+      setTimeout(() => {
+        printWin.print();
+      }, 300);
+    }
+  };
+
+  const printSupplierPaymentReceipt = (
+    payment: CreditPayment,
+    supplierName: string,
+    remainingDebt: number
+  ) => {
+    const receiptHtml = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="utf-8">
+        <title>Reçu de Règlement Fournisseur (Créancier) - ${payment.receiptNumber || 'REC'}</title>
+        <style>
+          body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; padding: 20px; color: #111; max-width: 450px; margin: 0 auto; font-size: 12px; }
+          .header { text-align: center; border-bottom: 2px solid #0f172a; padding-bottom: 12px; margin-bottom: 14px; }
+          .shop-name { font-size: 16px; font-weight: 900; text-transform: uppercase; }
+          .title { font-size: 13px; font-weight: 800; margin: 8px 0 3px; text-transform: uppercase; color: #991b1b; }
+          .subtitle { font-size: 10px; color: #64748b; margin-bottom: 4px; font-style: italic; }
+          .row { display: flex; justify-content: space-between; margin: 5px 0; }
+          .total-box { border-top: 1px dashed #444; border-bottom: 1px dashed #444; padding: 10px 0; margin: 12px 0; background: #f8fafc; }
+          .sig-container { display: flex; justify-content: space-between; margin-top: 24px; padding-top: 12px; border-top: 1px dotted #cbd5e1; font-size: 10px; }
+          .sig-col { width: 48%; text-align: center; }
+          .sig-box { height: 45px; }
+          .footer { text-align: center; font-size: 10px; margin-top: 18px; color: #64748b; }
+        </style>
+      </head>
+      <body>
+        <div class="header">
+          <div class="shop-name">${settings.shopName || 'COMMERCE GESTION'}</div>
+          <div>${settings.address || ''}</div>
+          <div>Tél: ${settings.phone || ''}</div>
+          <div class="title">REÇU DE RÈGLEMENT DE DETTE</div>
+          <div class="subtitle">(Document officiel remis au créancier)</div>
+          <div>N° Reçu: <strong>${payment.receiptNumber || 'REC-001'}</strong></div>
+          <div>Date: ${new Date(payment.date).toLocaleString('fr-FR')}</div>
+        </div>
+
+        <div class="row"><span>Créancier (Fournisseur):</span> <strong>${supplierName}</strong></div>
+        <div class="row"><span>Débiteur (Établissement):</span> <span>${settings.shopName}</span></div>
+        <div class="row"><span>Mode de règlement:</span> <strong>${payment.paymentMethod}</strong></div>
+        ${payment.receivedBy ? `<div class="row"><span>Émis par:</span> <span>${payment.receivedBy}</span></div>` : ''}
+        
+        <div class="total-box">
+          <div class="row" style="font-size: 15px; font-weight: bold; color: #166534; padding: 0 4px;">
+            <span>MONTANT RÉGLÉ:</span>
+            <span>${formatMoney(payment.amount, settings.currency)}</span>
+          </div>
+          <div class="row" style="font-size: 12px; margin-top: 6px; padding: 0 4px; color: ${remainingDebt > 0 ? '#991b1b' : '#166534'};">
+            <span>Solde restant dû au créancier:</span>
+            <span><strong>${formatMoney(remainingDebt, settings.currency)}</strong></span>
+          </div>
+        </div>
+
+        ${payment.notes ? `<div style="font-size: 11px; font-style: italic; margin-bottom: 10px; color: #475569;">Note: ${payment.notes}</div>` : ''}
+
+        <div class="sig-container">
+          <div class="sig-col">
+            <strong>Pour la Boutique</strong><br>
+            <span style="font-size:9px; color:#64748b;">(Signature & Cachet)</span>
+            <div class="sig-box"></div>
+          </div>
+          <div class="sig-col">
+            <strong>Le Créancier</strong><br>
+            <span style="font-size:9px; color:#64748b;">(Accusé de réception / Signature)</span>
+            <div class="sig-box"></div>
+          </div>
+        </div>
+
+        <div class="footer">
+          Document remis au créancier en preuve de règlement.<br>
+          Merci pour votre partenariat.
+        </div>
+      </body>
+      </html>
+    `;
+
+    const printWin = window.open('', '_blank', 'width=450,height=600');
+    if (printWin) {
+      printWin.document.write(receiptHtml);
+      printWin.document.close();
+      printWin.focus();
+      setTimeout(() => {
+        printWin.print();
+      }, 300);
+    }
+  };
+
   const handlePayCreditSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedCustomerForPay || creditPayAmount <= 0) return;
-    payCustomerCredit(selectedCustomerForPay.id, Number(creditPayAmount), creditPayMethod);
-    setShowPayCreditModal(false);
+    if (!selectedCustomerForPay) return;
+    const amount = Number(creditPayAmount);
+    if (!amount || amount <= 0) {
+      setCreditFeedback({ type: 'error', message: 'Veuillez saisir un montant supérieur à 0.' });
+      return;
+    }
+
+    const res = payCustomerCredit(selectedCustomerForPay.id, amount, creditPayMethod, creditPayNotes.trim() || undefined);
+    if (res.success) {
+      const remaining = Math.max(0, Math.round(((selectedCustomerForPay.creditBalance || 0) - amount) * 100) / 100);
+      setCreditFeedback({
+        type: 'success',
+        message: res.message || 'Paiement validé avec succès !',
+        receipt: res.receipt,
+        customerName: selectedCustomerForPay.name,
+        newBalance: remaining,
+      });
+      setSelectedCustomerForPay(prev => prev ? { ...prev, creditBalance: remaining } : null);
+      setCreditPayAmount(remaining);
+    } else {
+      setCreditFeedback({
+        type: 'error',
+        message: res.message || 'Erreur lors du versement.',
+      });
+    }
   };
 
   // Supplier Handlers
@@ -192,18 +407,41 @@ export const ThirdPartiesView: React.FC<ThirdPartiesViewProps> = ({ initialTab =
 
   const handlePaySupplierSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedSupplierForPay || supplierPayAmount <= 0) return;
-    paySupplierDebt(selectedSupplierForPay.id, Number(supplierPayAmount), supplierPayMethod);
-    setShowPaySupplierDebtModal(false);
+    if (!selectedSupplierForPay) return;
+    const amount = Number(supplierPayAmount);
+    if (!amount || amount <= 0) {
+      setSupplierFeedback({ type: 'error', message: 'Veuillez saisir un montant supérieur à 0.' });
+      return;
+    }
+
+    const currentDebt = selectedSupplierForPay.debtBalance || (selectedSupplierForPay as any).balanceDue || 0;
+    const res = paySupplierDebt(selectedSupplierForPay.id, amount, supplierPayMethod, supplierPayNotes.trim() || undefined);
+    if (res.success) {
+      const remaining = res.remainingBalance !== undefined ? res.remainingBalance : Math.max(0, Math.round((currentDebt - amount) * 100) / 100);
+      setSupplierFeedback({
+        type: 'success',
+        message: res.message || 'Paiement enregistré avec succès !',
+        receipt: res.receipt,
+        supplierName: selectedSupplierForPay.companyName,
+        newBalance: remaining,
+      });
+      setSelectedSupplierForPay(prev => prev ? { ...prev, debtBalance: remaining } : null);
+      setSupplierPayAmount(remaining);
+    } else {
+      setSupplierFeedback({
+        type: 'error',
+        message: res.message || 'Erreur lors du versement fournisseur.',
+      });
+    }
   };
 
   const totalCustomerDebt = useMemo(
-    () => customers.reduce((sum, c) => sum + c.creditBalance, 0),
-    [customers]
+    () => customers.reduce((sum, c) => sum + getCustomerTotalDebt(c), 0),
+    [customers, creditDebtRecords]
   );
   const totalSupplierDebt = useMemo(
-    () => suppliers.reduce((sum, s) => sum + (s.debtBalance || s.balanceDue || 0), 0),
-    [suppliers]
+    () => suppliers.reduce((sum, s) => sum + getSupplierTotalDebt(s), 0),
+    [suppliers, creditDebtRecords]
   );
 
   const isVendeur = currentUser.role === 'VENDEUR';
@@ -330,55 +568,61 @@ export const ThirdPartiesView: React.FC<ThirdPartiesViewProps> = ({ initialTab =
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {filteredCustomers.length > 0 ? (
-                  filteredCustomers.map((cust) => (
-                    <tr key={cust.id} className="hover:bg-slate-50/80 transition-colors">
-                      <td className="p-3.5 font-bold text-slate-900">{cust.name}</td>
-                      <td className="p-3.5 text-slate-600 font-mono text-[11px]">{cust.phone}</td>
-                      <td className="p-3.5 text-slate-500 text-[11px]">
-                        {cust.address || cust.email || '—'}
-                      </td>
-                      <td className="p-3.5 text-center">
-                        <span className="px-2 py-0.5 bg-slate-100 rounded-md font-semibold text-slate-700">
-                          {cust.salesCount ?? cust.totalPurchasesCount ?? 0} achats
-                        </span>
-                      </td>
-                      <td className="p-3.5 text-right">
-                        <span
-                          className={`font-black ${
-                            cust.creditBalance > 0 ? 'text-amber-700' : 'text-slate-400'
-                          }`}
-                        >
-                          {formatMoney(cust.creditBalance, settings.currency)}
-                        </span>
-                      </td>
-                      <td className="p-3.5 text-right text-slate-500">
-                        {formatMoney(cust.creditLimit || 0, settings.currency)}
-                      </td>
-                      <td className="p-3.5 text-right">
-                        <div className="flex items-center justify-end gap-1.5">
-                          {cust.creditBalance > 0 && (
-                            <button
-                              onClick={() => {
-                                setSelectedCustomerForPay(cust);
-                                setCreditPayAmount(cust.creditBalance);
-                                setShowPayCreditModal(true);
-                              }}
-                              className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-[10px] font-bold shadow-xs"
-                              title="Encaisser un remboursement"
-                            >
-                              Encaisser dette
-                            </button>
-                          )}
-                          <button
-                            onClick={() => handleOpenEditCustomer(cust)}
-                            className="p-1.5 text-slate-500 hover:text-indigo-600 hover:bg-slate-100 rounded-lg text-xs"
+                  filteredCustomers.map((cust) => {
+                    const custDebt = getCustomerTotalDebt(cust);
+                    return (
+                      <tr key={cust.id} className="hover:bg-slate-50/80 transition-colors">
+                        <td className="p-3.5 font-bold text-slate-900">{cust.name}</td>
+                        <td className="p-3.5 text-slate-600 font-mono text-[11px]">{cust.phone}</td>
+                        <td className="p-3.5 text-slate-500 text-[11px]">
+                          {cust.address || cust.email || '—'}
+                        </td>
+                        <td className="p-3.5 text-center">
+                          <span className="px-2 py-0.5 bg-slate-100 rounded-md font-semibold text-slate-700">
+                            {cust.salesCount ?? cust.totalPurchasesCount ?? 0} achats
+                          </span>
+                        </td>
+                        <td className="p-3.5 text-right">
+                          <span
+                            className={`font-black ${
+                              custDebt > 0 ? 'text-amber-700 font-bold' : 'text-slate-400'
+                            }`}
                           >
-                            Modifier
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))
+                            {formatMoney(custDebt, settings.currency)}
+                          </span>
+                        </td>
+                        <td className="p-3.5 text-right text-slate-500">
+                          {formatMoney(cust.creditLimit || 0, settings.currency)}
+                        </td>
+                        <td className="p-3.5 text-right">
+                          <div className="flex items-center justify-end gap-1.5">
+                            {custDebt > 0 && (
+                              <button
+                                onClick={() => {
+                                  setSelectedCustomerForPay(cust);
+                                  setCreditPayAmount(custDebt);
+                                  setCreditPayNotes('');
+                                  setCreditFeedback(null);
+                                  setShowPayCreditModal(true);
+                                }}
+                                className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-[10px] font-bold shadow-xs flex items-center gap-1"
+                                title="Encaisser un remboursement de dette"
+                              >
+                                <Banknote className="w-3 h-3" />
+                                Encaisser dette
+                              </button>
+                            )}
+                            <button
+                              onClick={() => handleOpenEditCustomer(cust)}
+                              className="p-1.5 text-slate-500 hover:text-indigo-600 hover:bg-slate-100 rounded-lg text-xs"
+                            >
+                              Modifier
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })
                 ) : (
                   <tr>
                     <td colSpan={7} className="p-8 text-center text-slate-400 text-xs">
@@ -409,50 +653,56 @@ export const ThirdPartiesView: React.FC<ThirdPartiesViewProps> = ({ initialTab =
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {filteredSuppliers.length > 0 ? (
-                  filteredSuppliers.map((sup) => (
-                    <tr key={sup.id} className="hover:bg-slate-50/80 transition-colors">
-                      <td className="p-3.5 font-bold text-slate-900">{sup.companyName}</td>
-                      <td className="p-3.5 text-slate-700 font-medium">{sup.contactName}</td>
-                      <td className="p-3.5 text-slate-600 font-mono text-[11px]">{sup.phone}</td>
-                      <td className="p-3.5 text-slate-500 text-[11px]">
-                        {sup.address || sup.email || '—'}
-                      </td>
-                      <td className="p-3.5 text-right">
-                        <span
-                          className={`font-black ${
-                            (sup.debtBalance || sup.balanceDue || 0) > 0 ? 'text-rose-600' : 'text-slate-400'
-                          }`}
-                        >
-                          {formatMoney(sup.debtBalance ?? sup.balanceDue ?? 0, settings.currency)}
-                        </span>
-                      </td>
-                      <td className="p-3.5 text-right">
-                        <div className="flex items-center justify-end gap-1.5">
-                          {(sup.debtBalance || sup.balanceDue || 0) > 0 && !isVendeur && (
-                            <button
-                              onClick={() => {
-                                setSelectedSupplierForPay(sup);
-                                setSupplierPayAmount(sup.debtBalance ?? sup.balanceDue ?? 0);
-                                setShowPaySupplierDebtModal(true);
-                              }}
-                              className="px-2.5 py-1 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-[10px] font-bold shadow-xs"
-                              title="Payer la dette fournisseur"
-                            >
-                              Régler dette
-                            </button>
-                          )}
-                          {!isVendeur && (
-                            <button
-                              onClick={() => handleOpenEditSupplier(sup)}
-                              className="p-1.5 text-slate-500 hover:text-indigo-600 hover:bg-slate-100 rounded-lg text-xs"
-                            >
-                              Modifier
-                            </button>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  ))
+                  filteredSuppliers.map((sup) => {
+                    const supDebt = getSupplierTotalDebt(sup);
+                    return (
+                      <tr key={sup.id} className="hover:bg-slate-50/80 transition-colors">
+                        <td className="p-3.5 font-bold text-slate-900">{sup.companyName}</td>
+                        <td className="p-3.5 text-slate-700 font-medium">{sup.contactName}</td>
+                        <td className="p-3.5 text-slate-600 font-mono text-[11px]">{sup.phone}</td>
+                        <td className="p-3.5 text-slate-500 text-[11px]">
+                          {sup.address || sup.email || '—'}
+                        </td>
+                        <td className="p-3.5 text-right">
+                          <span
+                            className={`font-black ${
+                              supDebt > 0 ? 'text-rose-600 font-bold' : 'text-slate-400'
+                            }`}
+                          >
+                            {formatMoney(supDebt, settings.currency)}
+                          </span>
+                        </td>
+                        <td className="p-3.5 text-right">
+                          <div className="flex items-center justify-end gap-1.5">
+                            {supDebt > 0 && !isVendeur && (
+                              <button
+                                onClick={() => {
+                                  setSelectedSupplierForPay(sup);
+                                  setSupplierPayAmount(supDebt);
+                                  setSupplierPayNotes('');
+                                  setSupplierFeedback(null);
+                                  setShowPaySupplierDebtModal(true);
+                                }}
+                                className="px-2.5 py-1 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-[10px] font-bold shadow-xs flex items-center gap-1"
+                                title="Payer la dette fournisseur"
+                              >
+                                <Banknote className="w-3 h-3" />
+                                Régler dette
+                              </button>
+                            )}
+                            {!isVendeur && (
+                              <button
+                                onClick={() => handleOpenEditSupplier(sup)}
+                                className="p-1.5 text-slate-500 hover:text-indigo-600 hover:bg-slate-100 rounded-lg text-xs"
+                              >
+                                Modifier
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })
                 ) : (
                   <tr>
                     <td colSpan={6} className="p-8 text-center text-slate-400 text-xs">
@@ -566,74 +816,176 @@ export const ThirdPartiesView: React.FC<ThirdPartiesViewProps> = ({ initialTab =
       {/* PAY CUSTOMER DEBT MODAL */}
       {showPayCreditModal && selectedCustomerForPay && (
         <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <form
-            onSubmit={handlePayCreditSubmit}
-            className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-sm overflow-hidden animate-in fade-in"
-          >
+          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-md overflow-hidden animate-in fade-in">
             <div className="p-4 bg-emerald-700 text-white flex items-center justify-between">
-              <h3 className="font-bold text-sm">Remboursement Dette Client</h3>
+              <h3 className="font-bold text-sm flex items-center gap-2">
+                <Banknote className="w-4 h-4" />
+                Règlement de Dette Client
+              </h3>
               <button
                 type="button"
-                onClick={() => setShowPayCreditModal(false)}
-                className="text-white hover:opacity-80"
+                onClick={() => {
+                  setShowPayCreditModal(false);
+                  setCreditFeedback(null);
+                }}
+                className="text-white/80 hover:text-white"
               >
                 ✕
               </button>
             </div>
 
-            <div className="p-5 space-y-3 text-xs">
-              <div className="p-3 bg-amber-50 rounded-xl border border-amber-200">
-                <p className="text-amber-900 font-bold">{selectedCustomerForPay.name}</p>
-                <p className="text-xs text-amber-800 mt-1">
-                  Dette actuelle : <strong>{formatMoney(selectedCustomerForPay.creditBalance, settings.currency)}</strong>
-                </p>
-              </div>
+            <form onSubmit={handlePayCreditSubmit} className="p-5 space-y-4 text-xs">
+              {/* Customer Debt Card */}
+              {(() => {
+                const currentDebt = getCustomerTotalDebt(selectedCustomerForPay);
+                return (
+                  <div className="p-3 bg-amber-50 rounded-xl border border-amber-200 space-y-1">
+                    <div className="flex justify-between items-center">
+                      <span className="font-bold text-amber-950 text-sm">{selectedCustomerForPay.name}</span>
+                      <span className="text-[11px] font-mono text-amber-800">{selectedCustomerForPay.phone}</span>
+                    </div>
+                    <div className="flex justify-between items-baseline pt-1">
+                      <span className="text-amber-800">Dette totale en cours :</span>
+                      <strong className="text-base font-black text-amber-900">
+                        {formatMoney(currentDebt, settings.currency)}
+                      </strong>
+                    </div>
+                  </div>
+                );
+              })()}
 
+              {/* Feedback messages */}
+              {creditFeedback && (
+                <div
+                  className={`p-3.5 rounded-xl border flex flex-col gap-2 ${
+                    creditFeedback.type === 'success'
+                      ? 'bg-emerald-50 border-emerald-300 text-emerald-900'
+                      : 'bg-rose-50 border-rose-300 text-rose-900'
+                  }`}
+                >
+                  <div className="flex items-center gap-2 font-bold text-xs">
+                    {creditFeedback.type === 'success' ? (
+                      <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                    ) : (
+                      <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                    )}
+                    <span>{creditFeedback.message}</span>
+                  </div>
+
+                  {creditFeedback.type === 'success' && creditFeedback.receipt && (
+                    <div className="pt-2 border-t border-emerald-200 flex items-center justify-between gap-2">
+                      <span className="text-[11px] text-emerald-800">
+                        Nouveau solde : <strong>{formatMoney(creditFeedback.newBalance || 0, settings.currency)}</strong>
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          printCustomerPaymentReceipt(
+                            creditFeedback.receipt!,
+                            creditFeedback.customerName || selectedCustomerForPay.name,
+                            creditFeedback.newBalance || 0
+                          )
+                        }
+                        className="px-3 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white rounded-lg font-bold text-[11px] flex items-center gap-1.5 shadow-xs"
+                      >
+                        <Printer className="w-3.5 h-3.5" />
+                        Imprimer le reçu
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Amount input */}
               <div>
                 <label className="font-semibold text-slate-700 block mb-1">
-                  Montant remboursé ({settings.currency}) *
+                  Montant à encaisser ({settings.currency}) *
                 </label>
                 <input
                   type="number"
                   min="1"
-                  max={selectedCustomerForPay.creditBalance}
+                  step="any"
                   required
-                  value={creditPayAmount}
+                  value={creditPayAmount || ''}
                   onChange={(e) => setCreditPayAmount(parseFloat(e.target.value) || 0)}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm font-bold text-slate-900 focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                  placeholder="Saisissez le montant"
+                  className="w-full px-3 py-2.5 border border-slate-300 rounded-xl text-base font-black text-slate-900 focus:ring-2 focus:ring-emerald-500 focus:outline-none"
                 />
+                {/* Quick select buttons */}
+                {(() => {
+                  const debt = getCustomerTotalDebt(selectedCustomerForPay);
+                  if (debt <= 0) return null;
+                  return (
+                    <div className="flex items-center gap-2 mt-1.5">
+                      <button
+                        type="button"
+                        onClick={() => setCreditPayAmount(debt)}
+                        className="px-2.5 py-1 bg-emerald-100 hover:bg-emerald-200 text-emerald-800 font-bold rounded-lg text-[10px] transition-colors"
+                      >
+                        Tout solder ({formatMoney(debt, '')})
+                      </button>
+                      {debt >= 2000 && (
+                        <button
+                          type="button"
+                          onClick={() => setCreditPayAmount(Math.round(debt / 2))}
+                          className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-lg text-[10px] transition-colors"
+                        >
+                          50% ({formatMoney(Math.round(debt / 2), '')})
+                        </button>
+                      )}
+                    </div>
+                  );
+                })()}
               </div>
 
+              {/* Payment Method */}
               <div>
                 <label className="font-semibold text-slate-700 block mb-1">Mode d'encaissement</label>
                 <select
                   value={creditPayMethod}
                   onChange={(e) => setCreditPayMethod(e.target.value as PaymentMethod)}
-                  className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none"
+                  className="w-full px-3 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:outline-none text-xs font-semibold"
                 >
-                  <option value="ESPECES">Espèces (Entrée en caisse)</option>
-                  <option value="MOBILE_MONEY">Mobile Money</option>
-                  <option value="VIREMENT">Virement</option>
+                  <option value="ESPECES">Espèces (Entrée dans la caisse du jour)</option>
+                  <option value="MOBILE_MONEY">Mobile Money (Wave / Orange Money)</option>
+                  <option value="VIREMENT">Virement bancaire</option>
+                  <option value="CHEQUE">Chèque</option>
                 </select>
               </div>
-            </div>
 
-            <div className="p-4 bg-slate-50 border-t border-slate-200 flex justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => setShowPayCreditModal(false)}
-                className="px-3 py-1.5 text-xs text-slate-600 hover:bg-slate-200 rounded-lg"
-              >
-                Annuler
-              </button>
-              <button
-                type="submit"
-                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold"
-              >
-                Valider l'Encaissement
-              </button>
-            </div>
-          </form>
+              {/* Notes */}
+              <div>
+                <label className="font-semibold text-slate-700 block mb-1">Remarque / Référence (optionnel)</label>
+                <input
+                  type="text"
+                  placeholder="Ex: Acompte sur crédit, N° de reçu papier..."
+                  value={creditPayNotes}
+                  onChange={(e) => setCreditPayNotes(e.target.value)}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                />
+              </div>
+
+              <div className="pt-3 border-t border-slate-200 flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowPayCreditModal(false);
+                    setCreditFeedback(null);
+                  }}
+                  className="px-3 py-2 text-xs text-slate-600 hover:bg-slate-100 rounded-xl"
+                >
+                  {creditFeedback?.type === 'success' ? 'Fermer' : 'Annuler'}
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold shadow-xs flex items-center gap-1.5"
+                >
+                  <Check className="w-4 h-4" />
+                  Valider l'Encaissement
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
       )}
 
@@ -735,28 +1087,87 @@ export const ThirdPartiesView: React.FC<ThirdPartiesViewProps> = ({ initialTab =
       {/* PAY SUPPLIER DEBT MODAL */}
       {showPaySupplierDebtModal && selectedSupplierForPay && (
         <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <form
-            onSubmit={handlePaySupplierSubmit}
-            className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-sm overflow-hidden animate-in fade-in"
-          >
+          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-md overflow-hidden animate-in fade-in">
             <div className="p-4 bg-rose-700 text-white flex items-center justify-between">
-              <h3 className="font-bold text-sm">Règlement Dette Fournisseur</h3>
+              <h3 className="font-bold text-sm flex items-center gap-2">
+                <Banknote className="w-4 h-4" />
+                Règlement Dette Fournisseur
+              </h3>
               <button
                 type="button"
-                onClick={() => setShowPaySupplierDebtModal(false)}
-                className="text-white hover:opacity-80"
+                onClick={() => {
+                  setShowPaySupplierDebtModal(false);
+                  setSupplierFeedback(null);
+                }}
+                className="text-white/80 hover:text-white"
               >
                 ✕
               </button>
             </div>
 
-            <div className="p-5 space-y-3 text-xs">
-              <div className="p-3 bg-rose-50 rounded-xl border border-rose-200">
-                <p className="text-rose-900 font-bold">{selectedSupplierForPay.companyName}</p>
-                <p className="text-xs text-rose-800 mt-1">
-                  Dette due : <strong>{formatMoney(selectedSupplierForPay.balanceDue, settings.currency)}</strong>
-                </p>
-              </div>
+            <form onSubmit={handlePaySupplierSubmit} className="p-5 space-y-4 text-xs">
+              {/* Supplier debt card */}
+              {(() => {
+                const currentDebt = getSupplierTotalDebt(selectedSupplierForPay);
+                return (
+                  <div className="p-3 bg-rose-50 rounded-xl border border-rose-200 space-y-1">
+                    <div className="flex justify-between items-center">
+                      <span className="font-bold text-rose-950 text-sm">{selectedSupplierForPay.companyName}</span>
+                      <span className="text-[11px] font-mono text-rose-800">{selectedSupplierForPay.phone}</span>
+                    </div>
+                    <div className="flex justify-between items-baseline pt-1">
+                      <span className="text-rose-800">Dette totale due :</span>
+                      <strong className="text-base font-black text-rose-900">
+                        {formatMoney(currentDebt, settings.currency)}
+                      </strong>
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* Feedback messages */}
+              {supplierFeedback && (
+                <div
+                  className={`p-3.5 rounded-xl border flex flex-col gap-2 ${
+                    supplierFeedback.type === 'success'
+                      ? 'bg-emerald-50 border-emerald-300 text-emerald-900'
+                      : 'bg-rose-50 border-rose-300 text-rose-900'
+                  }`}
+                >
+                  <div className="flex items-center gap-2 font-bold text-xs">
+                    {supplierFeedback.type === 'success' ? (
+                      <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                    ) : (
+                      <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                    )}
+                    <span>{supplierFeedback.message}</span>
+                  </div>
+
+                  {supplierFeedback.type === 'success' && (
+                    <div className="pt-2 border-t border-emerald-200 flex items-center justify-between gap-2 flex-wrap">
+                      <span className="text-[11px] text-emerald-800">
+                        Reste dû : <strong>{formatMoney(supplierFeedback.newBalance || 0, settings.currency)}</strong>
+                      </span>
+                      {supplierFeedback.receipt && (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            printSupplierPaymentReceipt(
+                              supplierFeedback.receipt!,
+                              supplierFeedback.supplierName || selectedSupplierForPay.companyName,
+                              supplierFeedback.newBalance || 0
+                            )
+                          }
+                          className="px-3 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white rounded-lg font-bold text-[11px] flex items-center gap-1.5 shadow-xs cursor-pointer transition-colors"
+                        >
+                          <Printer className="w-3.5 h-3.5" />
+                          Imprimer le reçu pour le créancier
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
 
               <div>
                 <label className="font-semibold text-slate-700 block mb-1">
@@ -765,12 +1176,38 @@ export const ThirdPartiesView: React.FC<ThirdPartiesViewProps> = ({ initialTab =
                 <input
                   type="number"
                   min="1"
-                  max={selectedSupplierForPay.balanceDue}
+                  step="any"
                   required
-                  value={supplierPayAmount}
+                  value={supplierPayAmount || ''}
                   onChange={(e) => setSupplierPayAmount(parseFloat(e.target.value) || 0)}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm font-bold text-slate-900 focus:ring-2 focus:ring-rose-500 focus:outline-none"
+                  placeholder="Saisissez le montant"
+                  className="w-full px-3 py-2.5 border border-slate-300 rounded-xl text-base font-black text-slate-900 focus:ring-2 focus:ring-rose-500 focus:outline-none"
                 />
+                {/* Quick select buttons */}
+                {(() => {
+                  const debt = getSupplierTotalDebt(selectedSupplierForPay);
+                  if (debt <= 0) return null;
+                  return (
+                    <div className="flex items-center gap-2 mt-1.5">
+                      <button
+                        type="button"
+                        onClick={() => setSupplierPayAmount(debt)}
+                        className="px-2.5 py-1 bg-rose-100 hover:bg-rose-200 text-rose-800 font-bold rounded-lg text-[10px] transition-colors"
+                      >
+                        Tout régler ({formatMoney(debt, '')})
+                      </button>
+                      {debt >= 2000 && (
+                        <button
+                          type="button"
+                          onClick={() => setSupplierPayAmount(Math.round(debt / 2))}
+                          className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-lg text-[10px] transition-colors"
+                        >
+                          50% ({formatMoney(Math.round(debt / 2), '')})
+                        </button>
+                      )}
+                    </div>
+                  );
+                })()}
               </div>
 
               <div>
@@ -778,31 +1215,47 @@ export const ThirdPartiesView: React.FC<ThirdPartiesViewProps> = ({ initialTab =
                 <select
                   value={supplierPayMethod}
                   onChange={(e) => setSupplierPayMethod(e.target.value as PaymentMethod)}
-                  className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none"
+                  className="w-full px-3 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-rose-500 focus:outline-none text-xs font-semibold"
                 >
+                  <option value="ESPECES">Espèces (Sortie de caisse du jour)</option>
                   <option value="VIREMENT">Virement Bancaire</option>
-                  <option value="ESPECES">Espèces (Sortie de caisse)</option>
                   <option value="MOBILE_MONEY">Mobile Money</option>
+                  <option value="CHEQUE">Chèque</option>
                 </select>
               </div>
-            </div>
 
-            <div className="p-4 bg-slate-50 border-t border-slate-200 flex justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => setShowPaySupplierDebtModal(false)}
-                className="px-3 py-1.5 text-xs text-slate-600 hover:bg-slate-200 rounded-lg"
-              >
-                Annuler
-              </button>
-              <button
-                type="submit"
-                className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold"
-              >
-                Confirmer le Paiement
-              </button>
-            </div>
-          </form>
+              <div>
+                <label className="font-semibold text-slate-700 block mb-1">Remarque / Référence facture (optionnel)</label>
+                <input
+                  type="text"
+                  placeholder="Ex: N° Chèque, Référence virement, N° Facture..."
+                  value={supplierPayNotes}
+                  onChange={(e) => setSupplierPayNotes(e.target.value)}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs focus:ring-2 focus:ring-rose-500 focus:outline-none"
+                />
+              </div>
+
+              <div className="pt-3 border-t border-slate-200 flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowPaySupplierDebtModal(false);
+                    setSupplierFeedback(null);
+                  }}
+                  className="px-3 py-2 text-xs text-slate-600 hover:bg-slate-100 rounded-xl"
+                >
+                  {supplierFeedback?.type === 'success' ? 'Fermer' : 'Annuler'}
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold shadow-xs flex items-center gap-1.5"
+                >
+                  <Check className="w-4 h-4" />
+                  Confirmer le Règlement
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
       )}
     </div>
