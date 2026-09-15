@@ -804,13 +804,13 @@ export const POSView: React.FC<POSViewProps> = ({ onNavigate }) => {
                   if (e.key === 'Enter') {
                     e.preventDefault();
                     if (autocompleteSuggestions.length > 0) {
-                      addToCart(autocompleteSuggestions[0], qtyToAdd);
+                      addToCart(autocompleteSuggestions[0], 1);
                       setShowSearchSuggestions(false);
                       setSearchTerm('');
                     }
                   }
                 }}
-                className="w-full pl-9 pr-8 py-2.5 bg-white border border-slate-300 rounded-xl text-xs font-semibold text-slate-900 placeholder:text-slate-400 placeholder:font-normal focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 focus:outline-none shadow-2xs"
+                className="w-full pl-9 pr-8 py-2.5 bg-white border border-slate-300 rounded-xl text-sm font-semibold text-slate-900 placeholder:text-slate-400 placeholder:font-normal focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 focus:outline-none shadow-2xs"
               />
               {searchTerm && (
                 <button
@@ -828,7 +828,7 @@ export const POSView: React.FC<POSViewProps> = ({ onNavigate }) => {
                 <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-xl z-30 max-h-72 overflow-y-auto divide-y divide-slate-100 animate-in fade-in">
                   <div className="p-2 bg-slate-50 text-[11px] font-bold text-slate-500 flex items-center justify-between">
                     <span>Résultats rapides ({autocompleteSuggestions.length})</span>
-                    <span className="text-[10px] text-slate-400 font-normal">Appuyez sur Entrée ou cliquez pour ajouter ({qtyToAdd})</span>
+                    <span className="text-[10px] text-slate-400 font-normal">Appuyez sur Entrée ou cliquez pour ajouter</span>
                   </div>
                   {autocompleteSuggestions.map((prod) => {
                     const isOutOfStock = prod.currentStock <= 0;
@@ -839,7 +839,7 @@ export const POSView: React.FC<POSViewProps> = ({ onNavigate }) => {
                       <div
                         key={prod.id}
                         onClick={() => {
-                          addToCart(prod, qtyToAdd);
+                          addToCart(prod, 1);
                           setShowSearchSuggestions(false);
                           setSearchTerm('');
                         }}
@@ -871,7 +871,7 @@ export const POSView: React.FC<POSViewProps> = ({ onNavigate }) => {
                             disabled={isOutOfStock && !settings.allowNegativeStock}
                             className="px-2.5 py-1 bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-200 text-white rounded-lg text-xs font-bold shadow-xs cursor-pointer"
                           >
-                            {inCart ? `+${qtyToAdd} (${inCart.quantity})` : `+ Sélectionner (${qtyToAdd})`}
+                            {inCart ? `+1 (${inCart.quantity})` : '+ Sélectionner'}
                           </button>
                         </div>
                       </div>
@@ -879,60 +879,6 @@ export const POSView: React.FC<POSViewProps> = ({ onNavigate }) => {
                   })}
                 </div>
               )}
-            </div>
-
-            {/* Saisie de la Quantité à ajouter */}
-            <div
-              className="flex items-center gap-1 bg-white border border-indigo-200 rounded-xl p-1 shadow-2xs shrink-0"
-              title="Saisir la quantité à ajouter lors de la sélection ou du scan d'un article"
-            >
-              <span className="text-[11px] font-black text-indigo-950 pl-1.5 hidden sm:inline">
-                Qté à ajouter :
-              </span>
-              <button
-                type="button"
-                onClick={() => setQtyToAdd((prev) => Math.max(1, prev - 1))}
-                className="w-6 h-6 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-black text-xs flex items-center justify-center transition-colors cursor-pointer"
-                title="Diminuer la quantité à ajouter (-1)"
-              >
-                <Minus className="w-3 h-3" />
-              </button>
-              <input
-                type="number"
-                min="1"
-                step="1"
-                value={qtyToAdd}
-                onChange={(e) => {
-                  const val = parseInt(e.target.value, 10);
-                  setQtyToAdd(isNaN(val) || val < 1 ? 1 : val);
-                }}
-                className="w-12 text-center py-0.5 text-xs font-black text-indigo-900 bg-indigo-50/50 border border-indigo-300 rounded-md focus:ring-2 focus:ring-indigo-500 focus:outline-none"
-                title="Saisir le nombre d'articles à ajouter"
-              />
-              <button
-                type="button"
-                onClick={() => setQtyToAdd((prev) => prev + 1)}
-                className="w-6 h-6 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-black text-xs flex items-center justify-center transition-colors cursor-pointer"
-                title="Augmenter la quantité à ajouter (+1)"
-              >
-                <Plus className="w-3 h-3" />
-              </button>
-              <div className="hidden xl:flex items-center gap-1 pl-1 border-l border-slate-200">
-                {[1, 2, 5, 10, 20].map((preset) => (
-                  <button
-                    key={preset}
-                    type="button"
-                    onClick={() => setQtyToAdd(preset)}
-                    className={`px-1.5 py-0.5 text-[10px] font-bold rounded cursor-pointer transition-colors ${
-                      qtyToAdd === preset
-                        ? 'bg-indigo-600 text-white shadow-2xs'
-                        : 'bg-slate-50 text-slate-600 hover:bg-indigo-50 hover:text-indigo-700'
-                    }`}
-                  >
-                    {preset}
-                  </button>
-                ))}
-              </div>
             </div>
 
             {/* Multi-Selection & Quick Add Buttons */}
