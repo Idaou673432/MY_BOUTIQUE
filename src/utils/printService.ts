@@ -1,4 +1,4 @@
-import { Sale, StoreSettings, Customer } from '../types';
+import { Sale, StoreSettings, Customer, CreditDebtRecord, CreditPayment, PaymentMethod } from '../types';
 import { STORE_LOGO_BASE64 } from '../assets/logoBase64';
 import {
   formatMoney,
@@ -129,9 +129,9 @@ export const generateThermalReceiptHtml = (
   const nif = settings.nifRccm || '';
   const mobileMoney = settings.mobileMoneyNumber || '';
 
-  const fontSize = is58 ? '12px' : '14px';
-  const headerFontSize = is58 ? '18px' : '22px';
-  const maxContentWidth = is58 ? '48mm' : '72mm';
+  const fontSize = is58 ? '11px' : '12.5px';
+  const headerFontSize = is58 ? '16px' : '19px';
+  const maxContentWidth = is58 ? '44mm' : '64mm';
 
   return `
 <!DOCTYPE html>
@@ -149,22 +149,20 @@ export const generateThermalReceiptHtml = (
       box-sizing: border-box;
       margin: 0;
       padding: 0;
-      font-weight: 900 !important;
-      color: #000000 !important;
-      -webkit-text-stroke: 0.35px #000000;
-      text-shadow: 0 0 0.3px #000000;
+      -webkit-print-color-adjust: exact !important;
+      print-color-adjust: exact !important;
     }
     body {
-      font-family: 'Courier New', Courier, monospace, -apple-system, BlinkMacSystemFont, Arial, sans-serif;
+      font-family: Arial, Helvetica, "Segoe UI", Roboto, -apple-system, sans-serif;
       font-size: ${fontSize};
-      font-weight: 900 !important;
-      line-height: 1.15;
+      font-weight: 600;
+      line-height: 1.35;
       color: #000000 !important;
       background: #ffffff !important;
-      padding: ${is58 ? '1.5mm' : '3mm'};
+      padding: ${is58 ? "1.5mm 2mm 1.5mm 1mm" : "2mm 4mm 2mm 1.5mm"};
       width: ${widthMm}mm;
       max-width: ${widthMm}mm;
-      margin: 0 auto;
+      margin: 0;
       -webkit-print-color-adjust: exact !important;
       print-color-adjust: exact !important;
       -webkit-font-smoothing: antialiased;
@@ -172,19 +170,22 @@ export const generateThermalReceiptHtml = (
     .ticket-container {
       width: 100%;
       max-width: ${maxContentWidth};
-      margin: 0 auto;
+      margin-left: 0.5mm;
+      margin-right: auto;
+      padding-right: 2.5mm;
     }
     .center { text-align: center; }
     .right { text-align: right; }
     .left { text-align: left; }
-    .bold { font-weight: 900 !important; }
+    .bold { font-weight: 800 !important; }
+    .bolder { font-weight: 900 !important; }
     .uppercase { text-transform: uppercase; }
     .divider {
-      border-top: 2px solid #000000;
+      border-top: 1.5px dashed #000000;
       margin: 3px 0;
     }
     .double-divider {
-      border-top: 3px double #000000;
+      border-top: 2.5px double #000000;
       margin: 4px 0;
     }
     .store-header-box {
@@ -194,9 +195,9 @@ export const generateThermalReceiptHtml = (
     }
     .receipt-logo {
       display: block;
-      margin: 0 auto 8px auto;
-      max-height: ${is58 ? '95px' : '125px'};
-      max-width: ${is58 ? '200px' : '270px'};
+      margin: 0 auto 6px auto;
+      max-height: ${is58 ? '80px' : '105px'};
+      max-width: ${is58 ? '180px' : '240px'};
       width: auto;
       object-fit: contain;
       filter: grayscale(100%) contrast(350%) brightness(55%);
@@ -208,23 +209,23 @@ export const generateThermalReceiptHtml = (
     .store-name {
       font-size: ${headerFontSize};
       font-weight: 900 !important;
-      letter-spacing: 0.5px;
+      letter-spacing: 0.3px;
       margin-bottom: 1px;
-      line-height: 1.05;
+      line-height: 1.1;
       text-transform: uppercase;
       color: #000000 !important;
     }
     .store-sub {
-      font-size: ${is58 ? '11px' : '13px'};
-      font-weight: 900 !important;
+      font-size: ${is58 ? '10px' : '11.5px'};
+      font-weight: 700 !important;
       margin-bottom: 1px;
-      line-height: 1.12;
+      line-height: 1.15;
       color: #000000 !important;
       text-transform: uppercase;
     }
     .store-info-line {
-      font-size: ${is58 ? '11px' : '13px'};
-      font-weight: 900 !important;
+      font-size: ${is58 ? '10px' : '11.5px'};
+      font-weight: 700 !important;
       margin-bottom: 1px;
       line-height: 1.15;
       color: #000000 !important;
@@ -232,11 +233,21 @@ export const generateThermalReceiptHtml = (
     .meta-row {
       display: flex;
       justify-content: space-between;
-      margin-bottom: 1px;
+      align-items: baseline;
+      margin-bottom: 2px;
       font-size: ${fontSize};
-      font-weight: 900 !important;
-      line-height: 1.15;
+      font-weight: 700 !important;
+      line-height: 1.25;
       color: #000000 !important;
+    }
+    .meta-row span:first-child {
+      flex-shrink: 0;
+    }
+    .meta-row span:last-child {
+      text-align: right;
+      padding-right: 2px;
+      word-break: break-word;
+      max-width: 65%;
     }
     .item-table {
       width: 100%;
@@ -246,48 +257,56 @@ export const generateThermalReceiptHtml = (
     .item-table th {
       border-bottom: 2px solid #000000;
       border-top: 2px solid #000000;
-      padding: 2px 0;
-      font-size: ${is58 ? '11px' : '13px'};
-      font-weight: 900 !important;
-      line-height: 1.15;
+      padding: 3px 1px;
+      font-size: ${is58 ? '10px' : '11.5px'};
+      font-weight: 800 !important;
+      line-height: 1.2;
       text-transform: uppercase;
       color: #000000 !important;
     }
     .item-table td {
-      padding: 2px 0;
+      padding: 3px 1px;
       vertical-align: top;
       font-size: ${fontSize};
-      font-weight: 900 !important;
-      line-height: 1.15;
+      font-weight: 600 !important;
+      line-height: 1.25;
       border-bottom: 1px dashed #000000;
       color: #000000 !important;
+    }
+    .item-table th:last-child,
+    .item-table td:last-child {
+      padding-right: 2.5px !important;
     }
     .total-row {
       display: flex;
       justify-content: space-between;
-      font-size: ${is58 ? '15px' : '18px'};
+      align-items: baseline;
+      font-size: ${is58 ? '14px' : '17px'};
       font-weight: 900 !important;
       margin: 3px 0;
       padding: 2px 0;
       line-height: 1.15;
       color: #000000 !important;
     }
+    .total-row span:last-child {
+      padding-right: 2.5px;
+    }
     .barcode {
       text-align: center;
       margin: 4px 0 1px 0;
       font-family: monospace;
-      letter-spacing: 3px;
-      font-size: 13px;
-      font-weight: 900 !important;
+      letter-spacing: 2px;
+      font-size: 12px;
+      font-weight: 700 !important;
       line-height: 1.1;
       color: #000000 !important;
     }
     .footer-msg {
       text-align: center;
-      font-size: ${is58 ? '10px' : '12px'};
-      font-weight: 900 !important;
+      font-size: ${is58 ? '10px' : '11.5px'};
+      font-weight: 700 !important;
       margin-top: 4px;
-      line-height: 1.18;
+      line-height: 1.2;
       color: #000000 !important;
     }
     .no-print-toolbar {
@@ -300,23 +319,23 @@ export const generateThermalReceiptHtml = (
       margin-bottom: 8px;
     }
     .btn-print {
-      background: #4f46e5 !important;
+      background: #000000 !important;
       color: white !important;
       border: none;
       padding: 8px 16px;
       font-weight: 900;
-      border-radius: 6px;
+      border-radius: 4px;
       cursor: pointer;
-      font-size: 13px;
+      font-size: 12px;
     }
     .btn-close {
       background: #64748b !important;
       color: white !important;
       border: none;
       padding: 8px 14px;
-      border-radius: 6px;
+      border-radius: 4px;
       cursor: pointer;
-      font-size: 13px;
+      font-size: 12px;
     }
     @media print {
       .no-print-toolbar {
@@ -324,13 +343,16 @@ export const generateThermalReceiptHtml = (
       }
       body {
         padding: 0 !important;
+        margin: 0 !important;
+        width: ${widthMm}mm !important;
         color: #000000 !important;
       }
-      * {
-        color: #000000 !important;
-        font-weight: 900 !important;
-        -webkit-print-color-adjust: exact !important;
-        print-color-adjust: exact !important;
+      .ticket-container {
+        width: 100% !important;
+        max-width: ${maxContentWidth} !important;
+        margin-left: 0.5mm !important;
+        margin-right: auto !important;
+        padding-right: 2.5mm !important;
       }
       .receipt-logo {
         filter: grayscale(100%) contrast(400%) brightness(40%) !important;
@@ -340,7 +362,6 @@ export const generateThermalReceiptHtml = (
         image-rendering: crisp-edges !important;
       }
       .store-header-box * {
-        font-weight: 900 !important;
         color: #000000 !important;
       }
     }
@@ -348,23 +369,23 @@ export const generateThermalReceiptHtml = (
 </head>
 <body>
   <div class="no-print-toolbar">
-    <button class="btn-print" onclick="window.print()">🖨️ IMPRIMER CE TICKET (TEXTE GRAS)</button>
+    <button class="btn-print" onclick="window.print()">🖨️ IMPRIMER CE TICKET</button>
     <button class="btn-close" onclick="window.close()">✕ Fermer</button>
   </div>
 
   <div class="ticket-container">
-    <!-- Store Header (ALL IN BOLD AND CLEARLY VISIBLE) -->
+    <!-- Store Header -->
     <div class="store-header-box center">
       <div style="text-align: center; margin: 0 auto 4px auto;">
         <img class="receipt-logo" src="${settings.logoUrl || STORE_LOGO_BASE64}" alt="${storeName}" />
       </div>
       <div class="store-name bold">${storeName}</div>
-      ${storeTagline ? `<div class="store-sub bold uppercase">${storeTagline}</div>` : ''}
-      ${address ? `<div class="store-info-line bold uppercase">ADRESSE: ${address}</div>` : ''}
-      ${phone ? `<div class="store-info-line bold">TÉL: ${phone}</div>` : ''}
-      ${email ? `<div class="store-info-line bold">EMAIL: ${email}</div>` : ''}
-      ${nif ? `<div class="store-info-line bold uppercase">NIF / RCCM: ${nif}</div>` : ''}
-      ${mobileMoney ? `<div class="store-info-line bold uppercase">PAIEMENT MOBILE: ${mobileMoney}</div>` : ''}
+      ${storeTagline ? `<div class="store-sub uppercase">${storeTagline}</div>` : ''}
+      ${address ? `<div class="store-info-line uppercase">ADRESSE: ${address}</div>` : ''}
+      ${phone ? `<div class="store-info-line">TÉL: ${phone}</div>` : ''}
+      ${email ? `<div class="store-info-line">EMAIL: ${email}</div>` : ''}
+      ${nif ? `<div class="store-info-line uppercase">NIF / RCCM: ${nif}</div>` : ''}
+      ${mobileMoney ? `<div class="store-info-line uppercase">PAIEMENT MOBILE: ${mobileMoney}</div>` : ''}
     </div>
 
     <div class="divider"></div>
@@ -372,20 +393,20 @@ export const generateThermalReceiptHtml = (
     <!-- Metadata -->
     <div>
       <div class="meta-row">
-        <span class="bold">TICKET N°:</span>
+        <span>TICKET N°:</span>
         <span class="bold">${sale.invoiceNumber}</span>
       </div>
       <div class="meta-row">
-        <span class="bold">DATE:</span>
+        <span>DATE:</span>
         <span class="bold">${formatDateTime(sale.date)}</span>
       </div>
       <div class="meta-row">
-        <span class="bold">CAISSIER:</span>
+        <span>CAISSIER:</span>
         <span class="bold">${sale.userName || 'Caisse 1'}</span>
       </div>
       ${sale.customerName ? `
       <div class="meta-row">
-        <span class="bold">CLIENT:</span>
+        <span>CLIENT:</span>
         <span class="bold uppercase">${sale.customerName}</span>
       </div>
       ` : ''}
@@ -397,18 +418,18 @@ export const generateThermalReceiptHtml = (
     <table class="item-table">
       <thead>
         <tr>
-          <th class="left bold">Article</th>
-          <th class="center bold">Qté</th>
-          <th class="right bold">P.U</th>
-          <th class="right bold">Total</th>
+          <th class="left bold" style="width: 40%;">Article</th>
+          <th class="center bold" style="width: 14%;">Qté</th>
+          <th class="right bold" style="width: 23%;">P.U</th>
+          <th class="right bold" style="width: 23%;">Total</th>
         </tr>
       </thead>
       <tbody>
         ${sale.items.map((item) => `
         <tr>
-          <td class="left bold" style="max-width: ${is58 ? '24mm' : '36mm'}; word-break: break-word;">
-            <div class="bold">${item.productName}</div>
-            ${item.discountPercent > 0 ? `<div style="font-size: ${is58 ? '9px' : '10px'};" class="bold">Remise -${item.discountPercent}%</div>` : ''}
+          <td class="left bold" style="word-break: break-word;">
+            <div>${item.productName}</div>
+            ${item.discountPercent > 0 ? `<div style="font-size: ${is58 ? '9.5px' : '10.5px'}; font-weight:700;">Remise -${item.discountPercent}%</div>` : ''}
           </td>
           <td class="center bold">${formatQuantity(item.quantity)}</td>
           <td class="right bold">${formatMoney(item.unitPrice, '')}</td>
@@ -421,51 +442,51 @@ export const generateThermalReceiptHtml = (
     <!-- Totals -->
     <div>
       <div class="meta-row">
-        <span class="bold">SOUS-TOTAL:</span>
+        <span>SOUS-TOTAL:</span>
         <span class="bold">${formatMoney(sale.subtotal, currency)}</span>
       </div>
       ${sale.discountTotal > 0 ? `
       <div class="meta-row">
-        <span class="bold">REMISE:</span>
+        <span>REMISE:</span>
         <span class="bold">-${formatMoney(sale.discountTotal, currency)}</span>
       </div>
       ` : ''}
       ${settings.taxEnabled && sale.taxAmount > 0 ? `
       <div class="meta-row">
-        <span class="bold">TVA (${settings.taxRatePercent}%):</span>
+        <span>TVA (${settings.taxRatePercent}%):</span>
         <span class="bold">${formatMoney(sale.taxAmount, currency)}</span>
       </div>
       ` : ''}
       
       <div class="double-divider"></div>
       <div class="total-row">
-        <span class="bold uppercase">NET À PAYER:</span>
-        <span class="bold">${formatMoney(sale.totalAmount, currency)}</span>
+        <span class="bolder uppercase">NET À PAYER:</span>
+        <span class="bolder">${formatMoney(sale.totalAmount, currency)}</span>
       </div>
       <div class="double-divider"></div>
     </div>
 
     <!-- Payment info -->
-    <div style="font-size: ${is58 ? '10px' : '11.5px'}; margin-top: 4px;">
+    <div style="font-size: ${is58 ? '10.5px' : '11.5px'}; margin-top: 4px;">
       <div class="meta-row">
-        <span class="bold">PAIEMENT:</span>
+        <span>PAIEMENT:</span>
         <span class="bold uppercase">${getPaymentMethodLabel(sale.paymentMethod)}</span>
       </div>
       ${sale.amountReceived > 0 ? `
       <div class="meta-row">
-        <span class="bold">MONTANT REÇU:</span>
+        <span>MONTANT REÇU:</span>
         <span class="bold">${formatMoney(sale.amountReceived, currency)}</span>
       </div>
       ` : ''}
       ${sale.remainingDue && sale.remainingDue > 0 ? `
-      <div class="meta-row" style="color: #b91c1c; font-weight: 900; border-top: 1px dashed #000; padding-top: 2px;">
-        <span class="bold">RESTE EN DETTE:</span>
+      <div class="meta-row" style="color: #000000; font-weight: 800; border-top: 1px dashed #000; padding-top: 2px;">
+        <span>RESTE EN DETTE:</span>
         <span class="bold font-mono">${formatMoney(sale.remainingDue, currency)}</span>
       </div>
       ` : ''}
       ${sale.changeGiven > 0 ? `
       <div class="meta-row">
-        <span class="bold">MONNAIE RENDUE:</span>
+        <span>MONNAIE RENDUE:</span>
         <span class="bold">${formatMoney(sale.changeGiven, currency)}</span>
       </div>
       ` : ''}
@@ -474,14 +495,365 @@ export const generateThermalReceiptHtml = (
     <div class="divider"></div>
 
     <!-- Barcode simulation -->
-    <div class="barcode bold">
+    <div class="barcode">
       ||||| ||| |||| || |||||| | |||
-      <div style="font-size: 10px; font-weight: 900; letter-spacing: 0;">${sale.invoiceNumber}</div>
+      <div style="font-size: 10px; font-weight: 700; letter-spacing: 0;">${sale.invoiceNumber}</div>
     </div>
 
     <!-- Footer message -->
-    <div class="footer-msg bold">
-      <div class="bold">${sanitizeReceiptFooter(settings.receiptFooterMessage)}</div>
+    <div class="footer-msg">
+      <div>${sanitizeReceiptFooter(settings.receiptFooterMessage)}</div>
+    </div>
+  </div>
+
+  <script>
+    window.addEventListener('load', function() {
+      setTimeout(function() {
+        try {
+          window.print();
+        } catch(e) {}
+      }, 300);
+    });
+  </script>
+</body>
+</html>
+  `;
+};
+
+export const generateCreditDebtThermalTicketHtml = (
+  record: CreditDebtRecord,
+  settings: StoreSettings,
+  widthMm: 80 | 58 = 80
+): string => {
+  const is58 = widthMm === 58;
+  const currency = settings.currency || 'FCFA';
+  const storeName = (settings.storeName || settings.shopName || 'BOUTIQUE MALI').toUpperCase();
+  const address = settings.address || settings.shopAddress || '';
+  const phone = settings.phone || settings.shopPhone || '';
+  const email = settings.email || settings.shopEmail || '';
+  const nif = settings.nifRccm || '';
+
+  const fontSize = is58 ? '11px' : '13px';
+  const headerFontSize = is58 ? '16px' : '19px';
+  const maxContentWidth = is58 ? '44mm' : '64mm';
+
+  const isClientCredit = record.type === 'CLIENT_CREDIT';
+  const title = isClientCredit
+    ? 'REÇU DE CRÉANCE CLIENT'
+    : 'RECONNAISSANCE DE DETTE';
+  const subtitle = isClientCredit
+    ? 'ENGAGEMENT DE PAIEMENT DU CLIENT'
+    : 'BON D\'ENGAGEMENT FOURNISSEUR';
+
+  const creditor = isClientCredit ? storeName : record.partyName;
+  const creditorPhone = isClientCredit ? phone : (record.partyPhone || '—');
+  const debtor = isClientCredit ? record.partyName : storeName;
+  const debtorPhone = isClientCredit ? (record.partyPhone || '—') : phone;
+  const isSettled = record.status === 'SOLDE' || record.remainingAmount <= 0.001;
+
+  return `
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Ticket_Solde_${record.id.slice(-6).toUpperCase()}</title>
+  <style>
+    @page {
+      margin: 0;
+      size: ${widthMm}mm auto;
+    }
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      -webkit-print-color-adjust: exact !important;
+      print-color-adjust: exact !important;
+    }
+    body {
+      font-family: Arial, Helvetica, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      font-size: ${fontSize};
+      font-weight: 600;
+      line-height: 1.35;
+      color: #000000 !important;
+      background: #ffffff !important;
+      padding: ${is58 ? "1.5mm" : "3mm"};
+      width: ${widthMm}mm;
+      max-width: ${widthMm}mm;
+      margin: 0 auto;
+      -webkit-print-color-adjust: exact !important;
+      print-color-adjust: exact !important;
+      -webkit-font-smoothing: antialiased;
+    }
+    .ticket-container {
+      width: 100%;
+      max-width: ${maxContentWidth};
+      margin-left: 0.5mm;
+      margin-right: auto;
+      padding-right: 2.5mm;
+    }
+    .center { text-align: center; }
+    .right { text-align: right; }
+    .left { text-align: left; }
+    .bold { font-weight: 900 !important; }
+    .uppercase { text-transform: uppercase; }
+    .divider {
+      border-top: 1.5px dashed #000000;
+      margin: 4px 0;
+    }
+    .solid-divider {
+      border-top: 2px solid #000000;
+      margin: 4px 0;
+    }
+    .double-divider {
+      border-top: 3px double #000000;
+      margin: 5px 0;
+    }
+    .store-name {
+      font-size: ${headerFontSize};
+      font-weight: 900 !important;
+      text-transform: uppercase;
+      line-height: 1.1;
+      margin-bottom: 2px;
+    }
+    .doc-title {
+      font-size: ${is58 ? '13px' : '15px'};
+      font-weight: 900 !important;
+      text-transform: uppercase;
+      margin-top: 3px;
+      border: 1.5px solid #000000;
+      padding: 3px 2px;
+      text-align: center;
+    }
+    .doc-subtitle {
+      font-size: ${is58 ? '10px' : '11.5px'};
+      text-align: center;
+      margin: 2px 0 4px;
+    }
+    .row {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 2px;
+      font-size: ${fontSize};
+      line-height: 1.2;
+    }
+    .total-box {
+      border: 2px solid #000000;
+      padding: 5px 4px;
+      margin: 6px 0;
+      background: #ffffff;
+    }
+    .big-balance {
+      font-size: ${is58 ? '14px' : '16px'};
+      font-weight: 900 !important;
+      text-align: center;
+      padding: 4px 0 2px;
+      border-top: 1.5px dashed #000000;
+      margin-top: 4px;
+    }
+    .payment-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: ${is58 ? '10.5px' : '12px'};
+      margin: 4px 0;
+    }
+    .payment-table th, .payment-table td {
+      border-bottom: 1px dashed #000000;
+      padding: 2px 1px;
+    }
+    .signatures {
+      display: flex;
+      justify-content: space-between;
+      margin-top: 10px;
+      padding-top: 4px;
+      border-top: 1px dashed #000000;
+    }
+    .sig-col {
+      width: 48%;
+      text-align: center;
+      font-size: ${is58 ? '10px' : '11.5px'};
+    }
+    .sig-space {
+      height: 38px;
+    }
+    .no-print-toolbar {
+      display: flex;
+      gap: 6px;
+      margin-bottom: 8px;
+    }
+    .btn-print {
+      flex: 1;
+      background: #000000;
+      color: #ffffff !important;
+      border: none;
+      padding: 8px;
+      font-size: 11px;
+      font-weight: 900;
+      cursor: pointer;
+      border-radius: 4px;
+    }
+    .btn-close {
+      background: #e2e8f0;
+      color: #000000 !important;
+      border: none;
+      padding: 8px 12px;
+      font-size: 11px;
+      font-weight: 900;
+      cursor: pointer;
+      border-radius: 4px;
+    }
+    @media print {
+      .no-print-toolbar { display: none !important; }
+      body {
+        padding: 0 !important;
+        margin: 0 !important;
+        width: ${widthMm}mm !important;
+      }
+      .ticket-container {
+        width: 100% !important;
+        max-width: ${maxContentWidth} !important;
+        margin-left: 0.5mm !important;
+        margin-right: auto !important;
+        padding-right: 2.5mm !important;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="no-print-toolbar">
+    <button class="btn-print" onclick="window.print()">🖨️ IMPRIMER CE TICKET 80mm</button>
+    <button class="btn-close" onclick="window.close()">✕ Fermer</button>
+  </div>
+
+  <div class="ticket-container">
+    <div class="center">
+      <div class="store-name">${storeName}</div>
+      ${address ? `<div>${address}</div>` : ''}
+      ${phone ? `<div>TÉL: ${phone}</div>` : ''}
+      ${email ? `<div>EMAIL: ${email}</div>` : ''}
+      ${nif ? `<div>NIF/RCCM: ${nif}</div>` : ''}
+    </div>
+
+    <div class="doc-title">${title}</div>
+    <div class="doc-subtitle">${subtitle}</div>
+
+    <div class="solid-divider"></div>
+
+    <div class="row">
+      <span>N° DOSSIER:</span>
+      <span class="bold">CD-${record.id.slice(-6).toUpperCase()}</span>
+    </div>
+    <div class="row">
+      <span>DATE ÉMISSION:</span>
+      <span>${formatDate(record.createdAt || record.date)}</span>
+    </div>
+    <div class="row">
+      <span>ÉCHÉANCE:</span>
+      <span class="bold">${record.dueDate ? formatDate(record.dueDate) : 'Non définie'}</span>
+    </div>
+    <div class="row">
+      <span>STATUT:</span>
+      <span class="bold">${isSettled ? 'SOLDÉ (100% PAYÉ)' : 'EN COURS (NON SOLDÉ)'}</span>
+    </div>
+
+    <div class="divider"></div>
+
+    <div class="row">
+      <span>CRÉANCIER:</span>
+      <span class="bold uppercase">${creditor}</span>
+    </div>
+    <div class="row">
+      <span>TÉL CRÉANCIER:</span>
+      <span>${creditorPhone}</span>
+    </div>
+    <div class="row" style="margin-top:2px;">
+      <span>DÉBITEUR:</span>
+      <span class="bold uppercase">${debtor}</span>
+    </div>
+    <div class="row">
+      <span>TÉL DÉBITEUR:</span>
+      <span>${debtorPhone}</span>
+    </div>
+    ${record.partyAddress ? `
+    <div class="row">
+      <span>ADRESSE:</span>
+      <span>${record.partyAddress}</span>
+    </div>
+    ` : ''}
+
+    <div class="divider"></div>
+
+    <div>
+      <span class="bold">OBJET / MOTIF:</span><br>
+      <span>${record.title}</span>
+      ${record.notes ? `<div style="font-size:10px; font-style:italic; margin-top:2px;">Note: ${record.notes}</div>` : ''}
+    </div>
+
+    <div class="total-box">
+      <div class="row">
+        <span>MONTANT INITIAL:</span>
+        <span class="bold">${formatMoney(record.initialAmount, currency)}</span>
+      </div>
+      <div class="row">
+        <span>DÉJÀ VERSÉ:</span>
+        <span class="bold">${formatMoney(record.paidAmount, currency)}</span>
+      </div>
+      <div class="big-balance">
+        SOLDE RESTANT DÛ:<br>
+        <span style="font-size:${is58 ? '16px' : '19px'};">${formatMoney(record.remainingAmount, currency)}</span>
+      </div>
+    </div>
+
+    ${record.payments && record.payments.length > 0 ? `
+    <div class="bold uppercase" style="font-size:10px; margin-top:4px;">
+      VERSEMENTS EFFECTUÉS (${record.payments.length}) :
+    </div>
+    <table class="payment-table">
+      <thead>
+        <tr>
+          <th class="left">Date</th>
+          <th class="left">Mode</th>
+          <th class="right">Montant</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${record.payments.map(p => `
+          <tr>
+            <td>${formatDate(p.date)}</td>
+            <td>${getPaymentMethodLabel(p.paymentMethod)}</td>
+            <td class="right bold">${formatMoney(p.amount, currency)}</td>
+          </tr>
+        `).join('')}
+      </tbody>
+    </table>
+    ` : ''}
+
+    <div style="font-size:${is58 ? '10px' : '11.5px'}; margin: 6px 0; line-height: 1.25;">
+      <strong>ENGAGEMENT FORMEL :</strong> Le Débiteur désigné reconnaît devoir valablement au Créancier 
+      la somme restante de <strong>${formatMoney(record.remainingAmount, currency)}</strong>.
+      ${isSettled 
+        ? 'Dossier intégralement soldé et acquitté.' 
+        : `Engagement de règlement complet au plus tard le ${record.dueDate ? formatDate(record.dueDate) : 'dans les délais convenus'}.`
+      }
+    </div>
+
+    <div class="signatures">
+      <div class="sig-col">
+        <strong>LE DÉBITEUR</strong><br>
+        <span style="font-size:8px;">(Signature & Accord)</span>
+        <div style="height:36px; border-bottom:1.5px dotted #000000; margin-top:8px;"></div>
+      </div>
+      <div class="sig-col">
+        <strong>LE CRÉANCIER</strong><br>
+        <span style="font-size:8px;">(Signature & Cachet)</span>
+        <div style="height:36px; border-bottom:1.5px dotted #000000; margin-top:8px;"></div>
+      </div>
+    </div>
+
+    <div class="divider"></div>
+    <div class="center" style="font-size:9px; margin-top:4px;">
+      Ticket édité le ${formatDateTime(new Date().toISOString())}<br>
+      Document légal valant preuve et engagement.
     </div>
   </div>
 
@@ -500,8 +872,811 @@ export const generateThermalReceiptHtml = (
 };
 
 /**
- * Generates official A4 invoice HTML with bold, high-contrast typography
+ * Generates an 80mm thermal receipt HTML for an individual credit repayment (Reçu de versement)
  */
+export const generateCreditPaymentThermalTicketHtml = (
+  payment: CreditPayment,
+  partyName: string,
+  partyType: 'CLIENT' | 'FOURNISSEUR',
+  remainingDebt: number,
+  settings: StoreSettings,
+  notes?: string,
+  widthMm: 80 | 58 = 80
+): string => {
+  const is58 = widthMm === 58;
+  const currency = settings.currency || 'FCFA';
+  const storeName = (settings.storeName || settings.shopName || 'BOUTIQUE MALI').toUpperCase();
+  const address = settings.address || settings.shopAddress || '';
+  const phone = settings.phone || settings.shopPhone || '';
+
+  const fontSize = is58 ? '11px' : '13px';
+  const maxContentWidth = is58 ? '44mm' : '64mm';
+
+  return `
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Reçu_${payment.receiptNumber || 'REC'}</title>
+  <style>
+    @page {
+      margin: 0;
+      size: ${widthMm}mm auto;
+    }
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      -webkit-print-color-adjust: exact !important;
+      print-color-adjust: exact !important;
+    }
+    body {
+      font-family: Arial, Helvetica, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      font-size: ${fontSize};
+      font-weight: 600;
+      line-height: 1.35;
+      color: #000000 !important;
+      background: #ffffff !important;
+      padding: ${is58 ? "1.5mm" : "3mm"};
+      width: ${widthMm}mm;
+      max-width: ${widthMm}mm;
+      margin: 0 auto;
+      -webkit-print-color-adjust: exact !important;
+      print-color-adjust: exact !important;
+      -webkit-font-smoothing: antialiased;
+    }
+    .ticket-container {
+      width: 100%;
+      max-width: ${maxContentWidth};
+      margin-left: 0.5mm;
+      margin-right: auto;
+      padding-right: 2.5mm;
+    }
+    .center { text-align: center; }
+    .right { text-align: right; }
+    .bold { font-weight: 900 !important; }
+    .uppercase { text-transform: uppercase; }
+    .divider {
+      border-top: 1.5px dashed #000000;
+      margin: 4px 0;
+    }
+    .solid-divider {
+      border-top: 2px solid #000000;
+      margin: 4px 0;
+    }
+    .doc-title {
+      font-size: ${is58 ? '12px' : '14px'};
+      border: 1.5px solid #000000;
+      padding: 3px 2px;
+      text-align: center;
+      margin: 3px 0 2px;
+    }
+    .row {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 2px;
+    }
+    .total-box {
+      border: 2px solid #000000;
+      padding: 6px 4px;
+      margin: 6px 0;
+    }
+    .signatures {
+      display: flex;
+      justify-content: space-between;
+      margin-top: 10px;
+      padding-top: 4px;
+      border-top: 1px dashed #000000;
+    }
+    .sig-col {
+      width: 48%;
+      text-align: center;
+      font-size: 10.5px;
+    }
+    .no-print-toolbar {
+      display: flex;
+      gap: 6px;
+      margin-bottom: 8px;
+    }
+    .btn-print {
+      flex: 1;
+      background: #000000;
+      color: #ffffff !important;
+      border: none;
+      padding: 8px;
+      font-size: 11px;
+      font-weight: 900;
+      cursor: pointer;
+      border-radius: 4px;
+    }
+    .btn-close {
+      background: #e2e8f0;
+      color: #000000 !important;
+      border: none;
+      padding: 8px 12px;
+      font-size: 11px;
+      font-weight: 900;
+      cursor: pointer;
+      border-radius: 4px;
+    }
+    @media print {
+      .no-print-toolbar { display: none !important; }
+      body {
+        padding: 0 !important;
+        margin: 0 !important;
+        width: ${widthMm}mm !important;
+      }
+      .ticket-container {
+        width: 100% !important;
+        max-width: ${maxContentWidth} !important;
+        margin-left: 0.5mm !important;
+        margin-right: auto !important;
+        padding-right: 2.5mm !important;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="no-print-toolbar">
+    <button class="btn-print" onclick="window.print()">🖨️ IMPRIMER CE REÇU 80mm</button>
+    <button class="btn-close" onclick="window.close()">✕ Fermer</button>
+  </div>
+
+  <div class="ticket-container">
+    <div class="center">
+      <div style="font-size:${is58 ? '15px' : '18px'};" class="bold">${storeName}</div>
+      ${address ? `<div>${address}</div>` : ''}
+      ${phone ? `<div>TÉL: ${phone}</div>` : ''}
+    </div>
+
+    <div class="doc-title bold">
+      REÇU DE RÈGLEMENT ${partyType === 'CLIENT' ? 'CRÉDIT' : 'DETTE'}
+    </div>
+    <div class="center" style="font-size:9px; margin-bottom:4px;">Document officiel remis aux parties</div>
+
+    <div class="solid-divider"></div>
+
+    <div class="row">
+      <span>N° REÇU:</span>
+      <span class="bold">${payment.receiptNumber || 'REC-001'}</span>
+    </div>
+    <div class="row">
+      <span>DATE & HEURE:</span>
+      <span>${formatDateTime(payment.date)}</span>
+    </div>
+    <div class="row">
+      <span>${partyType === 'CLIENT' ? 'CLIENT (DÉBITEUR):' : 'FOURNISSEUR (CRÉANCIER):'}</span>
+      <span class="bold uppercase">${partyName}</span>
+    </div>
+    <div class="row">
+      <span>MODE DE RÈGLEMENT:</span>
+      <span class="bold">${getPaymentMethodLabel(payment.paymentMethod)}</span>
+    </div>
+    ${payment.receivedBy ? `
+    <div class="row">
+      <span>ENCAISSÉ / ÉMIS PAR:</span>
+      <span>${payment.receivedBy}</span>
+    </div>
+    ` : ''}
+
+    <div class="total-box">
+      <div class="row" style="font-size:${is58 ? '14px' : '16px'};">
+        <span>MONTANT RÉGLÉ:</span>
+        <span class="bold">${formatMoney(payment.amount, currency)}</span>
+      </div>
+      <div class="row" style="margin-top:4px; padding-top:4px; border-top:1px dashed #000000; font-size:${is58 ? '12px' : '14px'};">
+        <span>NOUVEAU RESTE DÛ:</span>
+        <span class="bold">${formatMoney(remainingDebt, currency)}</span>
+      </div>
+    </div>
+
+    ${(notes || payment.notes) ? `
+    <div style="font-size:10px; margin: 4px 0;">
+      <strong>Note:</strong> ${notes || payment.notes}
+    </div>
+    ` : ''}
+
+    <div class="signatures">
+      <div class="sig-col">
+        <strong>LE DÉBITEUR</strong><br>
+        <span style="font-size:8px;">(Accusé de versement)</span>
+        <div style="height:36px; border-bottom:1.5px dotted #000000; margin-top:8px;"></div>
+      </div>
+      <div class="sig-col">
+        <strong>POUR LA BOUTIQUE</strong><br>
+        <span style="font-size:8px;">(Signature & Cachet)</span>
+        <div style="height:36px; border-bottom:1.5px dotted #000000; margin-top:8px;"></div>
+      </div>
+    </div>
+
+    <div class="divider"></div>
+    <div class="center" style="font-size:9px;">
+      Merci pour votre confiance !<br>
+      Ce reçu fait foi de paiement libératoire.
+    </div>
+  </div>
+
+  <script>
+    window.addEventListener('load', function() {
+      setTimeout(function() {
+        try {
+          window.print();
+        } catch(e) {}
+      }, 300);
+    });
+  </script>
+</body>
+</html>
+  `;
+};
+
+/**
+ * Generates an 80mm thermal ticket for Customer or Supplier Account Credit Balance (Situation de Compte)
+ */
+export const generatePartyCreditBalanceThermalTicketHtml = (params: {
+  partyName: string;
+  partyPhone?: string;
+  partyAddress?: string;
+  partyType: 'CLIENT' | 'FOURNISSEUR';
+  totalRemainingDebt: number;
+  creditLimit?: number;
+  records?: CreditDebtRecord[];
+  settings: StoreSettings;
+  widthMm?: 80 | 58;
+}): string => {
+  const {
+    partyName,
+    partyPhone,
+    partyAddress,
+    partyType,
+    totalRemainingDebt,
+    creditLimit,
+    records = [],
+    settings,
+    widthMm = 80,
+  } = params;
+
+  const is58 = widthMm === 58;
+  const currency = settings.currency || 'FCFA';
+  const storeName = (settings.storeName || settings.shopName || 'BOUTIQUE MALI').toUpperCase();
+  const address = settings.address || settings.shopAddress || '';
+  const phone = settings.phone || settings.shopPhone || '';
+  const maxContentWidth = is58 ? '44mm' : '64mm';
+  const fontSize = is58 ? '10.5px' : '12px';
+
+  return `
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Solde_${partyName.replace(/\s+/g, '_')}</title>
+  <style>
+    @page {
+      margin: 0;
+      size: ${widthMm}mm auto;
+    }
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      -webkit-print-color-adjust: exact !important;
+      print-color-adjust: exact !important;
+    }
+    body {
+      font-family: Arial, Helvetica, "Segoe UI", Roboto, -apple-system, sans-serif;
+      font-size: ${fontSize};
+      font-weight: 600;
+      line-height: 1.35;
+      color: #000000 !important;
+      background: #ffffff !important;
+      padding: ${is58 ? "1.5mm 2mm 1.5mm 1mm" : "2mm 4mm 2mm 1.5mm"};
+      width: ${widthMm}mm;
+      max-width: ${widthMm}mm;
+      margin: 0;
+      -webkit-print-color-adjust: exact !important;
+      print-color-adjust: exact !important;
+      -webkit-font-smoothing: antialiased;
+    }
+    .ticket-container {
+      width: 100%;
+      max-width: ${maxContentWidth};
+      margin-left: 0.5mm;
+      margin-right: auto;
+      padding-right: 2.5mm;
+    }
+    .center { text-align: center; }
+    .right { text-align: right; }
+    .left { text-align: left; }
+    .bold { font-weight: 800 !important; }
+    .bolder { font-weight: 900 !important; }
+    .uppercase { text-transform: uppercase; }
+    .divider {
+      border-top: 1.5px dashed #000000;
+      margin: 4px 0;
+    }
+    .solid-divider {
+      border-top: 2px solid #000000;
+      margin: 4px 0;
+    }
+    .row {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      margin: 3px 0;
+      font-size: ${is58 ? '10.5px' : '12px'};
+      line-height: 1.3;
+    }
+    .row .label {
+      font-weight: 700;
+      color: #000000;
+      flex-shrink: 0;
+    }
+    .row .value {
+      font-weight: 800;
+      color: #000000;
+      text-align: right;
+      padding-right: 2px;
+      word-break: break-word;
+      max-width: 65%;
+    }
+    .balance-box {
+      border: 2px solid #000000;
+      padding: 6px 4px;
+      margin: 6px 0;
+      text-align: center;
+      background: #ffffff;
+    }
+    .table-dossiers {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: ${is58 ? '10px' : '11.5px'};
+      margin: 5px 0;
+    }
+    .table-dossiers th {
+      border-bottom: 2px solid #000000;
+      border-top: 2px solid #000000;
+      padding: 3px 2px;
+      font-weight: 800;
+      line-height: 1.2;
+    }
+    .table-dossiers td {
+      border-bottom: 1px dashed #000000;
+      padding: 3.5px 2px;
+      font-weight: 600;
+      line-height: 1.25;
+    }
+    .table-dossiers th:last-child,
+    .table-dossiers td:last-child {
+      padding-right: 2.5px !important;
+    }
+    .signatures {
+      display: flex;
+      justify-content: space-between;
+      margin-top: 10px;
+      padding-top: 5px;
+      border-top: 1.5px dashed #000000;
+      padding-right: 2px;
+    }
+    .sig-col {
+      width: 47%;
+      text-align: center;
+      font-size: 10.5px;
+      font-weight: 700;
+    }
+    .no-print-toolbar {
+      display: flex;
+      gap: 6px;
+      margin-bottom: 8px;
+    }
+    .btn-print {
+      flex: 1;
+      background: #000000;
+      color: #ffffff !important;
+      border: none;
+      padding: 8px;
+      font-size: 11px;
+      font-weight: 900;
+      cursor: pointer;
+      border-radius: 4px;
+    }
+    .btn-close {
+      background: #e2e8f0;
+      color: #000000 !important;
+      border: none;
+      padding: 8px 12px;
+      font-size: 11px;
+      font-weight: 900;
+      cursor: pointer;
+      border-radius: 4px;
+    }
+    @media print {
+      .no-print-toolbar { display: none !important; }
+      body {
+        padding: 0 !important;
+        margin: 0 !important;
+        width: ${widthMm}mm !important;
+      }
+      .ticket-container {
+        width: 100% !important;
+        max-width: ${maxContentWidth} !important;
+        margin-left: 0.5mm !important;
+        margin-right: auto !important;
+        padding-right: 2.5mm !important;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="no-print-toolbar">
+    <button class="btn-print" onclick="window.print()">🖨️ IMPRIMER CE SOLDE</button>
+    <button class="btn-close" onclick="window.close()">✕ Fermer</button>
+  </div>
+
+  <div class="ticket-container">
+    <div class="center">
+      <div style="font-size:${is58 ? '15.5px' : '18.5px'}; line-height:1.15;" class="bolder uppercase">${storeName}</div>
+      ${address ? `<div style="font-size:${is58 ? '10px' : '11px'}; font-weight:700; margin-top:2px;">${address}</div>` : ''}
+      ${phone ? `<div style="font-size:${is58 ? '10px' : '11px'}; font-weight:700;">TÉL: ${phone}</div>` : ''}
+    </div>
+
+    <div class="center" style="font-size:${is58 ? '10px' : '11px'}; margin:4px 0 3px; font-weight:700;">
+      Situation arrêtée le ${formatDateTime(new Date().toISOString())}
+    </div>
+
+    <div class="solid-divider"></div>
+
+    <div class="row">
+      <span class="label">${partyType === 'CLIENT' ? 'CLIENT :' : 'FOURNISSEUR :'}</span>
+      <span class="value uppercase bold">${partyName}</span>
+    </div>
+    ${partyPhone ? `
+    <div class="row">
+      <span class="label">TÉLÉPHONE :</span>
+      <span class="value bold">${partyPhone}</span>
+    </div>
+    ` : ''}
+    ${partyAddress ? `
+    <div class="row">
+      <span class="label">ADRESSE :</span>
+      <span class="value bold">${partyAddress}</span>
+    </div>
+    ` : ''}
+    ${creditLimit !== undefined && creditLimit > 0 ? `
+    <div class="row">
+      <span class="label">PLAFOND AUTORISÉ :</span>
+      <span class="value bold">${formatMoney(creditLimit, currency)}</span>
+    </div>
+    ` : ''}
+
+    <div class="balance-box">
+      <div style="font-size:${is58 ? '11px' : '12px'}; font-weight:800; letter-spacing:0.3px;">TOTAL SOLDE RESTANT DÛ :</div>
+      <div style="font-size:${is58 ? '18px' : '22px'}; margin:3px 0 2px; letter-spacing:0.3px;" class="bolder">
+        ${formatMoney(totalRemainingDebt, currency)}
+      </div>
+      <div style="font-size:${is58 ? '9.5px' : '10.5px'}; font-weight:700;">
+        ${totalRemainingDebt <= 0 ? 'COMPTE ENTIÈREMEMENT EN RÈGLE (SOLDE NUL)' : 'SOLDE EXIGIBLE À RECOUVRER'}
+      </div>
+    </div>
+
+    ${records.length > 0 ? `
+    <div class="bold" style="font-size:${is58 ? '10.5px' : '11.5px'}; margin:5px 0 3px;">
+      DOSSIERS EN COURS (${records.length}) :
+    </div>
+    <table class="table-dossiers">
+      <thead>
+        <tr>
+          <th class="left" style="width:33%;">Date / Réf</th>
+          <th class="left" style="width:34%;">Objet</th>
+          <th class="right" style="width:33%;">Reste</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${records.map(r => `
+          <tr>
+            <td>${formatDate(r.date)}<br><span style="font-size:9.5px; font-weight:700;">CD-${r.id.slice(-4)}</span></td>
+            <td style="word-break: break-word;">${r.title}</td>
+            <td class="right bold">${formatMoney(r.remainingAmount, currency)}</td>
+          </tr>
+        `).join('')}
+      </tbody>
+    </table>
+    ` : ''}
+
+    <div class="signatures">
+      <div class="sig-col">
+        <strong>LE ${partyType}</strong><br>
+        <span style="font-size:9px; font-weight:600;">(Pour accord du solde)</span>
+        <div style="height:34px; border-bottom:1.5px dotted #000000; margin-top:6px;"></div>
+      </div>
+      <div class="sig-col">
+        <strong>POUR LA BOUTIQUE</strong><br>
+        <span style="font-size:9px; font-weight:600;">(Signature & Cachet)</span>
+        <div style="height:34px; border-bottom:1.5px dotted #000000; margin-top:6px;"></div>
+      </div>
+    </div>
+
+    <div class="divider"></div>
+    <div class="center" style="font-size:10.5px; font-weight:700; margin-top:4px;">
+      Relevé de solde officiel conforme aux écritures comptables.
+    </div>
+  </div>
+
+  <script>
+    window.addEventListener('load', function() {
+      setTimeout(function() {
+        try {
+          window.print();
+        } catch(e) {}
+      }, 300);
+    });
+  </script>
+</body>
+</html>
+  `;
+};
+
+export const generateCreditDebtSummaryReportThermalTicketHtml = (params: {
+  records: CreditDebtRecord[];
+  filterType: 'ALL' | 'CLIENT_CREDIT' | 'SUPPLIER_DEBT';
+  settings: StoreSettings;
+  generatedBy?: string;
+  widthMm?: 80 | 58;
+}): string => {
+  const { records, filterType, settings, generatedBy = 'Gérant', widthMm = 80 } = params;
+  const is58 = widthMm === 58;
+  const currency = settings.currency || 'FCFA';
+  const storeName = (settings.storeName || settings.shopName || 'BOUTIQUE MALI').toUpperCase();
+  const address = settings.address || settings.shopAddress || '';
+  const phone = settings.phone || settings.shopPhone || '';
+  const maxContentWidth = is58 ? '44mm' : '64mm';
+  const fontSize = is58 ? '11px' : '13px';
+
+  const clientRecords = records.filter(r => r.type === 'CLIENT_CREDIT');
+  const supplierRecords = records.filter(r => r.type === 'SUPPLIER_DEBT');
+
+  const totalClientDue = clientRecords.reduce((sum, r) => sum + (r.remainingAmount || 0), 0);
+  const totalSupplierDue = supplierRecords.reduce((sum, r) => sum + (r.remainingAmount || 0), 0);
+  const net = totalClientDue - totalSupplierDue;
+
+  const title =
+    filterType === 'CLIENT_CREDIT'
+      ? 'BILAN CRÉANCES CLIENTS'
+      : filterType === 'SUPPLIER_DEBT'
+      ? 'BILAN DETTES FOURNISSEURS'
+      : 'BILAN GÉNÉRAL CRÉDITS & DETTES';
+
+  return `
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Bilan_Soldes_Credits_80mm</title>
+  <style>
+    @page {
+      margin: 0;
+      size: ${widthMm}mm auto;
+    }
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      -webkit-print-color-adjust: exact !important;
+      print-color-adjust: exact !important;
+    }
+    body {
+      font-family: Arial, Helvetica, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      font-size: ${fontSize};
+      font-weight: 600;
+      line-height: 1.35;
+      color: #000000 !important;
+      background: #ffffff !important;
+      padding: ${is58 ? "1.5mm" : "3mm"};
+      width: ${widthMm}mm;
+      max-width: ${widthMm}mm;
+      margin: 0 auto;
+      -webkit-print-color-adjust: exact !important;
+      print-color-adjust: exact !important;
+      -webkit-font-smoothing: antialiased;
+    }
+    .ticket-container {
+      width: 100%;
+      max-width: ${maxContentWidth};
+      margin-left: 0.5mm;
+      margin-right: auto;
+      padding-right: 2.5mm;
+    }
+    .center { text-align: center; }
+    .right { text-align: right; }
+    .bold { font-weight: 900 !important; }
+    .uppercase { text-transform: uppercase; }
+    .divider {
+      border-top: 1.5px dashed #000000;
+      margin: 4px 0;
+    }
+    .solid-divider {
+      border-top: 2px solid #000000;
+      margin: 4px 0;
+    }
+    .doc-title {
+      font-size: ${is58 ? '12px' : '14px'};
+      border: 1.5px solid #000000;
+      padding: 3px 2px;
+      text-align: center;
+      margin: 3px 0 2px;
+    }
+    .row {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 2px;
+    }
+    .summary-box {
+      border: 2px solid #000000;
+      padding: 6px 4px;
+      margin: 6px 0;
+    }
+    .table-list {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: ${is58 ? '10.5px' : '12px'};
+      margin: 4px 0;
+    }
+    .table-list th, .table-list td {
+      border-bottom: 1px dashed #000000;
+      padding: 2px 1px;
+    }
+    .no-print-toolbar {
+      display: flex;
+      gap: 6px;
+      margin-bottom: 8px;
+    }
+    .btn-print {
+      flex: 1;
+      background: #000000;
+      color: #ffffff !important;
+      border: none;
+      padding: 8px;
+      font-size: 11px;
+      font-weight: 900;
+      cursor: pointer;
+      border-radius: 4px;
+    }
+    .btn-close {
+      background: #e2e8f0;
+      color: #000000 !important;
+      border: none;
+      padding: 8px 12px;
+      font-size: 11px;
+      font-weight: 900;
+      cursor: pointer;
+      border-radius: 4px;
+    }
+    @media print {
+      .no-print-toolbar { display: none !important; }
+      body {
+        padding: 0 !important;
+        margin: 0 !important;
+        width: ${widthMm}mm !important;
+      }
+      .ticket-container {
+        width: 100% !important;
+        max-width: ${maxContentWidth} !important;
+        margin-left: 0.5mm !important;
+        margin-right: auto !important;
+        padding-right: 2.5mm !important;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="no-print-toolbar">
+    <button class="btn-print" onclick="window.print()">🖨️ IMPRIMER CE BILAN 80mm</button>
+    <button class="btn-close" onclick="window.close()">✕ Fermer</button>
+  </div>
+
+  <div class="ticket-container">
+    <div class="center">
+      <div style="font-size:${is58 ? '15px' : '18px'};" class="bold">${storeName}</div>
+      ${address ? `<div>${address}</div>` : ''}
+      ${phone ? `<div>TÉL: ${phone}</div>` : ''}
+    </div>
+
+    <div class="doc-title bold">${title}</div>
+    <div class="center" style="font-size:9px; margin-bottom:3px;">
+      Arrêté le ${formatDateTime(new Date().toISOString())} • Édité par : ${generatedBy}
+    </div>
+
+    <div class="solid-divider"></div>
+
+    <div class="summary-box">
+      ${filterType !== 'SUPPLIER_DEBT' ? `
+      <div class="row">
+        <span>CRÉANCES CLIENTS DUES:</span>
+        <span class="bold">${formatMoney(totalClientDue, currency)}</span>
+      </div>
+      ` : ''}
+      ${filterType !== 'CLIENT_CREDIT' ? `
+      <div class="row">
+        <span>DETTES FOURNISSEURS DUES:</span>
+        <span class="bold">${formatMoney(totalSupplierDue, currency)}</span>
+      </div>
+      ` : ''}
+      ${filterType === 'ALL' ? `
+      <div class="row" style="margin-top:4px; padding-top:4px; border-top:1.5px dashed #000000; font-size:${is58 ? '13px' : '15px'};">
+        <span>BALANCE NETTE:</span>
+        <span class="bold">${formatMoney(net, currency)}</span>
+      </div>
+      ` : ''}
+    </div>
+
+    <div class="bold" style="font-size:10px; margin-top:4px;">
+      DÉTAIL DES DOSSIERS ACTIFS (${records.length}) :
+    </div>
+
+    <table class="table-list">
+      <thead>
+        <tr>
+          <th class="left">Tiers</th>
+          <th class="left">Échéance</th>
+          <th class="right">Reste Dû</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${records.map(r => `
+          <tr>
+            <td>
+              <span class="bold">${r.partyName}</span><br>
+              <span style="font-size:8px;">${r.type === 'CLIENT_CREDIT' ? 'Client' : 'Fournisseur'} • CD-${r.id.slice(-4)}</span>
+            </td>
+            <td>${r.dueDate ? formatDate(r.dueDate) : '—'}</td>
+            <td class="right bold">${formatMoney(r.remainingAmount, currency)}</td>
+          </tr>
+        `).join('')}
+      </tbody>
+    </table>
+
+    <div class="divider"></div>
+    <div class="center" style="font-size:9px; margin-top:6px;">
+      *** FIN DU RAPPORT DE SOLDES ***<br>
+      Imprimé sur imprimante thermique de caisse.
+    </div>
+  </div>
+
+  <script>
+    window.addEventListener('load', function() {
+      setTimeout(function() {
+        try {
+          window.print();
+        } catch(e) {}
+      }, 300);
+    });
+  </script>
+</body>
+</html>
+  `;
+};
+
+/**
+ * Direct print trigger helper for 80mm tickets
+ */
+export const printTicketIn80mm = (htmlContent: string): boolean => {
+  try {
+    const printWin = window.open('', '_blank', 'width=450,height=700');
+    if (printWin) {
+      printWin.document.open();
+      printWin.document.write(htmlContent);
+      printWin.document.close();
+      printWin.focus();
+      return true;
+    }
+  } catch (e) {
+    console.error('Window open failed:', e);
+  }
+  return false;
+};
+
 export const generateA4InvoiceHtml = (
   sale: Sale,
   settings: StoreSettings,
@@ -533,14 +1708,12 @@ export const generateA4InvoiceHtml = (
       padding: 0;
       font-weight: 900 !important;
       color: #000000 !important;
-      -webkit-text-stroke: 0.35px #000000;
-      text-shadow: 0 0 0.3px #000000;
     }
     body {
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
       font-size: 12px;
-      font-weight: 900 !important;
-      line-height: 1.2;
+      font-weight: 500;
+      line-height: 1.35;
       color: #000000 !important;
       background: #fff;
       padding: 6mm;
@@ -936,7 +2109,7 @@ export const generateAnnualInventoryReportHtml = (
     }
     body {
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-      font-size: 9.5px;
+      font-size: 10.5px;
       line-height: 1.2;
       color: #0f172a;
       background: #fff;
@@ -983,7 +2156,7 @@ export const generateAnnualInventoryReportHtml = (
       width: 100%;
       border-collapse: collapse;
       margin-bottom: 12px;
-      font-size: 9px;
+      font-size: 10.5px;
     }
     table.data-table th {
       background: #0f172a;
@@ -1021,7 +2194,7 @@ export const generateAnnualInventoryReportHtml = (
       display: flex;
       flex-direction: column;
       justify-content: space-between;
-      font-size: 8px;
+      font-size: 10px;
     }
     .tag-loss { color: #e11d48; font-weight: bold; }
     .tag-surplus { color: #059669; font-weight: bold; }
@@ -1091,14 +2264,14 @@ export const generateAnnualInventoryReportHtml = (
       <div>
         <div style="font-size: 16px; font-weight: 900; text-transform: uppercase;">${storeName}</div>
         <div style="font-size: 10px; color: #475569;">AUDIT ET BILAN ANNUEL DE VALORISATION DES STOCKS</div>
-        <div style="font-size: 9px; color: #64748b;">NIF / RCCM : ${settings.nifRccm || 'Non renseigné'} • Date d'édition : ${formatDate(new Date().toISOString())}</div>
+        <div style="font-size: 10.5px; color: #64748b;">NIF / RCCM : ${settings.nifRccm || 'Non renseigné'} • Date d'édition : ${formatDate(new Date().toISOString())}</div>
       </div>
     </div>
     <div class="right">
       <div style="background: #0f172a; color: white; padding: 4px 8px; font-weight: 900; border-radius: 4px; font-size: 11px;">
         EXERCICE FISCAL ${data.year}
       </div>
-      <div style="font-size: 9px; color: #64748b; margin-top: 3px;">Clôture au 31 Décembre ${data.year}</div>
+      <div style="font-size: 10.5px; color: #64748b; margin-top: 3px;">Clôture au 31 Décembre ${data.year}</div>
     </div>
   </div>
 
@@ -1198,7 +2371,7 @@ export const generateAnnualInventoryReportHtml = (
         <td class="right ${p.yearLossesValue > 0 ? 'tag-loss' : p.yearDifferencesQty > 0 ? 'tag-surplus' : ''}">
           ${p.yearDifferencesQty !== 0 ? `${p.yearDifferencesQty > 0 ? '+' : ''}${p.yearDifferencesQty} (${formatMoney(p.yearLossesValue, '')})` : '-'}
         </td>
-        <td class="center" style="font-size: 8px;">
+        <td class="center" style="font-size: 10px;">
           ${p.healthStatus === 'HEALTHY' ? '🟢 Conforme' : p.healthStatus === 'FAST_MOVING' ? '⚡ Forte Rotation' : p.healthStatus === 'OUT_OF_STOCK' ? '🔴 Rupture' : '🟡 Stock Bas'}
         </td>
       </tr>

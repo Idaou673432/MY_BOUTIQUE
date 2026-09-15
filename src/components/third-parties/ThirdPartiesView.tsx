@@ -21,6 +21,11 @@ import {
 import { useStore } from '../../context/StoreContext';
 import { Customer, Supplier, PaymentMethod, CreditPayment } from '../../types';
 import { formatMoney, formatDate } from '../../utils/formatters';
+import {
+  generateCreditPaymentThermalTicketHtml,
+  generatePartyCreditBalanceThermalTicketHtml,
+  printTicketIn80mm
+} from '../../utils/printService';
 
 interface ThirdPartiesViewProps {
   initialTab?: 'customers' | 'suppliers';
@@ -189,152 +194,79 @@ export const ThirdPartiesView: React.FC<ThirdPartiesViewProps> = ({ initialTab =
     return Math.max(sup.debtBalance || (sup as any).balanceDue || 0, recordDebt);
   };
 
+  // Print customer payment receipt in 80mm thermal format
   const printCustomerPaymentReceipt = (payment: CreditPayment, partyName: string, remainingDebt: number) => {
-    const receiptHtml = `
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <meta charset="utf-8">
-        <title>Reçu de Règlement - ${payment.receiptNumber || 'REC'}</title>
-        <style>
-          body { font-family: 'Courier New', Courier, monospace; padding: 20px; color: #111; max-width: 380px; margin: 0 auto; font-size: 13px; line-height: 1.4; }
-          .header { text-align: center; border-bottom: 1px dashed #444; padding-bottom: 12px; margin-bottom: 12px; }
-          .shop-name { font-size: 16px; font-weight: bold; text-transform: uppercase; }
-          .title { font-size: 13px; font-weight: bold; margin: 8px 0 4px; text-transform: uppercase; }
-          .row { display: flex; justify-content: space-between; margin: 4px 0; }
-          .total-box { border-top: 1px dashed #444; border-bottom: 1px dashed #444; padding: 10px 0; margin: 12px 0; }
-          .footer { text-align: center; font-size: 11px; margin-top: 18px; color: #555; }
-        </style>
-      </head>
-      <body>
-        <div class="header">
-          <div class="shop-name">${settings.shopName || 'COMMERCE GESTION'}</div>
-          <div>${settings.address || ''}</div>
-          <div>Tél: ${settings.phone || ''}</div>
-          <div class="title">REÇU DE RÈGLEMENT CLIENT</div>
-          <div>N°: ${payment.receiptNumber || 'REC-001'}</div>
-          <div>Date: ${new Date(payment.date).toLocaleString('fr-FR')}</div>
-        </div>
-        <div class="row"><span>Client:</span> <strong>${partyName}</strong></div>
-        <div class="row"><span>Mode de paiement:</span> <strong>${payment.paymentMethod}</strong></div>
-        ${payment.receivedBy ? `<div class="row"><span>Encaissé par:</span> <span>${payment.receivedBy}</span></div>` : ''}
-        
-        <div class="total-box">
-          <div class="row" style="font-size: 15px; font-weight: bold;">
-            <span>MONTANT VERSÉ:</span>
-            <span>${formatMoney(payment.amount, settings.currency)}</span>
-          </div>
-          <div class="row" style="font-size: 12px; margin-top: 6px;">
-            <span>Solde restant dû:</span>
-            <span>${formatMoney(remainingDebt, settings.currency)}</span>
-          </div>
-        </div>
-
-        ${payment.notes ? `<div style="font-size: 11px; font-style: italic; margin-bottom: 10px;">Note: ${payment.notes}</div>` : ''}
-
-        <div class="footer">
-          Merci pour votre confiance !<br>
-          Ce document officiel atteste du versement effectué.
-        </div>
-      </body>
-      </html>
-    `;
-
-    const printWin = window.open('', '_blank', 'width=450,height=600');
-    if (printWin) {
-      printWin.document.write(receiptHtml);
-      printWin.document.close();
-      printWin.focus();
-      setTimeout(() => {
-        printWin.print();
-      }, 300);
-    }
+    const html = generateCreditPaymentThermalTicketHtml(
+      payment,
+      partyName,
+      'CLIENT',
+      remainingDebt,
+      settings,
+      payment.notes,
+      80
+    );
+    printTicketIn80mm(html);
   };
 
+  // Print supplier debt payment receipt in 80mm thermal format
   const printSupplierPaymentReceipt = (
     payment: CreditPayment,
     supplierName: string,
     remainingDebt: number
   ) => {
-    const receiptHtml = `
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <meta charset="utf-8">
-        <title>Reçu de Règlement Fournisseur (Créancier) - ${payment.receiptNumber || 'REC'}</title>
-        <style>
-          body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; padding: 20px; color: #111; max-width: 450px; margin: 0 auto; font-size: 12px; }
-          .header { text-align: center; border-bottom: 2px solid #0f172a; padding-bottom: 12px; margin-bottom: 14px; }
-          .shop-name { font-size: 16px; font-weight: 900; text-transform: uppercase; }
-          .title { font-size: 13px; font-weight: 800; margin: 8px 0 3px; text-transform: uppercase; color: #991b1b; }
-          .subtitle { font-size: 10px; color: #64748b; margin-bottom: 4px; font-style: italic; }
-          .row { display: flex; justify-content: space-between; margin: 5px 0; }
-          .total-box { border-top: 1px dashed #444; border-bottom: 1px dashed #444; padding: 10px 0; margin: 12px 0; background: #f8fafc; }
-          .sig-container { display: flex; justify-content: space-between; margin-top: 24px; padding-top: 12px; border-top: 1px dotted #cbd5e1; font-size: 10px; }
-          .sig-col { width: 48%; text-align: center; }
-          .sig-box { height: 45px; }
-          .footer { text-align: center; font-size: 10px; margin-top: 18px; color: #64748b; }
-        </style>
-      </head>
-      <body>
-        <div class="header">
-          <div class="shop-name">${settings.shopName || 'COMMERCE GESTION'}</div>
-          <div>${settings.address || ''}</div>
-          <div>Tél: ${settings.phone || ''}</div>
-          <div class="title">REÇU DE RÈGLEMENT DE DETTE</div>
-          <div class="subtitle">(Document officiel remis au créancier)</div>
-          <div>N° Reçu: <strong>${payment.receiptNumber || 'REC-001'}</strong></div>
-          <div>Date: ${new Date(payment.date).toLocaleString('fr-FR')}</div>
-        </div>
+    const html = generateCreditPaymentThermalTicketHtml(
+      payment,
+      supplierName,
+      'FOURNISSEUR',
+      remainingDebt,
+      settings,
+      payment.notes,
+      80
+    );
+    printTicketIn80mm(html);
+  };
 
-        <div class="row"><span>Créancier (Fournisseur):</span> <strong>${supplierName}</strong></div>
-        <div class="row"><span>Débiteur (Établissement):</span> <span>${settings.shopName}</span></div>
-        <div class="row"><span>Mode de règlement:</span> <strong>${payment.paymentMethod}</strong></div>
-        ${payment.receivedBy ? `<div class="row"><span>Émis par:</span> <span>${payment.receivedBy}</span></div>` : ''}
-        
-        <div class="total-box">
-          <div class="row" style="font-size: 15px; font-weight: bold; color: #166534; padding: 0 4px;">
-            <span>MONTANT RÉGLÉ:</span>
-            <span>${formatMoney(payment.amount, settings.currency)}</span>
-          </div>
-          <div class="row" style="font-size: 12px; margin-top: 6px; padding: 0 4px; color: ${remainingDebt > 0 ? '#991b1b' : '#166534'};">
-            <span>Solde restant dû au créancier:</span>
-            <span><strong>${formatMoney(remainingDebt, settings.currency)}</strong></span>
-          </div>
-        </div>
+  // Print client balance statement in 80mm thermal roll format
+  const printCustomerBalanceTicket80mm = (cust: Customer) => {
+    const custDebt = getCustomerTotalDebt(cust);
+    const relatedRecords = (creditDebtRecords || []).filter(
+      r =>
+        r.type === 'CLIENT_CREDIT' &&
+        (r.partyId === cust.id || (r.partyName && cust.name && r.partyName.trim().toLowerCase() === cust.name.trim().toLowerCase()))
+    );
+    const html = generatePartyCreditBalanceThermalTicketHtml({
+      partyName: cust.name,
+      partyPhone: cust.phone,
+      partyAddress: cust.address,
+      partyType: 'CLIENT',
+      totalRemainingDebt: custDebt,
+      creditLimit: cust.creditLimit,
+      records: relatedRecords,
+      settings,
+      widthMm: 80,
+    });
+    printTicketIn80mm(html);
+  };
 
-        ${payment.notes ? `<div style="font-size: 11px; font-style: italic; margin-bottom: 10px; color: #475569;">Note: ${payment.notes}</div>` : ''}
-
-        <div class="sig-container">
-          <div class="sig-col">
-            <strong>Pour la Boutique</strong><br>
-            <span style="font-size:9px; color:#64748b;">(Signature & Cachet)</span>
-            <div class="sig-box"></div>
-          </div>
-          <div class="sig-col">
-            <strong>Le Créancier</strong><br>
-            <span style="font-size:9px; color:#64748b;">(Accusé de réception / Signature)</span>
-            <div class="sig-box"></div>
-          </div>
-        </div>
-
-        <div class="footer">
-          Document remis au créancier en preuve de règlement.<br>
-          Merci pour votre partenariat.
-        </div>
-      </body>
-      </html>
-    `;
-
-    const printWin = window.open('', '_blank', 'width=450,height=600');
-    if (printWin) {
-      printWin.document.write(receiptHtml);
-      printWin.document.close();
-      printWin.focus();
-      setTimeout(() => {
-        printWin.print();
-      }, 300);
-    }
+  // Print supplier debt balance statement in 80mm thermal roll format
+  const printSupplierBalanceTicket80mm = (sup: Supplier) => {
+    const supDebt = getSupplierTotalDebt(sup);
+    const relatedRecords = (creditDebtRecords || []).filter(
+      r =>
+        r.type === 'SUPPLIER_DEBT' &&
+        (r.partyId === sup.id || (r.partyName && sup.companyName && r.partyName.trim().toLowerCase() === sup.companyName.trim().toLowerCase()))
+    );
+    const html = generatePartyCreditBalanceThermalTicketHtml({
+      partyName: sup.companyName,
+      partyPhone: sup.phone,
+      partyAddress: sup.address,
+      partyType: 'FOURNISSEUR',
+      totalRemainingDebt: supDebt,
+      records: relatedRecords,
+      settings,
+      widthMm: 80,
+    });
+    printTicketIn80mm(html);
   };
 
   const handlePayCreditSubmit = (e: React.FormEvent) => {
@@ -613,6 +545,15 @@ export const ThirdPartiesView: React.FC<ThirdPartiesViewProps> = ({ initialTab =
                               </button>
                             )}
                             <button
+                              type="button"
+                              onClick={() => printCustomerBalanceTicket80mm(cust)}
+                              className="p-1.5 text-indigo-600 hover:text-indigo-800 hover:bg-indigo-50 rounded-lg text-xs flex items-center gap-1 font-semibold"
+                              title="Imprimer le ticket de solde de crédit (80mm)"
+                            >
+                              <Printer className="w-3.5 h-3.5" />
+                              <span className="hidden sm:inline">Solde 80mm</span>
+                            </button>
+                            <button
                               onClick={() => handleOpenEditCustomer(cust)}
                               className="p-1.5 text-slate-500 hover:text-indigo-600 hover:bg-slate-100 rounded-lg text-xs"
                             >
@@ -690,6 +631,15 @@ export const ThirdPartiesView: React.FC<ThirdPartiesViewProps> = ({ initialTab =
                                 Régler dette
                               </button>
                             )}
+                            <button
+                              type="button"
+                              onClick={() => printSupplierBalanceTicket80mm(sup)}
+                              className="p-1.5 text-indigo-600 hover:text-indigo-800 hover:bg-indigo-50 rounded-lg text-xs flex items-center gap-1 font-semibold"
+                              title="Imprimer le ticket de situation dette fournisseur (80mm)"
+                            >
+                              <Printer className="w-3.5 h-3.5" />
+                              <span className="hidden sm:inline">Solde 80mm</span>
+                            </button>
                             {!isVendeur && (
                               <button
                                 onClick={() => handleOpenEditSupplier(sup)}

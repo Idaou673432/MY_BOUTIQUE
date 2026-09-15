@@ -30,6 +30,12 @@ import {
 import { useStore } from '../../context/StoreContext';
 import { CreditDebtRecord, CreditPayment, PaymentMethod, Customer, Supplier } from '../../types';
 import { formatMoney, formatDate, formatDateTime, getPaymentMethodLabel } from '../../utils/formatters';
+import {
+  generateCreditDebtThermalTicketHtml,
+  generateCreditPaymentThermalTicketHtml,
+  generateCreditDebtSummaryReportThermalTicketHtml,
+  printTicketIn80mm
+} from '../../utils/printService';
 
 interface CreditDebtViewProps {
   initialType?: 'ALL' | 'CLIENT_CREDIT' | 'SUPPLIER_DEBT';
@@ -145,7 +151,7 @@ export const CreditDebtView: React.FC<CreditDebtViewProps> = ({ initialType = 'A
     });
   }, [creditDebtRecords, activeTypeTab, statusFilter, searchTerm]);
 
-  // Open add record modal
+    // Open add record modal
   const handleOpenAddModal = (type: 'CLIENT_CREDIT' | 'SUPPLIER_DEBT') => {
     setNewRecordType(type);
     setSelectedPartyId('');
@@ -270,386 +276,39 @@ export const CreditDebtView: React.FC<CreditDebtViewProps> = ({ initialType = 'A
     }
   };
 
-  // Print official debt acknowledgment receipt (Reconnaissance de dette / Reçu de créance)
+  // Print official debt acknowledgment receipt in 80mm thermal format
   const printDebtReceipt = (record: CreditDebtRecord) => {
-    const isClientCredit = record.type === 'CLIENT_CREDIT';
-    const docTitle = isClientCredit
-      ? 'REÇU DE CRÉANCE & ENGAGEMENT DE PAIEMENT'
-      : 'RECONNAISSANCE DE DETTE & BON D\'ENGAGEMENT';
-    const docSubtitle = isClientCredit
-      ? 'Document officiel délivré au client (créance)'
-      : 'Document officiel remis au fournisseur (créancier)';
-    const creditorName = isClientCredit ? (settings.shopName || 'COMMERCE GESTION') : record.partyName;
-    const creditorPhone = isClientCredit ? (settings.phone || '—') : (record.partyPhone || '—');
-    const debtorName = isClientCredit ? record.partyName : (settings.shopName || 'COMMERCE GESTION');
-    const debtorPhone = isClientCredit ? (record.partyPhone || '—') : (settings.phone || '—');
-    const isSettled = record.status === 'SOLDE' || record.remainingAmount <= 0.001;
-
-    const receiptHtml = `
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <meta charset="utf-8">
-        <title>${docTitle} - CD-${record.id.slice(-6).toUpperCase()}</title>
-        <style>
-          @page { size: auto; margin: 12mm; }
-          body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-            color: #0f172a;
-            max-width: 550px;
-            margin: 0 auto;
-            padding: 20px;
-            line-height: 1.4;
-            font-size: 12px;
-          }
-          .header {
-            text-align: center;
-            border-bottom: 2px solid #0f172a;
-            padding-bottom: 12px;
-            margin-bottom: 14px;
-          }
-          .shop-name {
-            font-size: 18px;
-            font-weight: 900;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-          }
-          .shop-meta {
-            font-size: 11px;
-            color: #475569;
-            margin-top: 2px;
-          }
-          .doc-badge {
-            display: inline-block;
-            margin-top: 8px;
-            padding: 5px 12px;
-            background: #0f172a;
-            color: #ffffff;
-            font-size: 12px;
-            font-weight: 800;
-            border-radius: 6px;
-            letter-spacing: 0.5px;
-          }
-          .doc-subtitle {
-            font-size: 11px;
-            color: #64748b;
-            margin-top: 4px;
-            font-style: italic;
-          }
-          .meta-grid {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 10px;
-            margin: 14px 0;
-            padding: 10px;
-            background: #f8fafc;
-            border: 1px solid #e2e8f0;
-            border-radius: 8px;
-          }
-          .meta-item strong {
-            display: block;
-            color: #0f172a;
-            font-size: 12px;
-          }
-          .parties-box {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 10px;
-            margin-bottom: 14px;
-          }
-          .party-card {
-            border: 1px solid #cbd5e1;
-            padding: 9px;
-            border-radius: 8px;
-          }
-          .party-title {
-            font-weight: 800;
-            text-transform: uppercase;
-            font-size: 10px;
-            color: #475569;
-            margin-bottom: 3px;
-            border-bottom: 1px solid #e2e8f0;
-            padding-bottom: 3px;
-          }
-          .amount-box {
-            border: 2px solid #0f172a;
-            background: #f1f5f9;
-            border-radius: 8px;
-            padding: 12px;
-            margin: 14px 0;
-          }
-          .amount-row {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            font-size: 12px;
-            margin: 3px 0;
-          }
-          .due-highlight {
-            font-size: 16px;
-            font-weight: 900;
-            color: ${isSettled ? '#059669' : '#dc2626'};
-            border-top: 1px solid #cbd5e1;
-            padding-top: 6px;
-            margin-top: 6px;
-          }
-          .legal-statement {
-            font-size: 11px;
-            color: #334155;
-            background: #ffffff;
-            border-left: 3px solid #0f172a;
-            padding: 8px 10px;
-            margin: 12px 0;
-            line-height: 1.45;
-          }
-          .payments-table {
-            width: 100%;
-            border-collapse: collapse;
-            font-size: 11px;
-            margin: 12px 0;
-          }
-          .payments-table th {
-            background: #e2e8f0;
-            text-align: left;
-            padding: 5px;
-            border: 1px solid #cbd5e1;
-          }
-          .payments-table td {
-            padding: 5px;
-            border: 1px solid #cbd5e1;
-          }
-          .signatures {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 16px;
-            margin-top: 22px;
-            padding-top: 8px;
-          }
-          .sig-box {
-            border: 1px dashed #94a3b8;
-            border-radius: 6px;
-            padding: 8px;
-            text-align: center;
-            min-height: 80px;
-            display: flex;
-            flex-direction: column;
-            justify-content: space-between;
-          }
-          .sig-title {
-            font-weight: bold;
-            font-size: 10px;
-            color: #1e293b;
-          }
-          .sig-hint {
-            font-size: 9px;
-            color: #94a3b8;
-          }
-          .sig-space {
-            height: 40px;
-          }
-          .footer-note {
-            text-align: center;
-            font-size: 9px;
-            color: #64748b;
-            margin-top: 20px;
-            border-top: 1px dashed #cbd5e1;
-            padding-top: 6px;
-          }
-        </style>
-      </head>
-      <body>
-        <div class="header">
-          <div class="shop-name">${settings.shopName || 'COMMERCE GESTION'}</div>
-          <div class="shop-meta">${settings.address ? settings.address + ' • ' : ''}Tél: ${settings.phone || '—'}</div>
-          <div class="doc-badge">${docTitle}</div>
-          <div class="doc-subtitle">${docSubtitle}</div>
-        </div>
-
-        <div class="meta-grid">
-          <div class="meta-item">
-            <span style="color:#64748b; font-size:10px;">N° DOSSIER :</span>
-            <strong>CD-${record.id.slice(-6).toUpperCase()}</strong>
-          </div>
-          <div class="meta-item">
-            <span style="color:#64748b; font-size:10px;">DATE D'ÉMISSION :</span>
-            <strong>${formatDate(record.createdAt || record.date)}</strong>
-          </div>
-          <div class="meta-item">
-            <span style="color:#64748b; font-size:10px;">DATE D'ÉCHÉANCE :</span>
-            <strong style="color: ${isSettled ? '#059669' : '#b91c1c'};">${record.dueDate ? formatDate(record.dueDate) : 'Non définie'}</strong>
-          </div>
-          <div class="meta-item">
-            <span style="color:#64748b; font-size:10px;">STATUT :</span>
-            <strong style="color: ${isSettled ? '#059669' : '#d97706'};">${isSettled ? 'SOLDÉ (PAYÉ)' : 'EN COURS'}</strong>
-          </div>
-        </div>
-
-        <div class="parties-box">
-          <div class="party-card">
-            <div class="party-title">CRÉANCIER (Bénéficiaire)</div>
-            <div style="font-weight:bold; font-size:12px; color:#0f172a;">${creditorName}</div>
-            <div>Tél : ${creditorPhone}</div>
-          </div>
-          <div class="party-card">
-            <div class="party-title">DÉBITEUR (Engagé à payer)</div>
-            <div style="font-weight:bold; font-size:12px; color:#0f172a;">${debtorName}</div>
-            <div>Tél : ${debtorPhone}</div>
-            ${record.partyAddress ? `<div>Adresse : ${record.partyAddress}</div>` : ''}
-          </div>
-        </div>
-
-        <div style="margin: 8px 0; font-size: 11px;">
-          <strong>Objet / Motif :</strong> ${record.title}
-          ${record.notes ? `<div style="font-style:italic; color:#475569; margin-top:2px;">${record.notes}</div>` : ''}
-        </div>
-
-        <div class="amount-box">
-          <div class="amount-row">
-            <span>Montant Initial :</span>
-            <strong style="font-size:13px;">${formatMoney(record.initialAmount, settings.currency)}</strong>
-          </div>
-          <div class="amount-row">
-            <span>Montant Déjà Réglé :</span>
-            <strong style="color:#059669; font-size:13px;">${formatMoney(record.paidAmount, settings.currency)}</strong>
-          </div>
-          <div class="amount-row due-highlight">
-            <span>SOLDE RESTANT DÛ :</span>
-            <span>${formatMoney(record.remainingAmount, settings.currency)}</span>
-          </div>
-        </div>
-
-        ${record.payments && record.payments.length > 0 ? `
-          <div style="font-weight:bold; font-size:10px; margin-bottom:3px; text-transform:uppercase; color:#475569;">
-            Détail des versements effectués (${record.payments.length}) :
-          </div>
-          <table class="payments-table">
-            <thead>
-              <tr>
-                <th>Date</th>
-                <th>Reçu N°</th>
-                <th>Mode</th>
-                <th style="text-align:right;">Montant</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${record.payments.map(p => `
-                <tr>
-                  <td>${formatDateTime(p.date)}</td>
-                  <td>${p.receiptNumber || 'REC'}</td>
-                  <td>${getPaymentMethodLabel(p.paymentMethod)}</td>
-                  <td style="text-align:right; font-weight:bold; color:#059669;">${formatMoney(p.amount, settings.currency)}</td>
-                </tr>
-              `).join('')}
-            </tbody>
-          </table>
-        ` : ''}
-
-        <div class="legal-statement">
-          <strong>ENGAGEMENT FORMEL :</strong> Le Débiteur désigné reconnaît expressément et valablement devoir au Créancier 
-          la somme restante de <strong>${formatMoney(record.remainingAmount, settings.currency)}</strong>. 
-          ${isSettled 
-            ? 'Ce dossier est intégralement SOLDÉ. Les parties sont quittes de toute obligation financière relative à cette créance.' 
-            : `Le Débiteur s'engage solennellement à rembourser la totalité du solde au plus tard le ${record.dueDate ? formatDate(record.dueDate) : 'dans les délais convenus'}.`
-          }
-        </div>
-
-        <div class="signatures">
-          <div class="sig-box">
-            <div class="sig-title">Signature du Débiteur</div>
-            <div class="sig-hint">"Lu et approuvé - Bon pour accord"</div>
-            <div class="sig-space"></div>
-          </div>
-          <div class="sig-box">
-            <div class="sig-title">Signature & Cachet du Créancier</div>
-            <div class="sig-hint">"Pour accord / Accusé de réception"</div>
-            <div class="sig-space"></div>
-          </div>
-        </div>
-
-        <div class="footer-note">
-          Document édité le ${formatDateTime(new Date().toISOString())} • Établi pour servir et valoir ce que de droit.
-        </div>
-      </body>
-      </html>
-    `;
-
-    const printWin = window.open('', '_blank', 'width=650,height=750');
-    if (printWin) {
-      printWin.document.write(receiptHtml);
-      printWin.document.close();
-      printWin.focus();
-      setTimeout(() => {
-        printWin.print();
-      }, 350);
-    }
+    const html = generateCreditDebtThermalTicketHtml(record, settings, 80);
+    printTicketIn80mm(html);
   };
 
-  // Print payment receipt
+  // Print payment receipt in 80mm thermal format
   const printPaymentReceipt = (record: CreditDebtRecord, paymentIndex: number) => {
     const payment = record.payments[paymentIndex];
     if (!payment) return;
 
-    const receiptHtml = `
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <meta charset="utf-8">
-        <title>Reçu de Versement - ${payment.receiptNumber || 'REC'}</title>
-        <style>
-          body { font-family: 'Courier New', monospace; padding: 20px; color: #111; max-width: 400px; margin: 0 auto; }
-          .header { text-align: center; border-bottom: 1px dashed #444; padding-bottom: 10px; margin-bottom: 15px; }
-          .shop-name { font-size: 16px; font-weight: bold; }
-          .title { font-size: 13px; font-weight: bold; margin: 10px 0 5px; text-transform: uppercase; }
-          .row { display: flex; justify-content: space-between; margin: 4px 0; font-size: 12px; }
-          .total-box { border-top: 1px dashed #444; border-bottom: 1px dashed #444; padding: 8px 0; margin: 12px 0; }
-          .footer { text-align: center; font-size: 10px; margin-top: 15px; }
-        </style>
-      </head>
-      <body>
-        <div class="header">
-          <div class="shop-name">${settings.shopName || 'BOUTIQUE'}</div>
-          <div>${settings.address || ''}</div>
-          <div>Tél: ${settings.phone || ''}</div>
-          <div class="title">REÇU DE RÈGLEMENT</div>
-          <div>N°: ${payment.receiptNumber || 'REC-001'}</div>
-          <div>Date: ${formatDateTime(payment.date)}</div>
-        </div>
-        <div class="row"><span>Tiers:</span> <strong>${record.partyName}</strong></div>
-        <div class="row"><span>Type:</span> <span>${record.type === 'CLIENT_CREDIT' ? 'Règlement Crédit Client' : 'Paiement Dette Fournisseur'}</span></div>
-        <div class="row"><span>Objet:</span> <span>${record.title}</span></div>
-        <div class="row"><span>Mode de règlement:</span> <strong>${getPaymentMethodLabel(payment.paymentMethod)}</strong></div>
-        ${payment.receivedBy ? `<div class="row"><span>Encaissé par:</span> <span>${payment.receivedBy}</span></div>` : ''}
-        
-        <div class="total-box">
-          <div class="row" style="font-size: 14px; font-weight: bold;">
-            <span>MONTANT VERSÉ:</span>
-            <span>${formatMoney(payment.amount, settings.currency)}</span>
-          </div>
-          <div class="row" style="font-size: 11px; margin-top: 4px;">
-            <span>Solde restant dû:</span>
-            <span>${formatMoney(record.remainingAmount, settings.currency)}</span>
-          </div>
-        </div>
+    const html = generateCreditPaymentThermalTicketHtml(
+      payment,
+      record.partyName,
+      record.type === 'CLIENT_CREDIT' ? 'CLIENT' : 'FOURNISSEUR',
+      record.remainingAmount,
+      settings,
+      payment.notes,
+      80
+    );
+    printTicketIn80mm(html);
+  };
 
-        ${payment.notes ? `<div style="font-size: 11px; font-style: italic; margin-bottom: 10px;">Note: ${payment.notes}</div>` : ''}
-
-        <div class="footer">
-          Merci pour votre confiance !<br>
-          Ce reçu fait foi de paiement.
-        </div>
-      </body>
-      </html>
-    `;
-
-    const printWin = window.open('', '_blank', 'width=450,height=600');
-    if (printWin) {
-      printWin.document.write(receiptHtml);
-      printWin.document.close();
-      printWin.focus();
-      setTimeout(() => {
-        printWin.print();
-      }, 300);
-    }
+  // Print balance summary of records in 80mm thermal roll format
+  const handlePrintBalancesSummary80mm = () => {
+    const html = generateCreditDebtSummaryReportThermalTicketHtml({
+      records: filteredRecords,
+      filterType: activeTypeTab,
+      settings,
+      generatedBy: currentUser?.name || currentUser?.username || 'Gérant',
+      widthMm: 80,
+    });
+    printTicketIn80mm(html);
   };
 
   return (
@@ -666,7 +325,16 @@ export const CreditDebtView: React.FC<CreditDebtViewProps> = ({ initialType = 'A
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={handlePrintBalancesSummary80mm}
+            className="px-3.5 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-xs transition-colors cursor-pointer"
+            title="Imprimer le bilan des soldes de crédit et dettes en format ticket 80mm"
+          >
+            <Printer className="w-4 h-4 text-indigo-600" />
+            <span>Imprimer Soldes (80mm)</span>
+          </button>
           <button
             onClick={() => handleOpenAddModal('CLIENT_CREDIT')}
             className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-sm transition-all cursor-pointer"
