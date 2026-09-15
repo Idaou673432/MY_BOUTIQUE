@@ -171,6 +171,11 @@ interface StoreContextType {
     paymentMethod: PaymentMethod,
     notes?: string
   ) => { success: boolean; message?: string; receipt?: CreditPayment };
+  cancelCreditPayment: (
+    recordIdOrPaymentId: string,
+    paymentId?: string,
+    reason?: string
+  ) => { success: boolean; message?: string };
   updateCreditDebtRecord: (id: string, updates: Partial<CreditDebtRecord>) => void;
   deleteCreditDebtRecord: (id: string) => boolean;
 
@@ -2201,6 +2206,125 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     };
   };
 
+  const cancelCreditPayment = (
+    recordIdOrPaymentId: string,
+    paymentId?: string,
+    reason?: string
+  ): { success: boolean; message?: string } => {
+    let targetRecord = (creditDebtRecords || []).find(r => r.id === recordIdOrPaymentId);
+    let targetPaymentId = paymentId;
+    const cancelReason = reason;
+
+    // If paymentId is not specified or record was not found by first ID, search across all records by paymentId
+    if (!targetPaymentId) {
+      targetPaymentId = recordIdOrPaymentId;
+      targetRecord = (creditDebtRecords || []).find(r => (r.payments || []).some(p => p.id === targetPaymentId));
+    } else if (!targetRecord) {
+      targetRecord = (creditDebtRecords || []).find(r => (r.payments || []).some(p => p.id === targetPaymentId));
+    }
+
+    if (!targetRecord) {
+      return { success: false, message: 'Dossier de crédit ou versement introuvable.' };
+    }
+
+    const paymentToCancel = (targetRecord.payments || []).find(p => p.id === targetPaymentId);
+    if (!paymentToCancel) {
+      return { success: false, message: 'Versement introuvable dans ce dossier.' };
+    }
+
+    const cancelAmount = paymentToCancel.amount;
+    const newPaidAmount = Math.max(0, Math.round(((targetRecord.paidAmount || 0) - cancelAmount) * 100) / 100);
+    const newRemainingAmount = Math.round(((targetRecord.remainingAmount || 0) + cancelAmount) * 100) / 100;
+    const newStatus: 'EN_COURS' | 'SOLDE' = newRemainingAmount > 0.001 ? 'EN_COURS' : 'SOLDE';
+    const updatedPayments = (targetRecord.payments || []).filter(p => p.id !== targetPaymentId);
+
+    const updatedCreditDebtRecords = (creditDebtRecords || []).map(r =>
+      r.id === targetRecord!.id
+        ? {
+            ...r,
+            paidAmount: newPaidAmount,
+            remainingAmount: newRemainingAmount,
+            status: newStatus,
+            payments: updatedPayments,
+          }
+        : r
+    );
+    setCreditDebtRecords(updatedCreditDebtRecords);
+    localStorage.setItem(STORAGE_KEYS.CREDIT_DEBT_RECORDS, JSON.stringify(updatedCreditDebtRecords));
+
+    let updatedCustomers = customers;
+    let updatedSuppliers = suppliers;
+
+    if (targetRecord.type === 'CLIENT_CREDIT') {
+      // Re-add the debt back to the customer
+      const cust = (customers || []).find(
+        c => (targetRecord!.partyId && c.id === targetRecord!.partyId) ||
+             (c.name && targetRecord!.partyName && c.name.trim().toLowerCase() === targetRecord!.partyName.trim().toLowerCase())
+      );
+      if (cust) {
+        const newCustBalance = Math.round(((cust.creditBalance || 0) + cancelAmount) * 100) / 100;
+        updatedCustomers = (customers || []).map(c =>
+          c.id === cust.id ? { ...c, creditBalance: newCustBalance } : c
+        );
+        setCustomers(updatedCustomers);
+        localStorage.setItem(STORAGE_KEYS.CUSTOMERS, JSON.stringify(updatedCustomers));
+      }
+
+      // If original payment was in cash, refund / remove cash from the register
+      if (paymentToCancel.paymentMethod === 'ESPECES' && cashRegister && cashRegister.isOpen) {
+        addCashTransaction(
+          'SORTIE',
+          -cancelAmount,
+          `Annulation encaissement dette client (${targetRecord.partyName}) - ${cancelReason || 'Versement erroné annulé'}`,
+          paymentToCancel.paymentMethod
+        );
+      }
+    } else {
+      // Re-add the debt to the supplier
+      const sup = (suppliers || []).find(
+        s => (targetRecord!.partyId && s.id === targetRecord!.partyId) ||
+             (s.companyName && targetRecord!.partyName && s.companyName.trim().toLowerCase() === targetRecord!.partyName.trim().toLowerCase())
+      );
+      if (sup) {
+        const newSupBalance = Math.round(((sup.debtBalance || 0) + cancelAmount) * 100) / 100;
+        updatedSuppliers = (suppliers || []).map(s =>
+          s.id === sup.id ? { ...s, debtBalance: newSupBalance } : s
+        );
+        setSuppliers(updatedSuppliers);
+        localStorage.setItem(STORAGE_KEYS.SUPPLIERS, JSON.stringify(updatedSuppliers));
+      }
+
+      // If original payment was in cash, return cash back to register
+      if (paymentToCancel.paymentMethod === 'ESPECES' && cashRegister && cashRegister.isOpen) {
+        addCashTransaction(
+          'ENTREE',
+          cancelAmount,
+          `Annulation règlement fournisseur (${targetRecord.partyName}) - ${cancelReason || 'Paiement erroné annulé'}`,
+          paymentToCancel.paymentMethod
+        );
+      }
+    }
+
+    logActivity(
+      'Annulation encaissement dette',
+      targetRecord.type === 'CLIENT_CREDIT' ? 'CLIENT' : 'FOURNISSEUR',
+      targetRecord.partyName,
+      `Annulation du versement de ${cancelAmount} (Reçu: ${paymentToCancel.receiptNumber || paymentToCancel.id}) - Raison: ${cancelReason || 'Erreur de saisie'}`
+    );
+
+    hasLocalMutations.current = true;
+    syncToCloudNow(false, {
+      creditDebtRecords: updatedCreditDebtRecords,
+      customers: updatedCustomers,
+      suppliers: updatedSuppliers,
+    });
+
+    return {
+      success: true,
+      message: `Encaissement de ${cancelAmount} annulé avec succès. La dette a été réactivée.`,
+    };
+  };
+
   const updateCreditDebtRecord = (id: string, updates: Partial<CreditDebtRecord>) => {
     const newRecords = (creditDebtRecords || []).map(r => (r.id === id ? { ...r, ...updates } : r));
     setCreditDebtRecords(newRecords);
@@ -2953,6 +3077,7 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         creditDebtRecords: creditDebtRecords || [],
         addCreditDebtRecord,
         recordCreditPayment,
+        cancelCreditPayment,
         updateCreditDebtRecord,
         deleteCreditDebtRecord,
         expenses: expenses || [],

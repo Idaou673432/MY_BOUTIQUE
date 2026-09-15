@@ -25,7 +25,9 @@ import {
   Check,
   Phone,
   Mail,
-  Receipt
+  Receipt,
+  RotateCcw,
+  History
 } from 'lucide-react';
 import { useStore } from '../../context/StoreContext';
 import { CreditDebtRecord, CreditPayment, PaymentMethod, Customer, Supplier } from '../../types';
@@ -48,6 +50,7 @@ export const CreditDebtView: React.FC<CreditDebtViewProps> = ({ initialType = 'A
     suppliers,
     addCreditDebtRecord,
     recordCreditPayment,
+    cancelCreditPayment,
     deleteCreditDebtRecord,
     settings,
     currentUser,
@@ -85,6 +88,11 @@ export const CreditDebtView: React.FC<CreditDebtViewProps> = ({ initialType = 'A
   // Modal: View record details & history
   const [showDetailModal, setShowDetailModal] = useState(false);
   const [selectedRecordDetail, setSelectedRecordDetail] = useState<CreditDebtRecord | null>(null);
+
+  // Modal: Global payments journal & cancellation
+  const [showPaymentsJournalModal, setShowPaymentsJournalModal] = useState(false);
+  const [journalFilterType, setJournalFilterType] = useState<'ALL' | 'CLIENT_CREDIT' | 'SUPPLIER_DEBT'>('ALL');
+  const [journalSearch, setJournalSearch] = useState('');
 
   // Modal: Prompt after creating new credit/debt record
   const [newlyCreatedRecord, setNewlyCreatedRecord] = useState<CreditDebtRecord | null>(null);
@@ -299,6 +307,104 @@ export const CreditDebtView: React.FC<CreditDebtViewProps> = ({ initialType = 'A
     printTicketIn80mm(html);
   };
 
+  // Direct payment printer by reference
+  const printSpecificPaymentReceipt = (record: CreditDebtRecord, payment: CreditPayment) => {
+    const html = generateCreditPaymentThermalTicketHtml(
+      payment,
+      record.partyName,
+      record.type === 'CLIENT_CREDIT' ? 'CLIENT' : 'FOURNISSEUR',
+      record.remainingAmount,
+      settings,
+      payment.notes,
+      80
+    );
+    printTicketIn80mm(html);
+  };
+
+  // Cancel an accidental payment / encaissement
+  const handleCancelPayment = (record: CreditDebtRecord, payment: CreditPayment) => {
+    const isClient = record.type === 'CLIENT_CREDIT';
+    const partyType = isClient ? 'client' : 'fournisseur';
+    const actionName = isClient ? 'cet encaissement de dette client' : 'ce règlement de dette fournisseur';
+    const balanceEffect = isClient
+      ? `La dette du client "${record.partyName}" sera réactivée (+${formatMoney(payment.amount, settings.currency)}).`
+      : `La dette envers le fournisseur "${record.partyName}" sera réactivée (+${formatMoney(payment.amount, settings.currency)}).`;
+
+    const cashEffect = payment.paymentMethod === 'ESPECES'
+      ? isClient
+        ? `\n- La caisse sera ajustée de -${formatMoney(payment.amount, settings.currency)} (Sortie de caisse compensatoire).`
+        : `\n- La caisse sera ajustée de +${formatMoney(payment.amount, settings.currency)} (Entrée de caisse compensatoire).`
+      : '';
+
+    const confirmMsg = `ATTENTION : Souhaitez-vous annuler ${actionName} effectué par erreur ?\n\n` +
+      `• Tiers : ${record.partyName} (${isClient ? 'Client' : 'Fournisseur'})\n` +
+      `• Montant : ${formatMoney(payment.amount, settings.currency)}\n` +
+      `• N° Reçu : ${payment.receiptNumber || 'N/A'}\n` +
+      `• Mode : ${getPaymentMethodLabel(payment.paymentMethod)}\n` +
+      `• Date : ${formatDateTime(payment.date)}\n\n` +
+      `Conséquences :\n` +
+      `- ${balanceEffect}${cashEffect}\n` +
+      `- Le versement sera retiré de l'historique.`;
+
+    if (!window.confirm(confirmMsg)) return;
+
+    const reason = window.prompt("Motif de l'annulation :", "Encaissement enregistré par erreur");
+    if (reason === null) return; // User clicked Cancel on prompt
+
+    const res = cancelCreditPayment(record.id, payment.id, reason.trim() || "Encaissement enregistré par erreur");
+    if (res.success) {
+      // If detail modal is open for this record, update its state
+      if (selectedRecordDetail && selectedRecordDetail.id === record.id) {
+        const updatedRecord = (creditDebtRecords || []).find(r => r.id === record.id);
+        if (updatedRecord) {
+          setSelectedRecordDetail({
+            ...updatedRecord,
+            payments: (updatedRecord.payments || []).filter(p => p.id !== payment.id),
+            paidAmount: Math.max(0, Math.round(((updatedRecord.paidAmount || 0) - payment.amount) * 100) / 100),
+            remainingAmount: Math.round(((updatedRecord.remainingAmount || 0) + payment.amount) * 100) / 100,
+            status: 'EN_COURS',
+          });
+        }
+      }
+      // If payment modal is open, clear payment message
+      if (selectedRecordForPayment && selectedRecordForPayment.id === record.id) {
+        setShowPaymentModal(false);
+        setPaymentMessage(null);
+      }
+      alert(res.message || 'Encaissement annulé avec succès.');
+    } else {
+      alert(res.message || "Erreur lors de l'annulation de l'encaissement.");
+    }
+  };
+
+  // All payments aggregated for the payments journal
+  const allPaymentsWithRecord = useMemo(() => {
+    const list: Array<{ record: CreditDebtRecord; payment: CreditPayment }> = [];
+    (creditDebtRecords || []).forEach(r => {
+      (r.payments || []).forEach(p => {
+        list.push({ record: r, payment: p });
+      });
+    });
+    // Sort descending by date
+    list.sort((a, b) => new Date(b.payment.date).getTime() - new Date(a.payment.date).getTime());
+    return list;
+  }, [creditDebtRecords]);
+
+  const filteredJournalPayments = useMemo(() => {
+    return allPaymentsWithRecord.filter(item => {
+      if (journalFilterType !== 'ALL' && item.record.type !== journalFilterType) return false;
+      if (journalSearch.trim()) {
+        const q = journalSearch.toLowerCase();
+        const party = item.record.partyName.toLowerCase();
+        const recNum = (item.payment.receiptNumber || '').toLowerCase();
+        const title = item.record.title.toLowerCase();
+        const notes = (item.payment.notes || '').toLowerCase();
+        return party.includes(q) || recNum.includes(q) || title.includes(q) || notes.includes(q);
+      }
+      return true;
+    });
+  }, [allPaymentsWithRecord, journalFilterType, journalSearch]);
+
   // Print balance summary of records in 80mm thermal roll format
   const handlePrintBalancesSummary80mm = () => {
     const html = generateCreditDebtSummaryReportThermalTicketHtml({
@@ -326,6 +432,19 @@ export const CreditDebtView: React.FC<CreditDebtViewProps> = ({ initialType = 'A
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={() => {
+              setJournalSearch('');
+              setJournalFilterType('ALL');
+              setShowPaymentsJournalModal(true);
+            }}
+            className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-xs transition-colors cursor-pointer"
+            title="Consulter et annuler un encaissement ou versement effectué par erreur"
+          >
+            <History className="w-4 h-4 text-indigo-600" />
+            <span>Journal des Règlements ({allPaymentsWithRecord.length})</span>
+          </button>
           <button
             type="button"
             onClick={handlePrintBalancesSummary80mm}
@@ -950,6 +1069,21 @@ export const CreditDebtView: React.FC<CreditDebtViewProps> = ({ initialType = 'A
                         : 'Imprimer l\'État de Créance & Engagement'}
                     </button>
 
+                    {paymentMessage.receipt && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const rec = paymentMessage.updatedRecord || selectedRecordForPayment;
+                          handleCancelPayment(rec, paymentMessage.receipt!);
+                        }}
+                        className="w-full py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer transition-colors"
+                        title="Annuler ce versement enregistré par erreur"
+                      >
+                        <RotateCcw className="w-4 h-4 text-rose-600" />
+                        Annuler ce versement (enregistré par erreur)
+                      </button>
+                    )}
+
                     <button
                       type="button"
                       onClick={() => {
@@ -1169,13 +1303,24 @@ export const CreditDebtView: React.FC<CreditDebtViewProps> = ({ initialType = 'A
                           </p>
                           {p.notes && <p className="text-[10px] text-slate-600 italic">{p.notes}</p>}
                         </div>
-                        <button
-                          onClick={() => printPaymentReceipt(selectedRecordDetail, idx)}
-                          className="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded text-[10px] font-bold flex items-center gap-1"
-                          title="Imprimer le reçu de ce versement"
-                        >
-                          <Printer className="w-3 h-3" /> Reçu
-                        </button>
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <button
+                            type="button"
+                            onClick={() => printPaymentReceipt(selectedRecordDetail, idx)}
+                            className="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded text-[10px] font-bold flex items-center gap-1 cursor-pointer transition-colors"
+                            title="Imprimer le reçu de ce versement"
+                          >
+                            <Printer className="w-3 h-3" /> Reçu
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleCancelPayment(selectedRecordDetail, p)}
+                            className="px-2 py-1 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded text-[10px] font-bold flex items-center gap-1 cursor-pointer transition-colors"
+                            title="Annuler ce versement enregistré par erreur (réactive la dette)"
+                          >
+                            <RotateCcw className="w-3 h-3 text-rose-600" /> Annuler
+                          </button>
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -1287,6 +1432,222 @@ export const CreditDebtView: React.FC<CreditDebtViewProps> = ({ initialType = 'A
                   Terminer
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: PAYMENTS JOURNAL & CANCELLATION */}
+      {showPaymentsJournalModal && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 z-50">
+          <div className="bg-white rounded-2xl max-w-4xl w-full max-h-[92vh] flex flex-col shadow-2xl border border-slate-200 overflow-hidden">
+            {/* Modal Header */}
+            <div className="p-4 sm:p-5 border-b border-slate-200 flex items-center justify-between bg-slate-50/70">
+              <div className="flex items-center gap-2.5">
+                <div className="w-10 h-10 rounded-xl bg-indigo-100 text-indigo-700 flex items-center justify-center shrink-0">
+                  <History className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-black text-slate-900 text-base flex items-center gap-2">
+                    Journal des Règlements & Encaissements
+                    <span className="px-2 py-0.5 bg-indigo-100 text-indigo-800 rounded-full text-xs font-bold">
+                      {filteredJournalPayments.length} versement(s)
+                    </span>
+                  </h3>
+                  <p className="text-xs text-slate-500">
+                    Consultez l'historique complet des versements et annulez tout encaissement ou règlement effectué par erreur.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowPaymentsJournalModal(false)}
+                className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-200 rounded-xl cursor-pointer transition-colors"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Filter & Search Bar */}
+            <div className="p-4 border-b border-slate-100 bg-white flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+              {/* Type Pills */}
+              <div className="flex items-center gap-1.5 p-1 bg-slate-100 rounded-xl text-xs font-bold">
+                <button
+                  type="button"
+                  onClick={() => setJournalFilterType('ALL')}
+                  className={`px-3 py-1.5 rounded-lg transition-colors cursor-pointer ${
+                    journalFilterType === 'ALL'
+                      ? 'bg-white text-slate-900 shadow-xs'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  Tous ({allPaymentsWithRecord.length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setJournalFilterType('CLIENT_CREDIT')}
+                  className={`px-3 py-1.5 rounded-lg transition-colors cursor-pointer ${
+                    journalFilterType === 'CLIENT_CREDIT'
+                      ? 'bg-emerald-600 text-white shadow-xs'
+                      : 'text-emerald-700 hover:bg-emerald-50'
+                  }`}
+                >
+                  Encaissements Clients
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setJournalFilterType('SUPPLIER_DEBT')}
+                  className={`px-3 py-1.5 rounded-lg transition-colors cursor-pointer ${
+                    journalFilterType === 'SUPPLIER_DEBT'
+                      ? 'bg-rose-600 text-white shadow-xs'
+                      : 'text-rose-700 hover:bg-rose-50'
+                  }`}
+                >
+                  Règlements Fournisseurs
+                </button>
+              </div>
+
+              {/* Search input */}
+              <div className="relative flex-1 max-w-sm">
+                <input
+                  type="text"
+                  placeholder="Rechercher par tiers, n° reçu, note..."
+                  value={journalSearch}
+                  onChange={(e) => setJournalSearch(e.target.value)}
+                  className="w-full pl-3 pr-8 py-2 text-xs border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:outline-hidden"
+                />
+                {journalSearch && (
+                  <button
+                    type="button"
+                    onClick={() => setJournalSearch('')}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs"
+                  >
+                    ✕
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Payments List */}
+            <div className="flex-1 overflow-y-auto p-4 space-y-2">
+              {filteredJournalPayments.length > 0 ? (
+                <div className="border border-slate-200 rounded-xl overflow-hidden divide-y divide-slate-100">
+                  {filteredJournalPayments.map(({ record, payment }) => {
+                    const isClient = record.type === 'CLIENT_CREDIT';
+                    return (
+                      <div
+                        key={payment.id}
+                        className="p-3.5 hover:bg-slate-50/80 transition-colors flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+                      >
+                        <div className="space-y-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span
+                              className={`px-2 py-0.5 text-[10px] font-extrabold rounded-md uppercase tracking-wider ${
+                                isClient
+                                  ? 'bg-emerald-100 text-emerald-800'
+                                  : 'bg-rose-100 text-rose-800'
+                              }`}
+                            >
+                              {isClient ? 'Encaissement Client' : 'Règlement Fournisseur'}
+                            </span>
+                            <strong className="text-slate-900 text-sm font-black truncate">
+                              {record.partyName}
+                            </strong>
+                            <span className="text-[11px] font-mono font-bold text-slate-500">
+                              {payment.receiptNumber || 'N° Reçu non renseigné'}
+                            </span>
+                          </div>
+
+                          <div className="flex items-center gap-3 text-xs text-slate-500 flex-wrap">
+                            <span className="flex items-center gap-1">
+                              <Calendar className="w-3 h-3 text-slate-400" />
+                              {formatDateTime(payment.date)}
+                            </span>
+                            <span className="px-1.5 py-0.5 bg-slate-100 rounded text-[10px] font-semibold text-slate-600">
+                              {getPaymentMethodLabel(payment.paymentMethod)}
+                            </span>
+                            {payment.receivedBy && (
+                              <span className="text-[11px] text-slate-600">
+                                Encaissé par : <strong>{payment.receivedBy}</strong>
+                              </span>
+                            )}
+                            <span className="text-slate-400 text-[11px] italic truncate">
+                              Dossier : {record.title}
+                            </span>
+                          </div>
+
+                          {payment.notes && (
+                            <p className="text-[11px] text-slate-600 italic bg-slate-100/70 px-2 py-1 rounded-lg">
+                              Note : {payment.notes}
+                            </p>
+                          )}
+                        </div>
+
+                        {/* Amount & Actions */}
+                        <div className="flex items-center sm:flex-col sm:items-end justify-between gap-2 shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-100">
+                          <div className="text-left sm:text-right">
+                            <span
+                              className={`text-base font-black ${
+                                isClient ? 'text-emerald-700' : 'text-rose-700'
+                              }`}
+                            >
+                              {isClient ? '+' : '-'}{formatMoney(payment.amount, settings.currency)}
+                            </span>
+                            <span className="block text-[10px] text-slate-400">
+                              Solde restant du dossier : {formatMoney(record.remainingAmount, settings.currency)}
+                            </span>
+                          </div>
+
+                          <div className="flex items-center gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() => printSpecificPaymentReceipt(record, payment)}
+                              className="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-bold flex items-center gap-1 cursor-pointer transition-colors shadow-2xs"
+                              title="Imprimer le ticket de ce versement (80mm)"
+                            >
+                              <Printer className="w-3.5 h-3.5" />
+                              <span className="hidden sm:inline">Ticket</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleCancelPayment(record, payment)}
+                              className="px-2.5 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-lg text-xs font-bold flex items-center gap-1 cursor-pointer transition-colors shadow-2xs"
+                              title="Annuler ce versement effectué par erreur (réactive la dette)"
+                            >
+                              <RotateCcw className="w-3.5 h-3.5 text-rose-600" />
+                              <span>Annuler</span>
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="p-12 text-center text-slate-400 bg-slate-50 rounded-2xl border border-dashed border-slate-200">
+                  <AlertTriangle className="w-8 h-8 text-slate-300 mx-auto mb-2" />
+                  <p className="font-semibold text-sm text-slate-600">Aucun versement trouvé</p>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    {journalSearch
+                      ? 'Aucun règlement ne correspond à votre recherche.'
+                      : 'Aucun versement n\'a encore été enregistré.'}
+                  </p>
+                </div>
+              )}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-4 border-t border-slate-200 bg-slate-50 flex items-center justify-between">
+              <span className="text-xs text-slate-500">
+                L'annulation d'un encaissement réactive automatiquement le montant sur la dette du tiers et ajuste la caisse.
+              </span>
+              <button
+                type="button"
+                onClick={() => setShowPaymentsJournalModal(false)}
+                className="px-4 py-2 bg-slate-800 hover:bg-slate-900 text-white rounded-xl text-xs font-bold cursor-pointer transition-colors"
+              >
+                Fermer
+              </button>
             </div>
           </div>
         </div>

@@ -115,6 +115,7 @@ export const POSView: React.FC<POSViewProps> = ({ onNavigate }) => {
 
   // Cart
   const [cart, setCart] = useState<SaleItem[]>([]);
+  const [qtyToAdd, setQtyToAdd] = useState<number>(1);
   const [selectedCustomerId, setSelectedCustomerId] = useState<string>('');
   const [discountGlobalPercent, setDiscountGlobalPercent] = useState<number>(0);
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('ESPECES');
@@ -289,7 +290,7 @@ export const POSView: React.FC<POSViewProps> = ({ onNavigate }) => {
         setErrorMessage(`"${product.name}" est en rupture de stock.`);
         return;
       }
-      handleModalQuantityChange(product.id, 1);
+      handleModalQuantityChange(product.id, qtyToAdd || 1);
     }
   };
   // Apply selected items from Modal into the actual Sale Cart
@@ -371,9 +372,14 @@ export const POSView: React.FC<POSViewProps> = ({ onNavigate }) => {
     setShowQuickAddProductModal(false);
   };
 
-  // Add product to cart
-  const addToCart = (product: Product) => {
+  // Add product to cart (with configurable quantity)
+  const addToCart = (product: Product, quantityToAdd?: number) => {
     setErrorMessage(null);
+    const amountToAdd = Math.max(
+      1,
+      typeof quantityToAdd === 'number' && !isNaN(quantityToAdd) ? quantityToAdd : qtyToAdd || 1
+    );
+
     if (!settings.allowNegativeStock && product.currentStock <= 0) {
       setErrorMessage(`Article "${product.name}" en rupture de stock.`);
       return;
@@ -382,11 +388,13 @@ export const POSView: React.FC<POSViewProps> = ({ onNavigate }) => {
     setCart((prev) => {
       const existing = (prev || []).find((it) => it.productId === product.id);
       if (existing) {
-        if (!settings.allowNegativeStock && existing.quantity >= product.currentStock) {
-          setErrorMessage(`Stock disponible atteint (${product.currentStock} ${product.unit}s).`);
+        const updatedQty = existing.quantity + amountToAdd;
+        if (!settings.allowNegativeStock && updatedQty > product.currentStock) {
+          setErrorMessage(
+            `Stock disponible insuffisant (${product.currentStock} ${product.unit}s disponibles, déjà ${existing.quantity} au panier).`
+          );
           return prev;
         }
-        const updatedQty = existing.quantity + 1;
         const discountPrice = existing.unitPrice * (1 - existing.discountPercent / 100);
         const newTotal = updatedQty * discountPrice;
         const newMargin = newTotal - existing.unitCost * updatedQty;
@@ -397,17 +405,23 @@ export const POSView: React.FC<POSViewProps> = ({ onNavigate }) => {
             : it
         );
       } else {
+        if (!settings.allowNegativeStock && amountToAdd > product.currentStock) {
+          setErrorMessage(
+            `Stock disponible insuffisant (${product.currentStock} ${product.unit}s disponibles).`
+          );
+          return prev;
+        }
         const item: SaleItem = {
           productId: product.id,
           productName: product.name,
           productCode: product.code,
           productUnit: product.unit || 'pièce',
-          quantity: 1,
+          quantity: amountToAdd,
           unitPrice: product.salePrice,
           unitCost: product.purchasePrice,
           discountPercent: 0,
-          total: product.salePrice,
-          margin: product.salePrice - product.purchasePrice,
+          total: product.salePrice * amountToAdd,
+          margin: (product.salePrice - product.purchasePrice) * amountToAdd,
         };
         return [...prev, item];
       }
@@ -790,7 +804,7 @@ export const POSView: React.FC<POSViewProps> = ({ onNavigate }) => {
                   if (e.key === 'Enter') {
                     e.preventDefault();
                     if (autocompleteSuggestions.length > 0) {
-                      addToCart(autocompleteSuggestions[0]);
+                      addToCart(autocompleteSuggestions[0], qtyToAdd);
                       setShowSearchSuggestions(false);
                       setSearchTerm('');
                     }
@@ -814,7 +828,7 @@ export const POSView: React.FC<POSViewProps> = ({ onNavigate }) => {
                 <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-xl z-30 max-h-72 overflow-y-auto divide-y divide-slate-100 animate-in fade-in">
                   <div className="p-2 bg-slate-50 text-[11px] font-bold text-slate-500 flex items-center justify-between">
                     <span>Résultats rapides ({autocompleteSuggestions.length})</span>
-                    <span className="text-[10px] text-slate-400 font-normal">Appuyez sur Entrée ou cliquez pour ajouter</span>
+                    <span className="text-[10px] text-slate-400 font-normal">Appuyez sur Entrée ou cliquez pour ajouter ({qtyToAdd})</span>
                   </div>
                   {autocompleteSuggestions.map((prod) => {
                     const isOutOfStock = prod.currentStock <= 0;
@@ -825,7 +839,7 @@ export const POSView: React.FC<POSViewProps> = ({ onNavigate }) => {
                       <div
                         key={prod.id}
                         onClick={() => {
-                          addToCart(prod);
+                          addToCart(prod, qtyToAdd);
                           setShowSearchSuggestions(false);
                           setSearchTerm('');
                         }}
@@ -857,7 +871,7 @@ export const POSView: React.FC<POSViewProps> = ({ onNavigate }) => {
                             disabled={isOutOfStock && !settings.allowNegativeStock}
                             className="px-2.5 py-1 bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-200 text-white rounded-lg text-xs font-bold shadow-xs cursor-pointer"
                           >
-                            {inCart ? `+1 (${inCart.quantity})` : '+ Sélectionner'}
+                            {inCart ? `+${qtyToAdd} (${inCart.quantity})` : `+ Sélectionner (${qtyToAdd})`}
                           </button>
                         </div>
                       </div>
@@ -865,6 +879,60 @@ export const POSView: React.FC<POSViewProps> = ({ onNavigate }) => {
                   })}
                 </div>
               )}
+            </div>
+
+            {/* Saisie de la Quantité à ajouter */}
+            <div
+              className="flex items-center gap-1 bg-white border border-indigo-200 rounded-xl p-1 shadow-2xs shrink-0"
+              title="Saisir la quantité à ajouter lors de la sélection ou du scan d'un article"
+            >
+              <span className="text-[11px] font-black text-indigo-950 pl-1.5 hidden sm:inline">
+                Qté à ajouter :
+              </span>
+              <button
+                type="button"
+                onClick={() => setQtyToAdd((prev) => Math.max(1, prev - 1))}
+                className="w-6 h-6 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-black text-xs flex items-center justify-center transition-colors cursor-pointer"
+                title="Diminuer la quantité à ajouter (-1)"
+              >
+                <Minus className="w-3 h-3" />
+              </button>
+              <input
+                type="number"
+                min="1"
+                step="1"
+                value={qtyToAdd}
+                onChange={(e) => {
+                  const val = parseInt(e.target.value, 10);
+                  setQtyToAdd(isNaN(val) || val < 1 ? 1 : val);
+                }}
+                className="w-12 text-center py-0.5 text-xs font-black text-indigo-900 bg-indigo-50/50 border border-indigo-300 rounded-md focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                title="Saisir le nombre d'articles à ajouter"
+              />
+              <button
+                type="button"
+                onClick={() => setQtyToAdd((prev) => prev + 1)}
+                className="w-6 h-6 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-black text-xs flex items-center justify-center transition-colors cursor-pointer"
+                title="Augmenter la quantité à ajouter (+1)"
+              >
+                <Plus className="w-3 h-3" />
+              </button>
+              <div className="hidden xl:flex items-center gap-1 pl-1 border-l border-slate-200">
+                {[1, 2, 5, 10, 20].map((preset) => (
+                  <button
+                    key={preset}
+                    type="button"
+                    onClick={() => setQtyToAdd(preset)}
+                    className={`px-1.5 py-0.5 text-[10px] font-bold rounded cursor-pointer transition-colors ${
+                      qtyToAdd === preset
+                        ? 'bg-indigo-600 text-white shadow-2xs'
+                        : 'bg-slate-50 text-slate-600 hover:bg-indigo-50 hover:text-indigo-700'
+                    }`}
+                  >
+                    {preset}
+                  </button>
+                ))}
+              </div>
             </div>
 
             {/* Multi-Selection & Quick Add Buttons */}
@@ -1044,7 +1112,7 @@ export const POSView: React.FC<POSViewProps> = ({ onNavigate }) => {
                   return (
                     <button
                       key={product.id}
-                      onClick={() => addToCart(product)}
+                      onClick={() => addToCart(product, qtyToAdd)}
                       disabled={isOutOfStock && !settings.allowNegativeStock}
                       className={`text-left p-3 rounded-xl border flex flex-col justify-between transition-all relative group cursor-pointer ${
                         inCart
@@ -1084,15 +1152,15 @@ export const POSView: React.FC<POSViewProps> = ({ onNavigate }) => {
                         </h4>
                       </div>
 
-                      <div className="mt-3 pt-2 border-t border-slate-100 flex items-end justify-between">
+                      <div className="mt-3 pt-2 border-t border-slate-100 flex items-end justify-between gap-1">
                         <div>
                           <p className="text-xs font-black text-indigo-700">
                             {formatMoney(product.salePrice, settings.currency)}
                           </p>
                           <span className="text-[10px] text-slate-400">Prix standard</span>
                         </div>
-                        <span className="text-[10px] font-bold text-indigo-600 bg-indigo-50 px-2 py-1 rounded-lg group-hover:bg-indigo-600 group-hover:text-white transition-colors">
-                          + Ajouter
+                        <span className="text-[10px] font-bold text-indigo-600 bg-indigo-50 px-2 py-1 rounded-lg group-hover:bg-indigo-600 group-hover:text-white transition-colors whitespace-nowrap">
+                          + Ajouter {qtyToAdd > 1 ? `(${qtyToAdd})` : ''}
                         </span>
                       </div>
                     </button>
@@ -1150,7 +1218,7 @@ export const POSView: React.FC<POSViewProps> = ({ onNavigate }) => {
                           <td className="py-2 px-3 text-center">
                             <button
                               type="button"
-                              onClick={() => addToCart(product)}
+                              onClick={() => addToCart(product, qtyToAdd)}
                               disabled={isOutOfStock && !settings.allowNegativeStock}
                               className={`px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
                                 inCart
@@ -1160,7 +1228,7 @@ export const POSView: React.FC<POSViewProps> = ({ onNavigate }) => {
                                   : 'bg-indigo-50 text-indigo-700 hover:bg-indigo-600 hover:text-white'
                               }`}
                             >
-                              {inCart ? `+1 (${inCart.quantity})` : '+ Vendre'}
+                              {inCart ? `+${qtyToAdd} (${inCart.quantity})` : `+ Vendre (${qtyToAdd})`}
                             </button>
                           </td>
                         </tr>
@@ -1234,17 +1302,34 @@ export const POSView: React.FC<POSViewProps> = ({ onNavigate }) => {
 
           {/* Quick Article Direct Dropdown Selector */}
           <div className="flex items-center gap-1.5">
+            <div
+              className="flex items-center bg-white border border-indigo-200 rounded-lg px-2 py-1 gap-1 shrink-0"
+              title="Quantité à ajouter pour cet article"
+            >
+              <span className="text-[10px] font-bold text-slate-500">Qté:</span>
+              <input
+                type="number"
+                min="1"
+                step="1"
+                value={qtyToAdd}
+                onChange={(e) => {
+                  const val = parseInt(e.target.value, 10);
+                  setQtyToAdd(isNaN(val) || val < 1 ? 1 : val);
+                }}
+                className="w-10 text-center text-xs font-black text-indigo-900 border-0 focus:outline-none"
+              />
+            </div>
             <select
               value=""
               onChange={(e) => {
                 if (e.target.value) {
                   const prod = products.find((p) => p.id === e.target.value);
-                  if (prod) addToCart(prod);
+                  if (prod) addToCart(prod, qtyToAdd);
                 }
               }}
               className="flex-1 py-1.5 px-2.5 bg-white border border-indigo-200 hover:border-indigo-400 rounded-lg text-xs text-indigo-950 font-semibold focus:ring-1 focus:ring-indigo-500 focus:outline-none cursor-pointer"
             >
-              <option value="">+ Choisir & Ajouter un article au ticket...</option>
+              <option value="">+ Choisir & Ajouter ({qtyToAdd}) au ticket...</option>
               {products
                 .filter((p) => p.active)
                 .map((p) => {
@@ -1388,21 +1473,40 @@ export const POSView: React.FC<POSViewProps> = ({ onNavigate }) => {
 
                   {/* Quantity & Item Discount Controls */}
                   <div className="flex items-center justify-between pt-0.5">
-                    <div className="flex items-center gap-1">
+                    <div className="flex items-center gap-1 bg-slate-50 border border-slate-200 rounded-lg p-0.5">
                       <button
                         type="button"
                         onClick={() => updateQuantity(item.productId, item.quantity - 1)}
-                        className="w-6 h-6 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 flex items-center justify-center text-xs cursor-pointer"
+                        className="w-6 h-6 rounded bg-white hover:bg-slate-200 text-slate-700 flex items-center justify-center text-xs cursor-pointer border border-slate-200 shadow-2xs"
+                        title="Diminuer d'une unité (-1)"
                       >
                         <Minus className="w-3 h-3" />
                       </button>
-                      <span className="w-8 text-center text-xs font-bold text-slate-800">
-                        {item.quantity}
-                      </span>
+                      <input
+                        type="number"
+                        min="1"
+                        step="1"
+                        value={item.quantity === 0 ? '' : item.quantity}
+                        onChange={(e) => {
+                          const val = e.target.value === '' ? 0 : parseInt(e.target.value, 10);
+                          if (!isNaN(val)) {
+                            updateQuantity(item.productId, val);
+                          }
+                        }}
+                        onBlur={(e) => {
+                          const val = parseInt(e.target.value, 10);
+                          if (isNaN(val) || val <= 0) {
+                            updateQuantity(item.productId, 1);
+                          }
+                        }}
+                        className="w-12 text-center py-0.5 text-xs font-black text-slate-900 bg-white border border-slate-300 rounded focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+                        title="Saisir directement le nombre d'articles"
+                      />
                       <button
                         type="button"
                         onClick={() => updateQuantity(item.productId, item.quantity + 1)}
-                        className="w-6 h-6 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 flex items-center justify-center text-xs cursor-pointer"
+                        className="w-6 h-6 rounded bg-white hover:bg-slate-200 text-slate-700 flex items-center justify-center text-xs cursor-pointer border border-slate-200 shadow-2xs"
+                        title="Augmenter d'une unité (+1)"
                       >
                         <Plus className="w-3 h-3" />
                       </button>
