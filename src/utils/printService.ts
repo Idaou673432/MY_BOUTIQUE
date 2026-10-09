@@ -111,6 +111,170 @@ export const sanitizeLegalNotice = (text?: string): string => {
 };
 
 /**
+ * Generates an elegant brand header for thermal tickets (80mm & 58mm)
+ */
+/**
+ * Vector SVG Barcode generator for laser-sharp thermal printing
+ */
+export const generateBarcodeSvg = (code: string): string => {
+  // Deterministic Code128-like barcode bars pattern
+  const bars = [2,1,1,2,3,1,2,1,1,3,1,2,2,1,3,1,1,2,1,1,2,3,2,1,1,2,2,1,3,1,2,1,1,2,3,1,2,1,3,1,1,2,2,3,1,1,2,1,1,2,3,1,2,1,1,3,2,1,2,1,1,2,3,1,1,2,3,1,2,1,2,1,1,2,3,1,2,2,1,3,1,1,2,1,1,2,3,2,1];
+  let x = 6;
+  let rects = '';
+  for (let i = 0; i < bars.length; i++) {
+    const w = bars[i];
+    if (i % 2 === 0) {
+      rects += `<rect x="${x}" y="0" width="${w}" height="42" fill="#000000" />`;
+    }
+    x += w;
+  }
+  return `<svg width="100%" height="42" viewBox="0 0 ${x + 6} 42" preserveAspectRatio="none" style="display:block; margin:0 auto;">${rects}</svg>`;
+};
+
+/**
+ * Generates brand header for thermal receipt matching the Daou Service / Modern receipt specification
+ */
+export const getThermalBrandHeaderHtml = (
+  settings: StoreSettings,
+  is58: boolean = false
+): string => {
+  const rawStoreName = (settings.storeName || settings.shopName || 'TANE FAH COLLECTION').trim();
+  const address = settings.address || settings.shopAddress || 'Grand Marché de Bamako, Rue 18 x 25, Bamako - Mali';
+  const phone = settings.phone || settings.shopPhone || '+223 76 00 00 00 / +223 66 00 00 00';
+  const storeTagline = settings.storeTagline || settings.businessType || 'Haute Couture & Prêt-à-Porter';
+
+  const logoSrc = settings.logoUrl || STORE_LOGO_BASE64;
+
+  const isIT = rawStoreName.toLowerCase().includes('daou') ||
+               rawStoreName.toLowerCase().includes('it') ||
+               rawStoreName.toLowerCase().includes('info') ||
+               rawStoreName.toLowerCase().includes('tech') ||
+               rawStoreName.toLowerCase().includes('macbook');
+
+  const taglineBullets = isIT
+    ? (storeTagline && storeTagline.includes('•') ? storeTagline.toUpperCase() : 'VENTE  •  ACCESSOIRES  •  SERVICES IT')
+    : (storeTagline && storeTagline.includes('•') ? storeTagline.toUpperCase() : 'HAUTE COUTURE  •  PRÊT-À-PORTER  •  ACCESSOIRES');
+
+  const categories = isIT ? [
+    {
+      icon: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#000000" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="12" rx="2"/><line x1="2" y1="20" x2="22" y2="20"/></svg>`,
+      label: 'ORDINATEURS'
+    },
+    {
+      icon: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#000000" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="2" width="14" height="20" rx="2" ry="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg>`,
+      label: 'SMARTPHONES'
+    },
+    {
+      icon: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#000000" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 18v-6a9 9 0 0 1 18 0v6"/><path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3zM3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z"/></svg>`,
+      label: 'ACCESSOIRES'
+    },
+    {
+      icon: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#000000" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>`,
+      label: 'SERVICES IT'
+    }
+  ] : [
+    {
+      icon: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#000000" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>`,
+      label: 'HAUTE COUTURE'
+    },
+    {
+      icon: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#000000" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.38 3.46L16 2a4 4 0 0 1-8 0L3.62 3.46a2 2 0 0 0-1.34 2.23l.58 3.47a1 1 0 0 0 .99.84H6v10a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V10h2.15a1 1 0 0 0 .99-.84l.58-3.47a2 2 0 0 0-1.34-2.23z"/></svg>`,
+      label: 'PRÊT-À-PORTER'
+    },
+    {
+      icon: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#000000" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2h12a2 2 0 0 1 2 2v16a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2z"/><path d="M9 2v4a3 3 0 0 0 6 0V2"/></svg>`,
+      label: 'ACCESSOIRES'
+    },
+    {
+      icon: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#000000" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><line x1="20" y1="4" x2="8.12" y2="15.88"/><line x1="14.47" y1="14.48" x2="20" y2="20"/><line x1="8.12" y1="8.12" x2="12" y2="12"/></svg>`,
+      label: 'SUR-MESURE'
+    }
+  ];
+
+  const displayAddress = address;
+  const displayPhone = phone;
+
+  return `
+    <div class="store-header-box center">
+      <div style="text-align: center; margin: 0 auto 4px auto;">
+        <img class="receipt-logo" src="${logoSrc}" alt="${rawStoreName}" />
+      </div>
+      <div class="brand-tagline-bullets">${taglineBullets}</div>
+
+      <!-- 4 Categories Grid with Icons -->
+      <div class="category-grid">
+        ${categories.map((cat, idx) => `
+          <div class="cat-item">
+            <div class="cat-icon">${cat.icon}</div>
+            <div class="cat-label">${cat.label}</div>
+          </div>
+          ${idx < categories.length - 1 ? '<div class="cat-divider"></div>' : ''}
+        `).join('')}
+      </div>
+
+      <!-- Location & Phone Row -->
+      <div class="store-coords-row">
+        <div class="coord-item">
+          <svg class="coord-icon" viewBox="0 0 24 24"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/></svg>
+          <span>${displayAddress}</span>
+        </div>
+        <div class="coord-item">
+          <svg class="coord-icon" viewBox="0 0 24 24"><path d="M6.62 10.79c1.44 2.83 3.76 5.14 6.59 6.59l2.2-2.2c.27-.27.67-.36 1.02-.24 1.12.37 2.33.57 3.57.57.55 0 1 .45 1 1V20c0 .55-.45 1-1 1-9.39 0-17-7.61-17-17 0-.55.45-1 1-1h3.5c.55 0 1 .45 1 1 0 1.25.2 2.45.57 3.57.11.35.03.74-.25 1.02l-2.2 2.2z"/></svg>
+          <span>${displayPhone}</span>
+        </div>
+      </div>
+    </div>
+  `;
+};
+
+/**
+ * Generates an elegant brand header for A4 documents
+ */
+export const getA4BrandHeaderHtml = (
+  settings: StoreSettings
+): string => {
+  const rawStoreName = (settings.storeName || settings.shopName || 'TANE FAH COLLECTION').trim();
+  const address = settings.address || settings.shopAddress || '';
+  const phone = settings.phone || settings.shopPhone || '';
+  const email = settings.email || settings.shopEmail || '';
+  const nif = settings.nifRccm || '';
+  const mobileMoney = settings.mobileMoneyNumber || '';
+  const storeTagline = settings.storeTagline || settings.businessType || '';
+
+  const isTaneFah = rawStoreName.toUpperCase().includes('TANE FAH');
+
+  let titleHtml = '';
+  if (isTaneFah) {
+    titleHtml = `
+      <div class="brand-title-a4">TANE FAH</div>
+      <div class="brand-subtitle-a4">C O L L E C T I O N</div>
+      <div class="brand-tagline-a4">${storeTagline ? storeTagline.toUpperCase() : '— HAUTE COUTURE & PRÊT-À-PORTER —'}</div>
+    `;
+  } else {
+    titleHtml = `
+      <div class="brand-title-a4">${rawStoreName.toUpperCase()}</div>
+      ${storeTagline ? `<div class="brand-tagline-a4">${storeTagline.toUpperCase()}</div>` : ''}
+    `;
+  }
+
+  return `
+    <div style="display: flex; align-items: center; gap: 16px;">
+      <img class="a4-logo" src="${settings.logoUrl || STORE_LOGO_BASE64}" alt="${rawStoreName}" />
+      <div>
+        ${titleHtml}
+        <div class="store-info-a4">
+          ${address ? `<div><strong>ADRESSE :</strong> <span>${address.toUpperCase()}</span></div>` : ''}
+          ${phone ? `<div><strong>TÉLÉPHONE :</strong> <span>${phone}</span></div>` : ''}
+          ${email ? `<div><strong>EMAIL :</strong> <span>${email}</span></div>` : ''}
+          ${nif ? `<div><strong>NIF / RCCM :</strong> <span>${nif}</span></div>` : ''}
+          ${mobileMoney ? `<div><strong>PAIEMENT MOBILE :</strong> <span>${mobileMoney}</span></div>` : ''}
+        </div>
+      </div>
+    </div>
+  `;
+};
+
+/**
  * Generates isolated HTML string for thermal receipt (80mm or 58mm) with high-contrast bold typography
  */
 export const generateThermalReceiptHtml = (
@@ -121,17 +285,11 @@ export const generateThermalReceiptHtml = (
 ): string => {
   const is58 = widthMm === 58;
   const currency = settings.currency || 'FCFA';
-  const storeName = (settings.storeName || settings.shopName || 'BOUTIQUE MALI').toUpperCase();
-  const storeTagline = settings.storeTagline || settings.businessType || '';
-  const address = settings.address || settings.shopAddress || '';
   const phone = settings.phone || settings.shopPhone || '';
-  const email = settings.email || settings.shopEmail || '';
-  const nif = settings.nifRccm || '';
-  const mobileMoney = settings.mobileMoneyNumber || '';
 
-  const fontSize = is58 ? '11px' : '12.5px';
-  const headerFontSize = is58 ? '16px' : '19px';
-  const maxContentWidth = is58 ? '44mm' : '64mm';
+  const fontSize = is58 ? '10.5px' : '12px';
+  const maxContentWidth = is58 ? '44mm' : '66mm';
+  const totalItemsCount = sale.items.reduce((acc, it) => acc + it.quantity, 0);
 
   return `
 <!DOCTYPE html>
@@ -140,6 +298,9 @@ export const generateThermalReceiptHtml = (
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Ticket_${sale.invoiceNumber}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Dancing+Script:wght@700&display=swap" rel="stylesheet">
   <style>
     @page {
       margin: 0;
@@ -153,16 +314,16 @@ export const generateThermalReceiptHtml = (
       print-color-adjust: exact !important;
     }
     body {
-      font-family: Arial, Helvetica, "Segoe UI", Roboto, -apple-system, sans-serif;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
       font-size: ${fontSize};
       font-weight: 600;
       line-height: 1.35;
       color: #000000 !important;
       background: #ffffff !important;
-      padding: ${is58 ? "1.5mm 2mm 1.5mm 1mm" : "2mm 4mm 2mm 1.5mm"};
+      padding: ${is58 ? "1mm 1.5mm" : "2mm 3.5mm"};
       width: ${widthMm}mm;
       max-width: ${widthMm}mm;
-      margin: 0;
+      margin: 0 auto;
       -webkit-print-color-adjust: exact !important;
       print-color-adjust: exact !important;
       -webkit-font-smoothing: antialiased;
@@ -170,9 +331,7 @@ export const generateThermalReceiptHtml = (
     .ticket-container {
       width: 100%;
       max-width: ${maxContentWidth};
-      margin-left: 0.5mm;
-      margin-right: auto;
-      padding-right: 2.5mm;
+      margin: 0 auto;
     }
     .center { text-align: center; }
     .right { text-align: right; }
@@ -180,135 +339,361 @@ export const generateThermalReceiptHtml = (
     .bold { font-weight: 800 !important; }
     .bolder { font-weight: 900 !important; }
     .uppercase { text-transform: uppercase; }
-    .divider {
-      border-top: 1.5px dashed #000000;
-      margin: 3px 0;
-    }
-    .double-divider {
-      border-top: 2.5px double #000000;
-      margin: 4px 0;
-    }
+
+    /* Prestigious Haute Couture & Boutique Styling */
     .store-header-box {
       text-align: center;
-      margin-bottom: 2px;
-      padding-bottom: 0px;
+      margin-bottom: 4px;
+      padding-bottom: 2px;
     }
     .receipt-logo {
       display: block;
-      margin: 0 auto 6px auto;
-      max-height: ${is58 ? '80px' : '105px'};
-      max-width: ${is58 ? '180px' : '240px'};
-      width: auto;
+      margin: 0 auto 4px auto;
+      width: ${is58 ? '135px' : '170px'};
+      max-width: 90%;
+      height: auto;
       object-fit: contain;
-      filter: grayscale(100%) contrast(350%) brightness(55%);
-      -webkit-print-color-adjust: exact !important;
-      print-color-adjust: exact !important;
+      filter: none !important;
+      -webkit-filter: none !important;
       image-rendering: -webkit-optimize-contrast;
       image-rendering: crisp-edges;
+      -webkit-print-color-adjust: exact !important;
+      print-color-adjust: exact !important;
     }
-    .store-name {
-      font-size: ${headerFontSize};
+    .brand-tagline-bullets {
+      font-size: ${is58 ? '9.5px' : '11px'};
       font-weight: 900 !important;
-      letter-spacing: 0.3px;
-      margin-bottom: 1px;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      text-align: center;
+      margin: 4px 0 6px 0;
+      color: #000000 !important;
+      line-height: 1.2;
+    }
+
+    /* 4 Categories Grid */
+    .category-grid {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-top: 1px solid #000000;
+      border-bottom: 1px solid #000000;
+      padding: 5px 0;
+      margin: 5px 0 6px 0;
+    }
+    .cat-item {
+      flex: 1;
+      text-align: center;
+    }
+    .cat-icon {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      margin-bottom: 2px;
+    }
+    .cat-icon svg {
+      width: ${is58 ? '16px' : '20px'};
+      height: ${is58 ? '16px' : '20px'};
+    }
+    .cat-label {
+      font-size: ${is58 ? '7px' : '8.5px'};
+      font-weight: 900 !important;
+      letter-spacing: 0.4px;
+      text-transform: uppercase;
       line-height: 1.1;
-      text-transform: uppercase;
-      color: #000000 !important;
     }
-    .store-sub {
-      font-size: ${is58 ? '10px' : '11.5px'};
-      font-weight: 700 !important;
-      margin-bottom: 1px;
-      line-height: 1.15;
-      color: #000000 !important;
-      text-transform: uppercase;
+    .cat-divider {
+      width: 1px;
+      height: 24px;
+      background: #000000;
     }
-    .store-info-line {
-      font-size: ${is58 ? '10px' : '11.5px'};
-      font-weight: 700 !important;
-      margin-bottom: 1px;
-      line-height: 1.15;
-      color: #000000 !important;
-    }
-    .meta-row {
+
+    /* Store Coordinates Row */
+    .store-coords-row {
       display: flex;
       justify-content: space-between;
-      align-items: baseline;
-      margin-bottom: 2px;
-      font-size: ${fontSize};
-      font-weight: 700 !important;
-      line-height: 1.25;
+      align-items: center;
+      font-size: ${is58 ? '8.5px' : '10.5px'};
+      font-weight: 800 !important;
+      margin: 6px 0 4px 0;
       color: #000000 !important;
+      gap: 6px;
     }
-    .meta-row span:first-child {
+    .coord-item {
+      display: flex;
+      align-items: center;
+      gap: 3px;
+    }
+    .coord-icon {
+      width: 13px;
+      height: 13px;
+      fill: #000000;
       flex-shrink: 0;
     }
-    .meta-row span:last-child {
-      text-align: right;
-      padding-right: 2px;
-      word-break: break-word;
-      max-width: 65%;
+
+    .dashed-line {
+      border-top: 1.5px dashed #000000;
+      margin: 6px 0;
     }
-    .item-table {
+
+    /* Black Pill Title Banner */
+    .receipt-black-banner {
+      background: #000000 !important;
+      color: #ffffff !important;
+      text-align: center;
+      font-size: ${is58 ? '12.5px' : '15.5px'};
+      font-weight: 900 !important;
+      letter-spacing: 1.5px;
+      padding: 5px 8px;
+      border-radius: 6px;
+      margin: 6px 0;
+      text-transform: uppercase;
+      -webkit-print-color-adjust: exact !important;
+      print-color-adjust: exact !important;
+    }
+
+    /* 2 Columns Metadata */
+    .meta-two-col {
+      display: flex;
+      align-items: stretch;
+      gap: 6px;
+      font-size: ${is58 ? '8.5px' : '10.5px'};
+      font-weight: 700 !important;
+      line-height: 1.35;
+      margin: 6px 0;
+    }
+    .meta-col {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+    }
+    .meta-v-divider {
+      width: 1.5px;
+      background: #000000;
+      margin: 0 1px;
+    }
+    .meta-line {
+      display: flex;
+      align-items: baseline;
+    }
+    .meta-lbl {
+      font-weight: 900 !important;
+      min-width: ${is58 ? '60px' : '74px'};
+      flex-shrink: 0;
+      text-transform: uppercase;
+    }
+    .meta-sep {
+      font-weight: 900 !important;
+      margin-right: 4px;
+    }
+    .meta-val {
+      font-weight: 800 !important;
+      word-break: break-word;
+    }
+
+    /* Thick Bordered Items Table */
+    .receipt-table {
       width: 100%;
       border-collapse: collapse;
-      margin: 3px 0;
+      border: 2px solid #000000;
+      margin: 6px 0;
     }
-    .item-table th {
+    .receipt-table th {
+      border-right: 1.5px solid #000000;
       border-bottom: 2px solid #000000;
-      border-top: 2px solid #000000;
-      padding: 3px 1px;
+      padding: 5px 2px;
+      font-size: ${is58 ? '8.5px' : '10.5px'};
+      font-weight: 900 !important;
+      text-transform: uppercase;
+      text-align: center;
+      background: #f8fafc;
+      color: #000000 !important;
+    }
+    .receipt-table th:last-child {
+      border-right: none;
+    }
+    .receipt-table td {
+      border-right: 1.5px solid #000000;
+      border-bottom: 1.5px solid #000000;
+      padding: 5px 3px;
+      vertical-align: middle;
+      font-size: ${is58 ? '9px' : '11px'};
+      font-weight: 700;
+      line-height: 1.25;
+      color: #000000 !important;
+    }
+    .receipt-table tr:last-child td {
+      border-bottom: none;
+    }
+    .receipt-table td:last-child {
+      border-right: none;
+    }
+    .item-title {
+      font-size: ${is58 ? '10px' : '12px'};
+      font-weight: 900 !important;
+      line-height: 1.2;
+    }
+    .item-subtitle {
+      font-size: ${is58 ? '8px' : '9.5px'};
+      font-weight: 600;
+      color: #333333;
+      margin-top: 1px;
+    }
+
+    /* Total Dual-Tone Centerpiece Banner */
+    .total-dual-banner {
+      display: flex;
+      align-items: stretch;
+      border: 2px solid #000000;
+      border-radius: 4px;
+      overflow: hidden;
+      margin: 8px 0;
+      -webkit-print-color-adjust: exact !important;
+      print-color-adjust: exact !important;
+    }
+    .total-left-label {
+      background: #f1f5f9 !important;
+      color: #000000 !important;
+      font-size: ${is58 ? '13px' : '17px'};
+      font-weight: 900 !important;
+      letter-spacing: 1px;
+      padding: 7px 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex: 1;
+      text-transform: uppercase;
+    }
+    .total-right-amount {
+      background: #000000 !important;
+      color: #ffffff !important;
+      font-size: ${is58 ? '14px' : '19px'};
+      font-weight: 900 !important;
+      letter-spacing: 0.5px;
+      padding: 7px 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex: 1.35;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, monospace;
+    }
+
+    /* Calligraphy Script */
+    .thanks-calligraphy {
+      font-family: 'Dancing Script', 'Brush Script MT', 'Caveat', 'Great Vibes', 'Segoe Script', cursive, italic;
+      font-size: ${is58 ? '18px' : '23px'};
+      font-weight: bold;
+      text-align: center;
+      margin: 8px 0 5px 0;
+      color: #000000 !important;
+    }
+
+    /* 3 Trust Badges */
+    .trust-badges-row {
+      display: flex;
+      justify-content: space-around;
+      align-items: center;
+      font-size: ${is58 ? '8px' : '9.5px'};
+      font-weight: 800 !important;
+      margin: 4px 0 6px 0;
+      text-align: center;
+      color: #000000 !important;
+    }
+    .badge-col {
+      display: flex;
+      align-items: center;
+      gap: 3px;
+    }
+    .badge-sep {
+      color: #000000;
+      font-weight: 900;
+    }
+
+    /* Realistic Barcode */
+    .barcode-section {
+      text-align: center;
+      margin: 7px 0 3px 0;
+    }
+    .barcode-code-str {
+      font-family: monospace;
+      font-size: 11px;
+      font-weight: 900 !important;
+      letter-spacing: 1px;
+      margin-top: 3px;
+    }
+    .net-box-label {
       font-size: ${is58 ? '10px' : '11.5px'};
       font-weight: 800 !important;
-      line-height: 1.2;
+      letter-spacing: 1.5px;
       text-transform: uppercase;
       color: #000000 !important;
     }
-    .item-table td {
-      padding: 3px 1px;
-      vertical-align: top;
-      font-size: ${fontSize};
-      font-weight: 600 !important;
-      line-height: 1.25;
-      border-bottom: 1px dashed #000000;
-      color: #000000 !important;
-    }
-    .item-table th:last-child,
-    .item-table td:last-child {
-      padding-right: 2.5px !important;
-    }
-    .total-row {
-      display: flex;
-      justify-content: space-between;
-      align-items: baseline;
-      font-size: ${is58 ? '14px' : '17px'};
+    .net-box-amount {
+      font-size: ${is58 ? '17px' : '21px'};
       font-weight: 900 !important;
-      margin: 3px 0;
-      padding: 2px 0;
-      line-height: 1.15;
+      letter-spacing: 0.5px;
+      margin-top: 2px;
       color: #000000 !important;
     }
-    .total-row span:last-child {
-      padding-right: 2.5px;
+
+    .payment-box {
+      margin-top: 4px;
+      font-size: ${is58 ? '10px' : '11.5px'};
     }
-    .barcode {
+    .credit-alert {
+      border-top: 1px dashed #000000;
+      padding-top: 2px;
+      margin-top: 2px;
+    }
+
+    /* Barcode & Footer */
+    .barcode-box {
       text-align: center;
-      margin: 4px 0 1px 0;
+      margin: 6px 0 4px 0;
+    }
+    .barcode-strip {
       font-family: monospace;
       letter-spacing: 2px;
-      font-size: 12px;
-      font-weight: 700 !important;
-      line-height: 1.1;
-      color: #000000 !important;
+      font-size: 13px;
+      font-weight: 900 !important;
+      line-height: 1;
     }
+    .barcode-num {
+      font-size: 9.5px;
+      font-weight: 700 !important;
+      letter-spacing: 1px;
+      margin-top: 1px;
+    }
+
     .footer-msg {
       text-align: center;
-      font-size: ${is58 ? '10px' : '11.5px'};
-      font-weight: 700 !important;
-      margin-top: 4px;
-      line-height: 1.2;
+      margin-top: 5px;
+      font-size: ${is58 ? '9.5px' : '11px'};
+      line-height: 1.35;
       color: #000000 !important;
     }
+    .footer-msg .thanks-title {
+      font-weight: 900 !important;
+      letter-spacing: 0.5px;
+    }
+    .footer-msg .thanks-brand {
+      font-weight: 800;
+      font-size: ${is58 ? '9px' : '10.5px'};
+      letter-spacing: 1px;
+      margin-top: 1px;
+    }
+    .footer-msg .thanks-policy {
+      font-size: ${is58 ? '8.5px' : '9.5px'};
+      margin-top: 2px;
+      color: #222222;
+    }
+    .footer-msg .thanks-contact {
+      font-size: ${is58 ? '8.5px' : '9.5px'};
+      font-weight: 700;
+      margin-top: 1px;
+    }
+
     .no-print-toolbar {
       display: flex;
       justify-content: center;
@@ -337,6 +722,7 @@ export const generateThermalReceiptHtml = (
       cursor: pointer;
       font-size: 12px;
     }
+
     @media print {
       .no-print-toolbar {
         display: none !important;
@@ -350,16 +736,12 @@ export const generateThermalReceiptHtml = (
       .ticket-container {
         width: 100% !important;
         max-width: ${maxContentWidth} !important;
-        margin-left: 0.5mm !important;
-        margin-right: auto !important;
-        padding-right: 2.5mm !important;
+        margin: 0 auto !important;
+        padding: 0 !important;
       }
       .receipt-logo {
-        filter: grayscale(100%) contrast(400%) brightness(40%) !important;
         -webkit-print-color-adjust: exact !important;
         print-color-adjust: exact !important;
-        image-rendering: -webkit-optimize-contrast !important;
-        image-rendering: crisp-edges !important;
       }
       .store-header-box * {
         color: #000000 !important;
@@ -374,135 +756,175 @@ export const generateThermalReceiptHtml = (
   </div>
 
   <div class="ticket-container">
-    <!-- Store Header -->
-    <div class="store-header-box center">
-      <div style="text-align: center; margin: 0 auto 4px auto;">
-        <img class="receipt-logo" src="${settings.logoUrl || STORE_LOGO_BASE64}" alt="${storeName}" />
-      </div>
-      <div class="store-name bold">${storeName}</div>
-      ${storeTagline ? `<div class="store-sub uppercase">${storeTagline}</div>` : ''}
-      ${address ? `<div class="store-info-line uppercase">ADRESSE: ${address}</div>` : ''}
-      ${phone ? `<div class="store-info-line">TÉL: ${phone}</div>` : ''}
-      ${email ? `<div class="store-info-line">EMAIL: ${email}</div>` : ''}
-      ${nif ? `<div class="store-info-line uppercase">NIF / RCCM: ${nif}</div>` : ''}
-      ${mobileMoney ? `<div class="store-info-line uppercase">PAIEMENT MOBILE: ${mobileMoney}</div>` : ''}
+    <!-- Store Header with Brand, Categories & Coords -->
+    ${getThermalBrandHeaderHtml(settings, is58)}
+
+    <div class="dashed-line"></div>
+
+    <!-- Title Banner: FACTURE / REÇU DE VENTE in black rounded pill -->
+    <div class="receipt-black-banner">
+      FACTURE / REÇU DE VENTE
     </div>
 
-    <div class="divider"></div>
-
-    <!-- Metadata -->
-    <div>
-      <div class="meta-row">
-        <span>TICKET N°:</span>
-        <span class="bold">${sale.invoiceNumber}</span>
+    <!-- 2-Columns Metadata -->
+    <div class="meta-two-col">
+      <div class="meta-col">
+        <div class="meta-line">
+          <span class="meta-lbl">N° FACTURE</span>
+          <span class="meta-sep">:</span>
+          <span class="meta-val font-mono">${sale.invoiceNumber}</span>
+        </div>
+        <div class="meta-line">
+          <span class="meta-lbl">DATE</span>
+          <span class="meta-sep">:</span>
+          <span class="meta-val">${formatDateTime(sale.date)}</span>
+        </div>
+        <div class="meta-line">
+          <span class="meta-lbl">VENDEUR</span>
+          <span class="meta-sep">:</span>
+          <span class="meta-val">${sale.userName || settings.storeName || 'TANE FAH'}</span>
+        </div>
       </div>
-      <div class="meta-row">
-        <span>DATE:</span>
-        <span class="bold">${formatDateTime(sale.date)}</span>
+      <div class="meta-v-divider"></div>
+      <div class="meta-col">
+        <div class="meta-line">
+          <span class="meta-lbl">CLIENT</span>
+          <span class="meta-sep">:</span>
+          <span class="meta-val uppercase">${sale.customerName ? sale.customerName : 'Client Passager'}</span>
+        </div>
+        <div class="meta-line">
+          <span class="meta-lbl">MODE PAIEMENT</span>
+          <span class="meta-sep">:</span>
+          <span class="meta-val">${getPaymentMethodLabel(sale.paymentMethod)}</span>
+        </div>
+        <div class="meta-line">
+          <span class="meta-lbl">STATUT</span>
+          <span class="meta-sep">:</span>
+          <span class="meta-val">${sale.remainingDue && sale.remainingDue > 0 ? 'Partiel / Dette' : 'Payé'}</span>
+        </div>
       </div>
-      <div class="meta-row">
-        <span>CAISSIER:</span>
-        <span class="bold">${sale.userName || 'Caisse 1'}</span>
-      </div>
-      ${sale.customerName ? `
-      <div class="meta-row">
-        <span>CLIENT:</span>
-        <span class="bold uppercase">${sale.customerName}</span>
-      </div>
-      ` : ''}
     </div>
 
-    <div class="divider"></div>
+    <div class="dashed-line"></div>
 
-    <!-- Articles Table -->
-    <table class="item-table">
+    <!-- Thick Bordered Articles Table -->
+    <table class="receipt-table">
       <thead>
         <tr>
-          <th class="left bold" style="width: 40%;">Article</th>
-          <th class="center bold" style="width: 14%;">Qté</th>
-          <th class="right bold" style="width: 23%;">P.U</th>
-          <th class="right bold" style="width: 23%;">Total</th>
+          <th style="width: 44%;">DÉSIGNATION</th>
+          <th style="width: 14%;">QTÉ</th>
+          <th style="width: 21%;">P.U. (${currency})</th>
+          <th style="width: 21%;">MONTANT (${currency})</th>
         </tr>
       </thead>
       <tbody>
         ${sale.items.map((item) => `
         <tr>
-          <td class="left bold" style="word-break: break-word;">
-            <div>${item.productName}</div>
-            ${item.discountPercent > 0 ? `<div style="font-size: ${is58 ? '9.5px' : '10.5px'}; font-weight:700;">Remise -${item.discountPercent}%</div>` : ''}
+          <td style="text-align: left;">
+            <div class="item-title">${item.productName}</div>
+            ${item.discountPercent > 0 ? `<div class="item-subtitle">Remise -${item.discountPercent}%</div>` : ''}
           </td>
-          <td class="center bold">${formatQuantity(item.quantity)}</td>
-          <td class="right bold">${formatMoney(item.unitPrice, '')}</td>
-          <td class="right bold">${formatMoney(item.total, '')}</td>
+          <td style="text-align: center; font-weight: 900; font-size: ${is58 ? '11px' : '13px'};">
+            ${formatQuantity(item.quantity)}
+          </td>
+          <td style="text-align: center; font-weight: 900;">
+            ${formatMoney(item.unitPrice, '')}
+          </td>
+          <td style="text-align: center; font-weight: 900;">
+            ${formatMoney(item.total, '')}
+          </td>
         </tr>
         `).join('')}
       </tbody>
     </table>
 
-    <!-- Totals -->
-    <div>
-      <div class="meta-row">
-        <span>SOUS-TOTAL:</span>
-        <span class="bold">${formatMoney(sale.subtotal, currency)}</span>
+    <div class="dashed-line"></div>
+
+    <!-- Optional discounts/subtotal summary if discounts applied -->
+    ${sale.discountTotal > 0 || (settings.taxEnabled && sale.taxAmount > 0) ? `
+    <div style="margin: 3px 0; font-size: ${is58 ? '9px' : '10.5px'}; font-weight: 800;">
+      <div style="display: flex; justify-content: space-between; margin-bottom: 2px;">
+        <span>Sous-total (${totalItemsCount} ${totalItemsCount > 1 ? 'articles' : 'article'}) :</span>
+        <span>${formatMoney(sale.subtotal, currency)}</span>
       </div>
       ${sale.discountTotal > 0 ? `
-      <div class="meta-row">
-        <span>REMISE:</span>
-        <span class="bold">-${formatMoney(sale.discountTotal, currency)}</span>
+      <div style="display: flex; justify-content: space-between; margin-bottom: 2px;">
+        <span>Remise commerciale :</span>
+        <span>-${formatMoney(sale.discountTotal, currency)}</span>
       </div>
       ` : ''}
       ${settings.taxEnabled && sale.taxAmount > 0 ? `
-      <div class="meta-row">
-        <span>TVA (${settings.taxRatePercent}%):</span>
-        <span class="bold">${formatMoney(sale.taxAmount, currency)}</span>
+      <div style="display: flex; justify-content: space-between; margin-bottom: 2px;">
+        <span>TVA (${settings.taxRatePercent}%) :</span>
+        <span>${formatMoney(sale.taxAmount, currency)}</span>
       </div>
       ` : ''}
-      
-      <div class="double-divider"></div>
-      <div class="total-row">
-        <span class="bolder uppercase">NET À PAYER:</span>
-        <span class="bolder">${formatMoney(sale.totalAmount, currency)}</span>
+    </div>
+    ` : ''}
+
+    <!-- Total Centerpiece Dual-Tone Banner -->
+    <div class="total-dual-banner">
+      <div class="total-left-label">
+        TOTAL TTC  :
       </div>
-      <div class="double-divider"></div>
+      <div class="total-right-amount">
+        ${formatMoney(sale.totalAmount, '')} ${currency}
+      </div>
     </div>
 
-    <!-- Payment info -->
-    <div style="font-size: ${is58 ? '10.5px' : '11.5px'}; margin-top: 4px;">
-      <div class="meta-row">
-        <span>PAIEMENT:</span>
-        <span class="bold uppercase">${getPaymentMethodLabel(sale.paymentMethod)}</span>
-      </div>
+    <!-- Payment info (Amount received, Change given, Credit remaining) -->
+    ${(sale.amountReceived > 0 || (sale.remainingDue && sale.remainingDue > 0)) ? `
+    <div style="font-size: ${is58 ? '9px' : '10.5px'}; font-weight: 800; margin: 4px 0;">
       ${sale.amountReceived > 0 ? `
-      <div class="meta-row">
-        <span>MONTANT REÇU:</span>
-        <span class="bold">${formatMoney(sale.amountReceived, currency)}</span>
-      </div>
-      ` : ''}
-      ${sale.remainingDue && sale.remainingDue > 0 ? `
-      <div class="meta-row" style="color: #000000; font-weight: 800; border-top: 1px dashed #000; padding-top: 2px;">
-        <span>RESTE EN DETTE:</span>
-        <span class="bold font-mono">${formatMoney(sale.remainingDue, currency)}</span>
+      <div style="display: flex; justify-content: space-between; margin-bottom: 2px;">
+        <span>Montant versé :</span>
+        <span>${formatMoney(sale.amountReceived, currency)}</span>
       </div>
       ` : ''}
       ${sale.changeGiven > 0 ? `
-      <div class="meta-row">
-        <span>MONNAIE RENDUE:</span>
-        <span class="bold">${formatMoney(sale.changeGiven, currency)}</span>
+      <div style="display: flex; justify-content: space-between; margin-bottom: 2px;">
+        <span>Monnaie rendue :</span>
+        <span>${formatMoney(sale.changeGiven, currency)}</span>
+      </div>
+      ` : ''}
+      ${sale.remainingDue && sale.remainingDue > 0 ? `
+      <div style="background:#fee2e2; border:1.5px solid #ef4444; color:#991b1b; padding:4px 8px; border-radius:4px; font-weight:900; display:flex; justify-content:space-between; margin:4px 0;">
+        <span>RESTE EN DETTE :</span>
+        <span class="font-mono">${formatMoney(sale.remainingDue, currency)}</span>
       </div>
       ` : ''}
     </div>
+    ` : ''}
 
-    <div class="divider"></div>
-
-    <!-- Barcode simulation -->
-    <div class="barcode">
-      ||||| ||| |||| || |||||| | |||
-      <div style="font-size: 10px; font-weight: 700; letter-spacing: 0;">${sale.invoiceNumber}</div>
+    <!-- Handwritten Calligraphy Script: Merci pour votre confiance ! -->
+    <div class="thanks-calligraphy">
+      Merci pour votre confiance !
     </div>
 
-    <!-- Footer message -->
-    <div class="footer-msg">
-      <div>${sanitizeReceiptFooter(settings.receiptFooterMessage)}</div>
+    <!-- 3 Trust Badges: Produits originaux | Garantie assurée | Service fiable -->
+    <div class="trust-badges-row">
+      <div class="badge-col">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="#000000"><path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm-2 16l-4-4 1.41-1.41L10 14.17l6.59-6.59L18 9l-8 8z"/></svg>
+        <span>Produits originaux</span>
+      </div>
+      <span class="badge-sep">|</span>
+      <div class="badge-col">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="#000000"><path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm-2 16l-4-4 1.41-1.41L10 14.17l6.59-6.59L18 9l-8 8z"/></svg>
+        <span>Garantie assurée</span>
+      </div>
+      <span class="badge-sep">|</span>
+      <div class="badge-col">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="#000000"><path d="M12 3a9 9 0 0 0-9 9v7c0 1.1.9 2 2 2h4v-8H5v-1a7 7 0 0 1 14 0v1h-4v8h4c1.1 0 2-.9 2-2v-7a9 9 0 0 0-9-9z"/></svg>
+        <span>Service fiable</span>
+      </div>
+    </div>
+
+    <div class="dashed-line"></div>
+
+    <!-- Vector Barcode Simulation -->
+    <div class="barcode-section">
+      ${generateBarcodeSvg(sale.invoiceNumber)}
+      <div class="barcode-code-str">${sale.invoiceNumber}</div>
     </div>
   </div>
 
@@ -726,13 +1148,7 @@ export const generateCreditDebtThermalTicketHtml = (
   </div>
 
   <div class="ticket-container">
-    <div class="center">
-      <div class="store-name">${storeName}</div>
-      ${address ? `<div>${address}</div>` : ''}
-      ${phone ? `<div>TÉL: ${phone}</div>` : ''}
-      ${email ? `<div>EMAIL: ${email}</div>` : ''}
-      ${nif ? `<div>NIF/RCCM: ${nif}</div>` : ''}
-    </div>
+    ${getThermalBrandHeaderHtml(settings, is58)}
 
     <div class="doc-title">${title}</div>
     <div class="doc-subtitle">${subtitle}</div>
@@ -1024,11 +1440,7 @@ export const generateCreditPaymentThermalTicketHtml = (
   </div>
 
   <div class="ticket-container">
-    <div class="center">
-      <div style="font-size:${is58 ? '15px' : '18px'};" class="bold">${storeName}</div>
-      ${address ? `<div>${address}</div>` : ''}
-      ${phone ? `<div>TÉL: ${phone}</div>` : ''}
-    </div>
+    ${getThermalBrandHeaderHtml(settings, is58)}
 
     <div class="doc-title bold">
       REÇU DE RÈGLEMENT ${partyType === 'CLIENT' ? 'CRÉDIT' : 'DETTE'}
@@ -1315,11 +1727,7 @@ export const generatePartyCreditBalanceThermalTicketHtml = (params: {
   </div>
 
   <div class="ticket-container">
-    <div class="center">
-      <div style="font-size:${is58 ? '15.5px' : '18.5px'}; line-height:1.15;" class="bolder uppercase">${storeName}</div>
-      ${address ? `<div style="font-size:${is58 ? '10px' : '11px'}; font-weight:700; margin-top:2px;">${address}</div>` : ''}
-      ${phone ? `<div style="font-size:${is58 ? '10px' : '11px'}; font-weight:700;">TÉL: ${phone}</div>` : ''}
-    </div>
+    ${getThermalBrandHeaderHtml(settings, is58)}
 
     <div class="center" style="font-size:${is58 ? '10px' : '11px'}; margin:4px 0 3px; font-weight:700;">
       Situation arrêtée le ${formatDateTime(new Date().toISOString())}
@@ -1577,11 +1985,7 @@ export const generateCreditDebtSummaryReportThermalTicketHtml = (params: {
   </div>
 
   <div class="ticket-container">
-    <div class="center">
-      <div style="font-size:${is58 ? '15px' : '18px'};" class="bold">${storeName}</div>
-      ${address ? `<div>${address}</div>` : ''}
-      ${phone ? `<div>TÉL: ${phone}</div>` : ''}
-    </div>
+    ${getThermalBrandHeaderHtml(settings, is58)}
 
     <div class="doc-title bold">${title}</div>
     <div class="center" style="font-size:9px; margin-bottom:3px;">
@@ -1889,16 +2293,40 @@ export const generateA4InvoiceHtml = (
       cursor: pointer;
     }
     .a4-logo {
-      max-height: 110px;
-      max-width: 220px;
+      max-height: 105px;
+      max-width: 210px;
       object-fit: contain;
       border-radius: 8px;
       padding: 2px;
-      filter: grayscale(100%) contrast(350%) brightness(55%);
       -webkit-print-color-adjust: exact !important;
       print-color-adjust: exact !important;
-      image-rendering: -webkit-optimize-contrast;
-      image-rendering: crisp-edges;
+    }
+    .brand-title-a4 {
+      font-family: 'Playfair Display', 'Cinzel', 'Didot', 'Bodoni MT', 'Georgia', 'Times New Roman', serif;
+      font-size: 26px;
+      font-weight: 900 !important;
+      letter-spacing: 2.5px;
+      line-height: 1.05;
+      text-transform: uppercase;
+      color: #000000 !important;
+      margin-bottom: 2px;
+    }
+    .brand-subtitle-a4 {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      font-size: 13px;
+      font-weight: 800 !important;
+      letter-spacing: 5px;
+      text-transform: uppercase;
+      color: #000000 !important;
+      margin-bottom: 3px;
+    }
+    .brand-tagline-a4 {
+      font-size: 11.5px;
+      font-weight: 700 !important;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      color: #1a1a1a !important;
+      margin-bottom: 6px;
     }
     @media print {
       .no-print-toolbar {
@@ -1915,11 +2343,8 @@ export const generateA4InvoiceHtml = (
         print-color-adjust: exact !important;
       }
       .a4-logo {
-        filter: grayscale(100%) contrast(400%) brightness(40%) !important;
         -webkit-print-color-adjust: exact !important;
         print-color-adjust: exact !important;
-        image-rendering: -webkit-optimize-contrast !important;
-        image-rendering: crisp-edges !important;
       }
     }
   </style>
@@ -1931,20 +2356,7 @@ export const generateA4InvoiceHtml = (
   </div>
 
   <div class="header">
-    <div style="display: flex; align-items: center; gap: 14px;">
-      <img class="a4-logo" src="${settings.logoUrl || STORE_LOGO_BASE64}" alt="${storeName}" />
-      <div>
-        <div class="store-title bold">${storeName}</div>
-        ${storeTagline ? `<div class="store-tagline-a4 bold">${storeTagline}</div>` : ''}
-        <div class="store-info-a4 bold">
-          ${address ? `<div><strong>ADRESSE :</strong> <span>${address.toUpperCase()}</span></div>` : ''}
-          ${phone ? `<div><strong>TÉLÉPHONE :</strong> <span>${phone}</span></div>` : ''}
-          ${email ? `<div><strong>EMAIL :</strong> <span>${email}</span></div>` : ''}
-          ${nif ? `<div><strong>NIF / RCCM :</strong> <span>${nif}</span></div>` : ''}
-          ${mobileMoney ? `<div><strong>PAIEMENT MOBILE :</strong> <span>${mobileMoney}</span></div>` : ''}
-        </div>
-      </div>
-    </div>
+    ${getA4BrandHeaderHtml(settings)}
 
     <div class="right">
       <div class="invoice-badge">FACTURE OFFICIELLE</div>

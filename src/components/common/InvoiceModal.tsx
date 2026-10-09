@@ -27,7 +27,9 @@ import {
   Settings as SettingsIcon,
   ChevronDown,
   RotateCcw,
-  AlertTriangle
+  AlertTriangle,
+  Laptop,
+  Headphones
 } from 'lucide-react';
 import { Sale, Customer } from '../../types';
 import { useStore } from '../../context/StoreContext';
@@ -42,6 +44,7 @@ import {
 import {
   generateThermalReceiptHtml,
   generateA4InvoiceHtml,
+  generateBarcodeSvg,
   executeDirectPrint,
   downloadHtmlFile,
   openPrintWindow,
@@ -500,18 +503,19 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
                   <img
                     src={settings.logoUrl || STORE_LOGO_BASE64}
                     alt={settings.storeName || 'Logo'}
-                    className="w-24 h-24 sm:w-28 sm:h-28 object-contain rounded-xl border border-slate-400 p-1 shrink-0 bg-white shadow-xs grayscale contrast-[350%] brightness-[50%] print:contrast-[400%] print:brightness-[35%]"
+                    className="w-24 h-24 sm:w-28 sm:h-28 object-contain rounded-xl border border-slate-300 p-1.5 shrink-0 bg-white shadow-xs"
                   />
                   <div className="space-y-1">
                     <div>
-                      <h1 className="text-xl sm:text-2xl font-black tracking-tight text-slate-950 uppercase leading-tight">
-                        {settings.storeName || settings.shopName || 'TANE FAH COLLECTION'}
+                      <h1 className="text-2xl sm:text-3xl font-serif font-black tracking-[0.12em] text-slate-950 uppercase leading-none">
+                        TANE FAH
                       </h1>
-                      {(settings.storeTagline || settings.businessType) && (
-                        <p className="text-[11px] text-slate-950 font-black uppercase tracking-wider leading-tight">
-                          {settings.storeTagline || settings.businessType}
-                        </p>
-                      )}
+                      <p className="text-xs font-sans font-black text-slate-800 tracking-[0.35em] uppercase leading-tight mt-0.5">
+                        C O L L E C T I O N
+                      </p>
+                      <p className="text-[10px] font-sans font-bold text-slate-600 tracking-wider uppercase leading-tight mt-1">
+                        — {settings.storeTagline || 'HAUTE COUTURE & PRÊT-À-PORTER'} —
+                      </p>
                     </div>
 
                     <div className="text-[11px] text-slate-950 font-black space-y-0.5 pt-1 leading-snug">
@@ -733,179 +737,223 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
           {(printFormat === 'TICKET_80' || printFormat === 'TICKET_58') && (
             <div
               id="printable-receipt"
-              className={`bg-white p-4 mx-auto border-2 border-slate-900 shadow-md text-slate-950 text-xs font-mono font-bold rounded-lg ${
-                printFormat === 'TICKET_58' ? 'max-w-[280px]' : 'max-w-[350px]'
+              className={`bg-white p-3 sm:p-4 mx-auto border-2 border-slate-900 shadow-md text-slate-950 text-xs font-mono font-bold rounded-lg ${
+                printFormat === 'TICKET_58' ? 'max-w-[290px]' : 'max-w-[360px]'
               } print:border-none print:shadow-none print:max-w-full print:p-0`}
             >
-              {/* Store Header (ULTRA BOLD & HIGH CONTRAST) */}
-              <div className="text-center space-y-0.5 pb-2 border-b-2 border-dashed border-slate-950">
-                <div className="flex justify-center mb-2">
+              {/* Store Header with Official Logo */}
+              <div className="text-center pb-1">
+                <div className="flex justify-center mb-1">
                   <img
                     src={settings.logoUrl || STORE_LOGO_BASE64}
-                    alt={settings.storeName || 'Logo'}
-                    className={`object-contain rounded grayscale contrast-[350%] brightness-[50%] print:contrast-[400%] print:brightness-[35%] ${
-                      printFormat === 'TICKET_58' ? 'max-h-24 max-w-[200px]' : 'max-h-28 max-w-[260px]'
-                    }`}
+                    alt={settings.storeName || 'TANE FAH COLLECTION'}
+                    className={`object-contain mx-auto ${
+                      printFormat === 'TICKET_58' ? 'w-32 max-w-[85%]' : 'w-44 max-w-[92%]'
+                    } h-auto`}
                   />
                 </div>
-                <h2 className="font-black text-base text-slate-950 uppercase tracking-wide leading-tight">
-                  {settings.storeName || settings.shopName || 'TANE FAH COLLECTION'}
-                </h2>
-                {(settings.storeTagline || settings.businessType) && (
-                  <p className="text-[11px] text-slate-950 font-black uppercase leading-tight">
-                    {settings.storeTagline || settings.businessType}
-                  </p>
-                )}
-                {(settings.address || settings.shopAddress) && (
-                  <p className="text-[11px] text-slate-950 font-black uppercase leading-tight">
-                    ADRESSE: {settings.address || settings.shopAddress}
-                  </p>
-                )}
-                {(settings.phone || settings.shopPhone) && (
-                  <p className="text-[11px] text-slate-950 font-black leading-tight">
-                    TÉL: {settings.phone || settings.shopPhone}
-                  </p>
-                )}
-                {(settings.email || settings.shopEmail) && (
-                  <p className="text-[11px] text-slate-950 font-black leading-tight">
-                    EMAIL: {settings.email || settings.shopEmail}
-                  </p>
-                )}
-                {settings.nifRccm && (
-                  <p className="text-[10px] text-slate-950 font-black uppercase leading-tight">
-                    NIF / RCCM: {settings.nifRccm}
-                  </p>
-                )}
-                {settings.mobileMoneyNumber && (
-                  <p className="text-[10px] text-slate-950 font-black uppercase leading-tight">
-                    WAVE / OM: {settings.mobileMoneyNumber}
-                  </p>
-                )}
-              </div>
+                <div className="text-[10px] sm:text-[11px] font-black uppercase tracking-[0.14em] text-black text-center my-1 leading-tight">
+                  {settings.storeTagline?.includes('•')
+                    ? settings.storeTagline.toUpperCase()
+                    : 'HAUTE COUTURE  •  PRÊT-À-PORTER  •  ACCESSOIRES'}
+                </div>
 
-              {/* Sale Metadata */}
-              <div className="py-1.5 border-b-2 border-dashed border-black space-y-0.5 text-xs font-black text-black leading-tight">
-                <div className="flex justify-between">
-                  <span>Ticket N°:</span>
-                  <span className="font-black text-black">{sale.invoiceNumber}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span>Date:</span>
-                  <span className="font-black">{formatDateTime(sale.date)}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span>Caissier:</span>
-                  <span className="font-black">{sale.userName}</span>
-                </div>
-                {sale.customerName && (
-                  <div className="flex justify-between">
-                    <span>Client:</span>
-                    <span className="font-black text-black uppercase">{sale.customerName}</span>
+                {/* 4 Categories Grid */}
+                <div className="grid grid-cols-4 items-center border-y border-black py-1.5 my-1.5 text-center text-black">
+                  <div className="flex flex-col items-center">
+                    <svg className="w-4 h-4 mb-0.5 text-black" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>
+                    <span className="text-[7px] sm:text-[7.5px] font-black uppercase tracking-tight leading-tight">HAUTE COUTURE</span>
                   </div>
-                )}
+                  <div className="flex flex-col items-center border-l border-black">
+                    <svg className="w-4 h-4 mb-0.5 text-black" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20.38 3.46L16 2a4 4 0 0 1-8 0L3.62 3.46a2 2 0 0 0-1.34 2.23l.58 3.47a1 1 0 0 0 .99.84H6v10a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V10h2.15a1 1 0 0 0 .99-.84l.58-3.47a2 2 0 0 0-1.34-2.23z"/></svg>
+                    <span className="text-[7px] sm:text-[7.5px] font-black uppercase tracking-tight leading-tight">PRÊT-À-PORTER</span>
+                  </div>
+                  <div className="flex flex-col items-center border-l border-black">
+                    <svg className="w-4 h-4 mb-0.5 text-black" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M6 2h12a2 2 0 0 1 2 2v16a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2z"/><path d="M9 2v4a3 3 0 0 0 6 0V2"/></svg>
+                    <span className="text-[7px] sm:text-[7.5px] font-black uppercase tracking-tight leading-tight">ACCESSOIRES</span>
+                  </div>
+                  <div className="flex flex-col items-center border-l border-black">
+                    <svg className="w-4 h-4 mb-0.5 text-black" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><line x1="20" y1="4" x2="8.12" y2="15.88"/><line x1="14.47" y1="14.48" x2="20" y2="20"/><line x1="8.12" y1="8.12" x2="12" y2="12"/></svg>
+                    <span className="text-[7px] sm:text-[7.5px] font-black uppercase tracking-tight leading-tight">SUR-MESURE</span>
+                  </div>
+                </div>
+
+                {/* Location & Phone Row */}
+                <div className="flex justify-between items-center text-[8.5px] sm:text-[9.5px] font-extrabold text-black my-1 gap-2">
+                  <div className="flex items-center gap-1 truncate">
+                    <svg className="w-3 h-3 flex-shrink-0 fill-current" viewBox="0 0 24 24"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/></svg>
+                    <span className="truncate">{settings.address || settings.shopAddress || 'Grand Marché de Bamako, Rue 18 x 25'}</span>
+                  </div>
+                  <div className="flex items-center gap-1 flex-shrink-0">
+                    <svg className="w-3 h-3 flex-shrink-0 fill-current" viewBox="0 0 24 24"><path d="M6.62 10.79c1.44 2.83 3.76 5.14 6.59 6.59l2.2-2.2c.27-.27.67-.36 1.02-.24 1.12.37 2.33.57 3.57.57.55 0 1 .45 1 1V20c0 .55-.45 1-1 1-9.39 0-17-7.61-17-17 0-.55.45-1 1-1h3.5c.55 0 1 .45 1 1 0 1.25.2 2.45.57 3.57.11.35.03.74-.25 1.02l-2.2 2.2z"/></svg>
+                    <span>{settings.phone || settings.shopPhone || '+223 76 00 00 00'}</span>
+                  </div>
+                </div>
               </div>
 
-              {/* Items List */}
-              <div className="py-1.5 border-b-2 border-dashed border-black">
-                <table className="w-full text-left">
-                  <thead>
-                    <tr className="border-b-2 border-black text-xs text-black uppercase font-black leading-tight">
-                      <th className="pb-0.5">Article</th>
-                      <th className="pb-0.5 text-center">Qté</th>
-                      <th className="pb-0.5 text-right">P.U</th>
-                      <th className="pb-0.5 text-right">Total</th>
+              {/* Dashed line */}
+              <div className="border-t-[1.5px] border-dashed border-black my-1.5" />
+
+              {/* Black Pill Title Banner */}
+              <div className="bg-black text-white text-center font-black tracking-widest uppercase text-xs sm:text-sm py-1.5 px-2 rounded my-1.5">
+                FACTURE / REÇU DE VENTE
+              </div>
+
+              {/* 2 Columns Metadata */}
+              <div className="grid grid-cols-[1fr_auto_1fr] items-stretch gap-1.5 text-[9px] sm:text-[10px] font-bold text-black my-1.5 leading-tight">
+                <div className="space-y-0.5">
+                  <div className="flex items-baseline">
+                    <span className="w-16 sm:w-20 font-black uppercase flex-shrink-0">N° FACTURE :</span>
+                    <span className="font-mono font-black">{sale.invoiceNumber}</span>
+                  </div>
+                  <div className="flex items-baseline">
+                    <span className="w-16 sm:w-20 font-black uppercase flex-shrink-0">DATE :</span>
+                    <span>{formatDateTime(sale.date)}</span>
+                  </div>
+                  <div className="flex items-baseline">
+                    <span className="w-16 sm:w-20 font-black uppercase flex-shrink-0">VENDEUR :</span>
+                    <span className="truncate">{sale.userName || settings.storeName || 'TANE FAH'}</span>
+                  </div>
+                </div>
+                <div className="w-[1.5px] bg-black self-stretch" />
+                <div className="space-y-0.5">
+                  <div className="flex items-baseline">
+                    <span className="w-16 sm:w-20 font-black uppercase flex-shrink-0">CLIENT :</span>
+                    <span className="font-black uppercase truncate">{sale.customerName ? sale.customerName : 'CLIENT PASSAGER'}</span>
+                  </div>
+                  <div className="flex items-baseline">
+                    <span className="w-16 sm:w-20 font-black uppercase flex-shrink-0">PAIEMENT :</span>
+                    <span>{getPaymentMethodLabel(sale.paymentMethod)}</span>
+                  </div>
+                  <div className="flex items-baseline">
+                    <span className="w-16 sm:w-20 font-black uppercase flex-shrink-0">STATUT :</span>
+                    <span>{sale.remainingDue && sale.remainingDue > 0 ? 'Partiel / Dette' : 'Payé'}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Dashed line */}
+              <div className="border-t-[1.5px] border-dashed border-black my-1.5" />
+
+              {/* Thick Bordered Items Table */}
+              <table className="w-full border-2 border-black text-left text-xs my-1.5 border-collapse">
+                <thead>
+                  <tr className="bg-slate-100 text-black uppercase font-black border-b-2 border-black text-[9px] sm:text-[10px]">
+                    <th className="p-1 border-r border-black">DÉSIGNATION</th>
+                    <th className="p-1 text-center border-r border-black w-10">QTÉ</th>
+                    <th className="p-1 text-center border-r border-black">P.U</th>
+                    <th className="p-1 text-right">MONTANT</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {sale.items.map((item, idx) => (
+                    <tr key={idx} className="border-b border-black last:border-b-0 font-bold text-[9.5px] sm:text-[11px]">
+                      <td className="p-1 border-r border-black leading-tight">
+                        <div className="font-black">{item.productName}</div>
+                        {item.discountPercent > 0 && (
+                          <span className="text-[8.5px] text-slate-700 block">Remise -{item.discountPercent}%</span>
+                        )}
+                      </td>
+                      <td className="p-1 text-center font-black border-r border-black">{formatQuantity(item.quantity)}</td>
+                      <td className="p-1 text-center font-black border-r border-black">{formatMoney(item.unitPrice, '')}</td>
+                      <td className="p-1 text-right font-black">{formatMoney(item.total, '')}</td>
                     </tr>
-                  </thead>
-                  <tbody className="divide-y divide-dashed divide-black">
-                    {sale.items.map((item, idx) => (
-                      <tr key={idx}>
-                        <td className="py-0.5 text-xs pr-1 font-black leading-tight text-black">
-                          {item.productName}
-                          {item.discountPercent > 0 && (
-                            <span className="block text-[9.5px] text-black font-black leading-none">
-                              Remise -{item.discountPercent}%
-                            </span>
-                          )}
-                        </td>
-                        <td className="py-0.5 text-center font-black text-black leading-tight">
-                          {formatQuantity(item.quantity)}
-                        </td>
-                        <td className="py-0.5 text-right font-black text-black leading-tight">
-                          {formatMoney(item.unitPrice, '')}
-                        </td>
-                        <td className="py-0.5 text-right font-black text-black leading-tight">
-                          {formatMoney(item.total, '')}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                  ))}
+                </tbody>
+              </table>
 
-              {/* Totals */}
-              <div className="py-1.5 border-b-2 border-dashed border-black space-y-0.5 text-xs font-black text-black leading-tight">
-                <div className="flex justify-between">
-                  <span>Sous-total :</span>
-                  <span className="font-black">{formatMoney(sale.subtotal, settings.currency)}</span>
+              {/* Subtotal / Discounts if applicable */}
+              {(sale.discountTotal > 0 || (settings.taxEnabled && sale.taxAmount > 0)) && (
+                <div className="space-y-0.5 text-[9px] sm:text-[10px] font-bold text-black my-1">
+                  <div className="flex justify-between">
+                    <span>Sous-total ({sale.items.reduce((acc, it) => acc + it.quantity, 0)} {sale.items.reduce((acc, it) => acc + it.quantity, 0) > 1 ? 'articles' : 'article'}) :</span>
+                    <span>{formatMoney(sale.subtotal, settings.currency)}</span>
+                  </div>
+                  {sale.discountTotal > 0 && (
+                    <div className="flex justify-between font-black">
+                      <span>Remise commerciale :</span>
+                      <span>-{formatMoney(sale.discountTotal, settings.currency)}</span>
+                    </div>
+                  )}
+                  {settings.taxEnabled && sale.taxAmount > 0 && (
+                    <div className="flex justify-between">
+                      <span>TVA ({settings.taxRatePercent}%) :</span>
+                      <span>{formatMoney(sale.taxAmount, settings.currency)}</span>
+                    </div>
+                  )}
                 </div>
-                {sale.discountTotal > 0 && (
-                  <div className="flex justify-between text-black font-black">
-                    <span>Remise totale :</span>
-                    <span>-{formatMoney(sale.discountTotal, settings.currency)}</span>
-                  </div>
-                )}
-                {settings.taxEnabled && sale.taxAmount > 0 && (
-                  <div className="flex justify-between text-black font-black">
-                    <span>TVA ({settings.taxRatePercent}%) :</span>
-                    <span className="font-black">{formatMoney(sale.taxAmount, settings.currency)}</span>
-                  </div>
-                )}
-                <div className="flex justify-between items-center pt-0.5 text-sm font-black text-black border-t-2 border-black">
-                  <span className="font-black uppercase">NET À PAYER :</span>
-                  <span className="text-base font-black text-black">
-                    {formatMoney(sale.totalAmount, settings.currency)}
-                  </span>
+              )}
+
+              {/* Dual-Tone Centerpiece Banner */}
+              <div className="flex items-stretch border-2 border-black rounded overflow-hidden my-2">
+                <div className="bg-slate-100 text-black font-black uppercase tracking-wider text-xs sm:text-sm p-2 flex items-center justify-center flex-1">
+                  TOTAL TTC :
+                </div>
+                <div className="bg-black text-white font-mono font-black text-sm sm:text-lg p-2 flex items-center justify-center flex-[1.4] text-right">
+                  {formatMoney(sale.totalAmount, '')} {settings.currency || 'FCFA'}
                 </div>
               </div>
 
               {/* Payment Details */}
-              <div className="py-1.5 border-b-2 border-dashed border-black space-y-0.5 text-xs font-black text-black leading-tight">
-                <div className="flex justify-between">
-                  <span>Paiement:</span>
-                  <span className="font-black uppercase">{getPaymentMethodLabel(sale.paymentMethod)}</span>
+              {(sale.amountReceived > 0 || (sale.remainingDue && sale.remainingDue > 0)) && (
+                <div className="space-y-0.5 text-[9px] sm:text-[10px] font-bold text-black my-1.5">
+                  {sale.amountReceived > 0 && (
+                    <div className="flex justify-between">
+                      <span>Montant versé :</span>
+                      <span>{formatMoney(sale.amountReceived, settings.currency)}</span>
+                    </div>
+                  )}
+                  {sale.changeGiven > 0 && (
+                    <div className="flex justify-between font-black">
+                      <span>Monnaie rendue :</span>
+                      <span>{formatMoney(sale.changeGiven, settings.currency)}</span>
+                    </div>
+                  )}
+                  {sale.remainingDue && sale.remainingDue > 0 && (
+                    <div className="flex justify-between bg-rose-50 border border-rose-300 text-rose-800 p-1 rounded font-black mt-1">
+                      <span>RESTE EN DETTE :</span>
+                      <span className="font-mono">{formatMoney(sale.remainingDue, settings.currency)}</span>
+                    </div>
+                  )}
                 </div>
-                {sale.amountReceived > 0 && (
-                  <div className="flex justify-between">
-                    <span>Montant reçu:</span>
-                    <span className="font-black">{formatMoney(sale.amountReceived, settings.currency)}</span>
-                  </div>
-                )}
-                {sale.remainingDue !== undefined && sale.remainingDue > 0 && (
-                  <div className="flex justify-between text-rose-700 font-black pt-0.5 border-t border-dashed border-rose-500">
-                    <span>RESTE EN DETTE:</span>
-                    <span className="font-mono">{formatMoney(sale.remainingDue, settings.currency)}</span>
-                  </div>
-                )}
-                {sale.changeGiven > 0 && (
-                  <div className="flex justify-between font-black text-black">
-                    <span>Monnaie rendue:</span>
-                    <span className="font-black">{formatMoney(sale.changeGiven, settings.currency)}</span>
-                  </div>
-                )}
+              )}
+
+              {/* Calligraphy Script */}
+              <div className="text-center font-bold italic text-base sm:text-lg my-1.5 font-serif text-black">
+                Merci pour votre confiance !
               </div>
 
-              {/* Barcode simulation */}
-              <div className="pt-1.5 text-center space-y-0.5 leading-tight">
-                <div className="inline-block px-2.5 py-0.5 bg-slate-200 rounded tracking-widest text-[9.5px] font-mono font-black text-slate-950">
-                  ||||| | |||| || |||||| | |||||
+              {/* 3 Trust Badges */}
+              <div className="flex justify-around items-center text-[8px] sm:text-[9px] font-black text-black my-1 text-center">
+                <div className="flex items-center gap-1">
+                  <svg className="w-3 h-3 fill-black flex-shrink-0" viewBox="0 0 24 24"><path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm-2 16l-4-4 1.41-1.41L10 14.17l6.59-6.59L18 9l-8 8z"/></svg>
+                  <span>Créations Originales</span>
                 </div>
-                <p className="text-[8.5px] text-slate-800 font-bold">{sale.invoiceNumber}</p>
+                <span className="font-black">|</span>
+                <div className="flex items-center gap-1">
+                  <svg className="w-3 h-3 fill-black flex-shrink-0" viewBox="0 0 24 24"><path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm-2 16l-4-4 1.41-1.41L10 14.17l6.59-6.59L18 9l-8 8z"/></svg>
+                  <span>Finitions Soignées</span>
+                </div>
+                <span className="font-black">|</span>
+                <div className="flex items-center gap-1">
+                  <svg className="w-3 h-3 fill-black flex-shrink-0" viewBox="0 0 24 24"><path d="M12 3a9 9 0 0 0-9 9v7c0 1.1.9 2 2 2h4v-8H5v-1a7 7 0 0 1 14 0v1h-4v8h4c1.1 0 2-.9 2-2v-7a9 9 0 0 0-9-9z"/></svg>
+                  <span>Service Client</span>
+                </div>
               </div>
 
-              {/* Footer */}
-              <div className="pt-1.5 text-center text-[9.5px] text-slate-950 font-bold leading-tight space-y-0.5">
-                <p className="font-black">{sanitizeReceiptFooter(settings.receiptFooterMessage)}</p>
-                <p className="text-[8.5px] text-slate-800 font-bold">Merci de votre fidélité !</p>
+              {/* Dashed line */}
+              <div className="border-t-[1.5px] border-dashed border-black my-2" />
+
+              {/* Vector Barcode Simulation */}
+              <div className="text-center my-1.5">
+                <div className="max-w-[190px] mx-auto" dangerouslySetInnerHTML={{ __html: generateBarcodeSvg(sale.invoiceNumber) }} />
+                <div className="font-mono font-black text-[11px] tracking-widest mt-1 text-black">{sale.invoiceNumber}</div>
+              </div>
+
+              {/* Friendly Footer Note */}
+              <div className="pt-1 text-center text-[9px] text-slate-800 leading-tight">
+                <p className="font-black text-black">Aw ni ce ! Merci pour votre visite !</p>
+                <p className="text-[8px] text-slate-500 mt-0.5">Les articles vendus ne sont ni repris ni échangés.</p>
               </div>
             </div>
           )}

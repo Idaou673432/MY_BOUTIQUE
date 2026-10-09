@@ -258,10 +258,25 @@ const STORAGE_KEYS = {
   ACTIVITY_LOGS: 'bpm_activity_logs_v2_zero',
 };
 
-// Helper to sanitize payload for Firestore by stripping undefined fields
+// Helper to sanitize payload for Firestore by stripping undefined fields & keeping doc size well under 1 MiB
 function sanitizeForFirestore<T>(data: T): any {
   try {
-    return JSON.parse(JSON.stringify(data));
+    const cloned = JSON.parse(JSON.stringify(data));
+    // Size and memory optimization to prevent exceeding Firestore 1 MiB hard document limit
+    if (cloned.activityLogs && Array.isArray(cloned.activityLogs) && cloned.activityLogs.length > 150) {
+      cloned.activityLogs = cloned.activityLogs.slice(0, 150);
+    }
+    if (cloned.stockMovements && Array.isArray(cloned.stockMovements) && cloned.stockMovements.length > 250) {
+      cloned.stockMovements = cloned.stockMovements.slice(0, 250);
+    }
+    if (cloned.cashTransactions && Array.isArray(cloned.cashTransactions) && cloned.cashTransactions.length > 200) {
+      cloned.cashTransactions = cloned.cashTransactions.slice(0, 200);
+    }
+    // Deduplicate default logo if it's the large base64 image (saves 173 KB per write)
+    if (cloned.settings && cloned.settings.logoUrl && cloned.settings.logoUrl.length > 50000) {
+      cloned.settings.logoUrl = '__DEFAULT_LOGO__';
+    }
+    return cloned;
   } catch (e) {
     console.error('Error sanitizing data for Firestore:', e);
     return data;
@@ -289,36 +304,60 @@ function loadSafeList<T>(primaryKey: string, backupKeys: string[] = [], fallback
   return fallback;
 }
 
-// Helper to merge remote items with local items by ID so offline/local items are never wiped out
-function mergeListById<T extends { id: string }>(remoteList?: T[], localList?: T[], preferLocal = false): T[] {
+// Helper to merge remote items with local items by ID so offline/local/edited items are NEVER wiped out
+function mergeListById<T extends { id: string; updatedAt?: string; createdAt?: string }>(
+  remoteList?: T[],
+  localList?: T[],
+  preferLocal = false
+): T[] {
   if (!remoteList || !Array.isArray(remoteList) || remoteList.length === 0) {
     return localList || [];
   }
   if (!localList || !Array.isArray(localList) || localList.length === 0) {
     return remoteList;
   }
+
   const map = new Map<string, T>();
-  if (preferLocal) {
-    // If local changes are authoritatively pending, keep local records for existing IDs
-    localList.forEach((item) => {
-      if (item && item.id) map.set(item.id, item);
-    });
-    remoteList.forEach((item) => {
-      if (item && item.id && !map.has(item.id)) {
-        map.set(item.id, item);
+  const localMap = new Map<string, T>();
+
+  // Index all current local items
+  (localList || []).forEach((item) => {
+    if (item && item.id) localMap.set(item.id, item);
+  });
+
+  // Evaluate remote items against local items
+  (remoteList || []).forEach((remoteItem) => {
+    if (!remoteItem || !remoteItem.id) return;
+    const localItem = localMap.get(remoteItem.id);
+
+    if (!localItem) {
+      // Item exists remotely but not locally -> accept remote item
+      map.set(remoteItem.id, remoteItem);
+    } else if (preferLocal) {
+      // Local changes are prioritized -> keep local item
+      map.set(remoteItem.id, localItem);
+    } else {
+      // Smart conflict resolution by timestamp: keep the newest version!
+      const localTime = new Date((localItem as any).updatedAt || (localItem as any).createdAt || 0).getTime();
+      const remoteTime = new Date((remoteItem as any).updatedAt || (remoteItem as any).createdAt || 0).getTime();
+
+      if (localTime > remoteTime) {
+        // Local edit is fresher than remote -> keep local!
+        map.set(remoteItem.id, localItem);
+      } else {
+        // Remote is newer or equal -> accept remote
+        map.set(remoteItem.id, remoteItem);
       }
-    });
-  } else {
-    // Standard merge: remote values override local unless absent
-    remoteList.forEach((item) => {
-      if (item && item.id) map.set(item.id, item);
-    });
-    localList.forEach((item) => {
-      if (item && item.id && !map.has(item.id)) {
-        map.set(item.id, item);
-      }
-    });
-  }
+    }
+  });
+
+  // CRITICAL: Any local items that do not exist remotely yet (e.g. newly added products) MUST be preserved!
+  localMap.forEach((localItem, id) => {
+    if (!map.has(id)) {
+      map.set(id, localItem);
+    }
+  });
+
   return Array.from(map.values());
 }
 
@@ -374,15 +413,22 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       invoiceLegalNotice = 'Facture conforme aux normes du commerce au Mali.';
     }
 
-    const storeName = (!s.storeName || s.storeName === 'Boutique Bamako Pro' || s.storeName === 'Boutique & Négoce Pro')
+    const storeName = (!s.storeName || s.storeName === 'Boutique Bamako Pro' || s.storeName === 'Boutique & Négoce Pro' || s.storeName.toLowerCase().includes('boutique'))
       ? 'TANE FAH COLLECTION'
       : s.storeName;
 
-    const logoUrl = s.logoUrl || STORE_LOGO_BASE64;
+    const storeTagline = (!s.storeTagline || s.storeTagline.includes('Boutique de Mode') || s.storeTagline.includes('Boutique'))
+      ? 'Haute Couture & Prêt-à-Porter'
+      : s.storeTagline;
+
+    const logoUrl = (!s.logoUrl || s.logoUrl === '__DEFAULT_LOGO__' || s.logoUrl.trim() === '' || s.logoUrl.includes('placeholder') || s.logoUrl.includes('default') || s.logoUrl.includes('unsplash') || s.logoUrl.toLowerCase().includes('boutique'))
+      ? STORE_LOGO_BASE64
+      : s.logoUrl;
 
     return {
       ...s,
       storeName,
+      storeTagline,
       logoUrl,
       receiptFooterMessage,
       invoiceLegalNotice,
@@ -459,6 +505,64 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   const hasReconciledRef = useRef<boolean>(false);
   const debounceTimer = useRef<NodeJS.Timeout | null>(null);
 
+  // Authoritative real-time state ref to eliminate stale closures during asynchronous writes
+  const stateRef = useRef({
+    settings,
+    users,
+    categories,
+    products,
+    suppliers,
+    customers,
+    stockMovements,
+    sales,
+    quotes,
+    creditDebtRecords,
+    purchases,
+    expenses,
+    cashRegister,
+    cashTransactions,
+    inventories,
+    activityLogs,
+  });
+
+  useEffect(() => {
+    stateRef.current = {
+      settings,
+      users,
+      categories,
+      products,
+      suppliers,
+      customers,
+      stockMovements,
+      sales,
+      quotes,
+      creditDebtRecords,
+      purchases,
+      expenses,
+      cashRegister,
+      cashTransactions,
+      inventories,
+      activityLogs,
+    };
+  }, [
+    settings,
+    users,
+    categories,
+    products,
+    suppliers,
+    customers,
+    stockMovements,
+    sales,
+    quotes,
+    creditDebtRecords,
+    purchases,
+    expenses,
+    cashRegister,
+    cashTransactions,
+    inventories,
+    activityLogs,
+  ]);
+
   // Sync to local storage & maintain permanent rolling multi-key backups
   useEffect(() => { 
     localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(users)); 
@@ -532,7 +636,7 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   // Fingerprint calculation to detect genuine data changes and avoid quota-wasting write loops
   const computeFingerprint = useCallback(() => {
     return JSON.stringify({
-      products: products.map(p => `${p.id}:${p.currentStock}:${p.salePrice}`),
+      products: products.map(p => `${p.id}:${p.name}:${p.currentStock}:${p.salePrice}:${p.purchasePrice}:${p.updatedAt || ''}`),
       salesCount: sales.length,
       salesLatestId: sales[0]?.id || '',
       customersCount: customers.length,
@@ -656,7 +760,11 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
           if (remote.users && Array.isArray(remote.users) && remote.users.length > 0) setUsers(prev => mergeListById(remote.users, prev, preferLocal));
           if (remote.categories && Array.isArray(remote.categories) && remote.categories.length > 0) setCategories(prev => mergeListById(remote.categories, prev, preferLocal));
           if (remote.products && Array.isArray(remote.products) && remote.products.length > 0) {
-            setProducts(prev => mergeListById(remote.products, prev, preferLocal));
+            setProducts(prev => {
+              const merged = mergeListById(remote.products, prev, preferLocal);
+              stateRef.current.products = merged;
+              return merged;
+            });
           }
           if (remote.suppliers && Array.isArray(remote.suppliers) && remote.suppliers.length > 0) setSuppliers(prev => mergeListById(remote.suppliers, prev, preferLocal));
           if (remote.customers && Array.isArray(remote.customers) && remote.customers.length > 0) setCustomers(prev => mergeListById(remote.customers, prev, preferLocal));
@@ -691,7 +799,7 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
 
           setTimeout(() => {
             isRemoteUpdate.current = false;
-          }, 800);
+          }, 400);
         }
       } else {
         // Document does not exist yet on remote: safe initial seed
@@ -723,24 +831,25 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
 
     try {
       setIsSyncing(true);
+      const currentData = stateRef.current;
       const docRef = doc(db, 'store_data', 'main_store');
       const payload = sanitizeForFirestore({
-        settings,
-        users,
-        categories,
-        products,
-        suppliers,
-        customers,
-        stockMovements,
-        sales,
-        quotes,
-        creditDebtRecords,
-        purchases,
-        expenses,
-        cashRegister,
-        cashTransactions,
-        inventories,
-        activityLogs,
+        settings: currentData.settings,
+        users: currentData.users,
+        categories: currentData.categories,
+        products: currentData.products,
+        suppliers: currentData.suppliers,
+        customers: currentData.customers,
+        stockMovements: currentData.stockMovements,
+        sales: currentData.sales,
+        quotes: currentData.quotes,
+        creditDebtRecords: currentData.creditDebtRecords,
+        purchases: currentData.purchases,
+        expenses: currentData.expenses,
+        cashRegister: currentData.cashRegister,
+        cashTransactions: currentData.cashTransactions,
+        inventories: currentData.inventories,
+        activityLogs: currentData.activityLogs,
         ...(overrideData || {}),
         updatedAt: new Date().toISOString(),
       });
@@ -787,7 +896,7 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       if (hasLocalMutations.current && isCloudHydrated.current) {
         syncToCloudNow();
       }
-    }, 2000);
+    }, 300);
 
     return () => {
       if (debounceTimer.current) {
@@ -1064,7 +1173,22 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       updatedAt: new Date().toISOString(),
     };
 
-    setProducts(prev => [newProd, ...prev]);
+    hasLocalMutations.current = true;
+    setIsCloudSynced(false);
+
+    let nextProducts: Product[] = [];
+    setProducts(prev => {
+      nextProducts = [newProd, ...(prev || [])];
+      stateRef.current.products = nextProducts;
+      try {
+        localStorage.setItem(STORAGE_KEYS.PRODUCTS, JSON.stringify(nextProducts));
+        localStorage.setItem('bpm_products_backup', JSON.stringify(nextProducts));
+        localStorage.setItem('bpm_products_recovery_catalog', JSON.stringify(nextProducts));
+      } catch (err) {
+        console.warn('LocalStorage write warning:', err);
+      }
+      return nextProducts;
+    });
 
     // If initial stock is positive, record initial movement
     if (newProd.currentStock > 0) {
@@ -1082,16 +1206,30 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         date: new Date().toISOString(),
         reason: 'Stock initial à la création du produit',
       };
-      setStockMovements(prev => [initialMov, ...prev]);
+      setStockMovements(prev => {
+        const nextMovs = [initialMov, ...(prev || [])];
+        stateRef.current.stockMovements = nextMovs;
+        return nextMovs;
+      });
     }
 
     logActivity('Ajout produit', 'STOCK', newProd.name, `Prix vente: ${newProd.salePrice}, Stock: ${newProd.currentStock}`);
+
+    // Fast sync to Firestore with authoritative payload
+    if (debounceTimer.current) clearTimeout(debounceTimer.current);
+    debounceTimer.current = setTimeout(() => {
+      syncToCloudNow(false, { products: nextProducts });
+    }, 150);
+
     return newProd;
   };
 
   const updateProduct = (id: string, pData: Partial<Product>) => {
     const existing = (products || []).find(p => p.id === id);
     if (!existing) return;
+
+    hasLocalMutations.current = true;
+    setIsCloudSynced(false);
 
     // Detect price changes or manual stock corrections
     if (pData.salePrice !== undefined && pData.salePrice !== existing.salePrice) {
@@ -1122,10 +1260,26 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       );
     }
 
-    setProducts(prev =>
-      prev.map(p => (p.id === id ? { ...p, ...pData, updatedAt: new Date().toISOString() } : p))
-    );
+    let updatedProducts: Product[] = [];
+    setProducts(prev => {
+      updatedProducts = (prev || []).map(p => (p.id === id ? { ...p, ...pData, updatedAt: new Date().toISOString() } : p));
+      stateRef.current.products = updatedProducts;
+      try {
+        localStorage.setItem(STORAGE_KEYS.PRODUCTS, JSON.stringify(updatedProducts));
+        localStorage.setItem('bpm_products_backup', JSON.stringify(updatedProducts));
+        localStorage.setItem('bpm_products_recovery_catalog', JSON.stringify(updatedProducts));
+      } catch (err) {
+        console.warn('LocalStorage write warning:', err);
+      }
+      return updatedProducts;
+    });
     logActivity('Mise à jour produit', 'STOCK', existing.name, 'Fiche produit modifiée');
+
+    // Fast sync to Firestore
+    if (debounceTimer.current) clearTimeout(debounceTimer.current);
+    debounceTimer.current = setTimeout(() => {
+      syncToCloudNow(false, { products: updatedProducts });
+    }, 150);
   };
 
   const deleteProduct = (id: string): { success: boolean; message?: string } => {
@@ -1141,8 +1295,30 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       };
     }
 
-    setProducts(prev => (prev || []).filter(p => p.id !== id));
+    hasLocalMutations.current = true;
+    setIsCloudSynced(false);
+
+    let updatedProducts: Product[] = [];
+    setProducts(prev => {
+      updatedProducts = (prev || []).filter(p => p.id !== id);
+      stateRef.current.products = updatedProducts;
+      try {
+        localStorage.setItem(STORAGE_KEYS.PRODUCTS, JSON.stringify(updatedProducts));
+        localStorage.setItem('bpm_products_backup', JSON.stringify(updatedProducts));
+        localStorage.setItem('bpm_products_recovery_catalog', JSON.stringify(updatedProducts));
+      } catch (err) {
+        console.warn('LocalStorage write warning:', err);
+      }
+      return updatedProducts;
+    });
     logActivity('Suppression produit', 'STOCK', prod.name, 'Produit retiré du catalogue');
+
+    // Fast sync to Firestore
+    if (debounceTimer.current) clearTimeout(debounceTimer.current);
+    debounceTimer.current = setTimeout(() => {
+      syncToCloudNow(false, { products: updatedProducts });
+    }, 150);
+
     return { success: true };
   };
 

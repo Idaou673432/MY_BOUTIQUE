@@ -515,7 +515,7 @@ export const INITIAL_ACTIVITY_LOGS: ActivityLog[] = [
 
 export const INITIAL_SETTINGS: StoreSettings = {
   storeName: 'TANE FAH COLLECTION',
-  storeTagline: 'Boutique de Mode & Prêt-à-Porter - Bamako (Mali)',
+  storeTagline: 'Haute Couture & Prêt-à-Porter',
   logoUrl: STORE_LOGO_BASE64,
   address: 'Grand Marché de Bamako, Rue 18 x 25, Bamako - Mali',
   phone: '+223 76 00 00 00 / +223 66 00 00 00',

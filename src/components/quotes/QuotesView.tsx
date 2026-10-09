@@ -229,28 +229,47 @@ export const QuotesView: React.FC = () => {
           body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; padding: 20px; color: #1e293b; max-width: 800px; margin: 0 auto; line-height: 1.25; }
           .header { display: flex; justify-content: space-between; border-bottom: 2px solid #e2e8f0; padding-bottom: 12px; margin-bottom: 14px; }
           .quote-logo {
-            max-height: 105px;
-            max-width: 210px;
+            max-height: 100px;
+            max-width: 190px;
             object-fit: contain;
             border-radius: 8px;
             border: 1px solid #cbd5e1;
             padding: 2px;
-            filter: grayscale(100%) contrast(350%) brightness(55%);
             -webkit-print-color-adjust: exact !important;
             print-color-adjust: exact !important;
-            image-rendering: -webkit-optimize-contrast;
-            image-rendering: crisp-edges;
           }
           @media print {
             .quote-logo {
-              filter: grayscale(100%) contrast(400%) brightness(40%) !important;
               -webkit-print-color-adjust: exact !important;
               print-color-adjust: exact !important;
-              image-rendering: -webkit-optimize-contrast !important;
-              image-rendering: crisp-edges !important;
             }
           }
-          .shop-title { font-size: 20px; font-weight: 800; color: #0f172a; line-height: 1.15; margin-bottom: 2px; }
+          .shop-brand-title {
+            font-family: 'Playfair Display', 'Cinzel', 'Didot', 'Georgia', serif;
+            font-size: 24px;
+            font-weight: 900;
+            color: #0f172a;
+            letter-spacing: 2px;
+            line-height: 1.05;
+            text-transform: uppercase;
+            margin-bottom: 2px;
+          }
+          .shop-brand-subtitle {
+            font-size: 11px;
+            font-weight: 800;
+            color: #334155;
+            letter-spacing: 4px;
+            text-transform: uppercase;
+            margin-bottom: 2px;
+          }
+          .shop-brand-tagline {
+            font-size: 10px;
+            font-weight: 700;
+            color: #64748b;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+            margin-bottom: 4px;
+          }
           .doc-title { font-size: 22px; font-weight: 900; color: #4338ca; text-align: right; line-height: 1.15; }
           .meta-box { display: flex; justify-content: space-between; margin-bottom: 14px; background: #f8fafc; padding: 10px 12px; border-radius: 8px; line-height: 1.25; }
           table { width: 100%; border-collapse: collapse; margin: 12px 0; }
@@ -266,10 +285,12 @@ export const QuotesView: React.FC = () => {
           <div style="display: flex; align-items: center; gap: 14px;">
             <img class="quote-logo" src="${settings.logoUrl || STORE_LOGO_BASE64}" alt="Logo" />
             <div>
-              <div class="shop-title">${settings.storeName || settings.shopName || 'TANE FAH COLLECTION'}</div>
-              <div>${settings.address || ''}</div>
-              <div>Tél: ${settings.phone || ''}</div>
-              ${settings.email ? `<div>Email: ${settings.email}</div>` : ''}
+              <div class="shop-brand-title">TANE FAH</div>
+              <div class="shop-brand-subtitle">C O L L E C T I O N</div>
+              <div class="shop-brand-tagline">— ${settings.storeTagline || 'HAUTE COUTURE & PRÊT-À-PORTER'} —</div>
+              <div style="font-size: 11px; color: #475569; margin-top: 2px;">${settings.address || ''}</div>
+              <div style="font-size: 11px; color: #475569;">Tél : ${settings.phone || ''}</div>
+              ${settings.email ? `<div style="font-size: 11px; color: #475569;">Email : ${settings.email}</div>` : ''}
             </div>
           </div>
           <div>
