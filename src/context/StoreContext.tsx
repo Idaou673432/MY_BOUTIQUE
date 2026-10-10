@@ -272,8 +272,8 @@ function sanitizeForFirestore<T>(data: T): any {
     if (cloned.cashTransactions && Array.isArray(cloned.cashTransactions) && cloned.cashTransactions.length > 200) {
       cloned.cashTransactions = cloned.cashTransactions.slice(0, 200);
     }
-    // Deduplicate default logo if it's the large base64 image (saves 173 KB per write)
-    if (cloned.settings && cloned.settings.logoUrl && cloned.settings.logoUrl.length > 50000) {
+    // Deduplicate default logo if it is the built-in STORE_LOGO_BASE64 (saves document size)
+    if (cloned.settings && cloned.settings.logoUrl && cloned.settings.logoUrl === STORE_LOGO_BASE64) {
       cloned.settings.logoUrl = '__DEFAULT_LOGO__';
     }
     return cloned;
@@ -413,17 +413,17 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       invoiceLegalNotice = 'Facture conforme aux normes du commerce au Mali.';
     }
 
-    const storeName = (!s.storeName || s.storeName === 'Boutique Bamako Pro' || s.storeName === 'Boutique & Négoce Pro' || s.storeName.toLowerCase().includes('boutique'))
+    const storeName = (!s.storeName || s.storeName === 'Boutique Bamako Pro' || s.storeName === 'Boutique & Négoce Pro')
       ? 'TANE FAH COLLECTION'
       : s.storeName;
 
-    const storeTagline = (!s.storeTagline || s.storeTagline.includes('Boutique de Mode') || s.storeTagline.includes('Boutique'))
-      ? 'Haute Couture & Prêt-à-Porter'
-      : s.storeTagline;
+    const storeTagline = s.storeTagline !== undefined ? s.storeTagline : 'Haute Couture & Prêt-à-Porter';
 
-    const logoUrl = (!s.logoUrl || s.logoUrl === '__DEFAULT_LOGO__' || s.logoUrl.trim() === '' || s.logoUrl.includes('placeholder') || s.logoUrl.includes('default') || s.logoUrl.includes('unsplash') || s.logoUrl.toLowerCase().includes('boutique'))
-      ? STORE_LOGO_BASE64
-      : s.logoUrl;
+    const customLogo = typeof window !== 'undefined' ? localStorage.getItem('bpm_custom_logo') : null;
+    let logoUrl = s.logoUrl;
+    if (!logoUrl || logoUrl === '__DEFAULT_LOGO__' || logoUrl.trim() === '' || logoUrl.includes('placeholder') || logoUrl.includes('default') || logoUrl.includes('unsplash')) {
+      logoUrl = customLogo || STORE_LOGO_BASE64;
+    }
 
     return {
       ...s,

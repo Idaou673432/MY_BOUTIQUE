@@ -741,7 +741,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
                 printFormat === 'TICKET_58' ? 'max-w-[290px]' : 'max-w-[360px]'
               } print:border-none print:shadow-none print:max-w-full print:p-0`}
             >
-              {/* Store Header with Official Logo */}
+              {/* Store Header with Official or Custom Logo */}
               <div className="text-center pb-1">
                 <div className="flex justify-center mb-1">
                   <img
@@ -752,42 +752,21 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
                     } h-auto`}
                   />
                 </div>
-                <div className="text-[10px] sm:text-[11px] font-black uppercase tracking-[0.14em] text-black text-center my-1 leading-tight">
-                  {settings.storeTagline?.includes('•')
-                    ? settings.storeTagline.toUpperCase()
-                    : 'HAUTE COUTURE  •  PRÊT-À-PORTER  •  ACCESSOIRES'}
-                </div>
-
-                {/* 4 Categories Grid */}
-                <div className="grid grid-cols-4 items-center border-y border-black py-1.5 my-1.5 text-center text-black">
-                  <div className="flex flex-col items-center">
-                    <svg className="w-4 h-4 mb-0.5 text-black" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>
-                    <span className="text-[7px] sm:text-[7.5px] font-black uppercase tracking-tight leading-tight">HAUTE COUTURE</span>
-                  </div>
-                  <div className="flex flex-col items-center border-l border-black">
-                    <svg className="w-4 h-4 mb-0.5 text-black" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20.38 3.46L16 2a4 4 0 0 1-8 0L3.62 3.46a2 2 0 0 0-1.34 2.23l.58 3.47a1 1 0 0 0 .99.84H6v10a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V10h2.15a1 1 0 0 0 .99-.84l.58-3.47a2 2 0 0 0-1.34-2.23z"/></svg>
-                    <span className="text-[7px] sm:text-[7.5px] font-black uppercase tracking-tight leading-tight">PRÊT-À-PORTER</span>
-                  </div>
-                  <div className="flex flex-col items-center border-l border-black">
-                    <svg className="w-4 h-4 mb-0.5 text-black" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M6 2h12a2 2 0 0 1 2 2v16a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2z"/><path d="M9 2v4a3 3 0 0 0 6 0V2"/></svg>
-                    <span className="text-[7px] sm:text-[7.5px] font-black uppercase tracking-tight leading-tight">ACCESSOIRES</span>
-                  </div>
-                  <div className="flex flex-col items-center border-l border-black">
-                    <svg className="w-4 h-4 mb-0.5 text-black" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><line x1="20" y1="4" x2="8.12" y2="15.88"/><line x1="14.47" y1="14.48" x2="20" y2="20"/><line x1="8.12" y1="8.12" x2="12" y2="12"/></svg>
-                    <span className="text-[7px] sm:text-[7.5px] font-black uppercase tracking-tight leading-tight">SUR-MESURE</span>
-                  </div>
-                </div>
 
                 {/* Location & Phone Row */}
-                <div className="flex justify-between items-center text-[8.5px] sm:text-[9.5px] font-extrabold text-black my-1 gap-2">
-                  <div className="flex items-center gap-1 truncate">
-                    <svg className="w-3 h-3 flex-shrink-0 fill-current" viewBox="0 0 24 24"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/></svg>
-                    <span className="truncate">{settings.address || settings.shopAddress || 'Grand Marché de Bamako, Rue 18 x 25'}</span>
-                  </div>
-                  <div className="flex items-center gap-1 flex-shrink-0">
-                    <svg className="w-3 h-3 flex-shrink-0 fill-current" viewBox="0 0 24 24"><path d="M6.62 10.79c1.44 2.83 3.76 5.14 6.59 6.59l2.2-2.2c.27-.27.67-.36 1.02-.24 1.12.37 2.33.57 3.57.57.55 0 1 .45 1 1V20c0 .55-.45 1-1 1-9.39 0-17-7.61-17-17 0-.55.45-1 1-1h3.5c.55 0 1 .45 1 1 0 1.25.2 2.45.57 3.57.11.35.03.74-.25 1.02l-2.2 2.2z"/></svg>
-                    <span>{settings.phone || settings.shopPhone || '+223 76 00 00 00'}</span>
-                  </div>
+                <div className="flex flex-col items-center justify-center text-[8.5px] sm:text-[9.5px] font-extrabold text-black my-1 gap-0.5 leading-tight">
+                  {(settings.address || settings.shopAddress) && (
+                    <div className="flex items-center gap-1 text-center">
+                      <svg className="w-3 h-3 flex-shrink-0 fill-current" viewBox="0 0 24 24"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/></svg>
+                      <span>{settings.address || settings.shopAddress}</span>
+                    </div>
+                  )}
+                  {(settings.phone || settings.shopPhone) && (
+                    <div className="flex items-center gap-1 text-center">
+                      <svg className="w-3 h-3 flex-shrink-0 fill-current" viewBox="0 0 24 24"><path d="M6.62 10.79c1.44 2.83 3.76 5.14 6.59 6.59l2.2-2.2c.27-.27.67-.36 1.02-.24 1.12.37 2.33.57 3.57.57.55 0 1 .45 1 1V20c0 .55-.45 1-1 1-9.39 0-17-7.61-17-17 0-.55.45-1 1-1h3.5c.55 0 1 .45 1 1 0 1.25.2 2.45.57 3.57.11.35.03.74-.25 1.02l-2.2 2.2z"/></svg>
+                      <span>{settings.phone || settings.shopPhone}</span>
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -799,63 +778,46 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
                 FACTURE / REÇU DE VENTE
               </div>
 
-              {/* 2 Columns Metadata */}
-              <div className="grid grid-cols-[1fr_auto_1fr] items-stretch gap-1.5 text-[9px] sm:text-[10px] font-bold text-black my-1.5 leading-tight">
-                <div className="space-y-0.5">
-                  <div className="flex items-baseline">
-                    <span className="w-16 sm:w-20 font-black uppercase flex-shrink-0">N° FACTURE :</span>
-                    <span className="font-mono font-black">{sale.invoiceNumber}</span>
-                  </div>
-                  <div className="flex items-baseline">
-                    <span className="w-16 sm:w-20 font-black uppercase flex-shrink-0">DATE :</span>
-                    <span>{formatDateTime(sale.date)}</span>
-                  </div>
-                  <div className="flex items-baseline">
-                    <span className="w-16 sm:w-20 font-black uppercase flex-shrink-0">VENDEUR :</span>
-                    <span className="truncate">{sale.userName || settings.storeName || 'TANE FAH'}</span>
-                  </div>
+              {/* Clean Metadata Block */}
+              <div className="space-y-1 text-[9px] sm:text-[10px] font-bold text-black my-1.5 leading-tight">
+                <div className="flex justify-between items-baseline">
+                  <span><span className="font-black uppercase">TICKET N° :</span> <span className="font-mono font-black">{sale.invoiceNumber}</span></span>
+                  <span>{formatDateTime(sale.date)}</span>
                 </div>
-                <div className="w-[1.5px] bg-black self-stretch" />
-                <div className="space-y-0.5">
-                  <div className="flex items-baseline">
-                    <span className="w-16 sm:w-20 font-black uppercase flex-shrink-0">CLIENT :</span>
-                    <span className="font-black uppercase truncate">{sale.customerName ? sale.customerName : 'CLIENT PASSAGER'}</span>
-                  </div>
-                  <div className="flex items-baseline">
-                    <span className="w-16 sm:w-20 font-black uppercase flex-shrink-0">PAIEMENT :</span>
-                    <span>{getPaymentMethodLabel(sale.paymentMethod)}</span>
-                  </div>
-                  <div className="flex items-baseline">
-                    <span className="w-16 sm:w-20 font-black uppercase flex-shrink-0">STATUT :</span>
-                    <span>{sale.remainingDue && sale.remainingDue > 0 ? 'Partiel / Dette' : 'Payé'}</span>
-                  </div>
+                <div className="flex justify-between items-baseline">
+                  <span><span className="font-black uppercase">VENDEUR :</span> {sale.userName || settings.storeName || 'TANE FAH'}</span>
+                  <span><span className="font-black uppercase">RÈGLEMENT :</span> {getPaymentMethodLabel(sale.paymentMethod)}</span>
+                </div>
+                <div className="flex justify-between items-baseline">
+                  <span className="truncate pr-2"><span className="font-black uppercase">CLIENT :</span> <span className="font-black uppercase">{sale.customerName ? sale.customerName : 'CLIENT PASSAGER'}</span></span>
+                  <span className="shrink-0"><span className="font-black uppercase">STATUT :</span> <span className="font-black">{sale.remainingDue && sale.remainingDue > 0 ? 'Dette' : 'Payé'}</span></span>
                 </div>
               </div>
 
               {/* Dashed line */}
               <div className="border-t-[1.5px] border-dashed border-black my-1.5" />
 
-              {/* Thick Bordered Items Table */}
+              {/* Thick Bordered Items Table with Right-aligned Financials */}
               <table className="w-full border-2 border-black text-left text-xs my-1.5 border-collapse">
                 <thead>
                   <tr className="bg-slate-100 text-black uppercase font-black border-b-2 border-black text-[9px] sm:text-[10px]">
-                    <th className="p-1 border-r border-black">DÉSIGNATION</th>
+                    <th className="p-1 border-r border-black text-left">DÉSIGNATION</th>
                     <th className="p-1 text-center border-r border-black w-10">QTÉ</th>
-                    <th className="p-1 text-center border-r border-black">P.U</th>
+                    <th className="p-1 text-right border-r border-black">P.U</th>
                     <th className="p-1 text-right">MONTANT</th>
                   </tr>
                 </thead>
                 <tbody>
                   {sale.items.map((item, idx) => (
                     <tr key={idx} className="border-b border-black last:border-b-0 font-bold text-[9.5px] sm:text-[11px]">
-                      <td className="p-1 border-r border-black leading-tight">
+                      <td className="p-1 border-r border-black leading-tight text-left">
                         <div className="font-black">{item.productName}</div>
                         {item.discountPercent > 0 && (
                           <span className="text-[8.5px] text-slate-700 block">Remise -{item.discountPercent}%</span>
                         )}
                       </td>
                       <td className="p-1 text-center font-black border-r border-black">{formatQuantity(item.quantity)}</td>
-                      <td className="p-1 text-center font-black border-r border-black">{formatMoney(item.unitPrice, '')}</td>
+                      <td className="p-1 text-right font-black border-r border-black">{formatMoney(item.unitPrice, '')}</td>
                       <td className="p-1 text-right font-black">{formatMoney(item.total, '')}</td>
                     </tr>
                   ))}

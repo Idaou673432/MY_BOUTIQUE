@@ -492,6 +492,7 @@ export interface StoreSettings {
   defaultInvoiceFormat?: 'A4' | 'TICKET';
   allowNegativeStock: boolean;
   lowStockThresholdDefault: number;
+  criticalStockThreshold?: number; // Seuil critique pour les alertes visuelles du tableau de bord
   cashThresholdAlert?: number;
   printerType?: PrinterType;
   autoPrintReceiptOnSale?: boolean;

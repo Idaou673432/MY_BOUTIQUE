@@ -287,7 +287,7 @@ export const QuotesView: React.FC = () => {
             <div>
               <div class="shop-brand-title">TANE FAH</div>
               <div class="shop-brand-subtitle">C O L L E C T I O N</div>
-              <div class="shop-brand-tagline">— ${settings.storeTagline || 'HAUTE COUTURE & PRÊT-À-PORTER'} —</div>
+              ${settings.storeTagline ? `<div class="shop-brand-tagline">— ${settings.storeTagline} —</div>` : ''}
               <div style="font-size: 11px; color: #475569; margin-top: 2px;">${settings.address || ''}</div>
               <div style="font-size: 11px; color: #475569;">Tél : ${settings.phone || ''}</div>
               ${settings.email ? `<div style="font-size: 11px; color: #475569;">Email : ${settings.email}</div>` : ''}

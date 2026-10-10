@@ -94,8 +94,58 @@ export const SettingsView: React.FC = () => {
     }));
   }, [settings]);
 
+  const processAndSetLogo = (file: File) => {
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const rawData = event.target?.result as string;
+      if (!rawData) return;
+      const img = new Image();
+      img.onload = () => {
+        const maxDim = 450;
+        let w = img.width;
+        let h = img.height;
+        if (w > maxDim || h > maxDim) {
+          if (w > h) {
+            h = Math.round((h * maxDim) / w);
+            w = maxDim;
+          } else {
+            w = Math.round((w * maxDim) / h);
+            h = maxDim;
+          }
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = w;
+        canvas.height = h;
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          ctx.fillStyle = '#FFFFFF';
+          ctx.fillRect(0, 0, w, h);
+          ctx.drawImage(img, 0, 0, w, h);
+          const compressedBase64 = canvas.toDataURL('image/jpeg', 0.85);
+          setFormData(prev => ({ ...prev, logoUrl: compressedBase64 }));
+          localStorage.setItem('bpm_custom_logo', compressedBase64);
+        } else {
+          setFormData(prev => ({ ...prev, logoUrl: rawData }));
+          localStorage.setItem('bpm_custom_logo', rawData);
+        }
+      };
+      img.src = rawData;
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleResetToTaneFahLogo = () => {
+    localStorage.removeItem('bpm_custom_logo');
+    setFormData(prev => ({ ...prev, logoUrl: STORE_LOGO_BASE64 }));
+  };
+
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
+    if (formData.logoUrl && formData.logoUrl !== STORE_LOGO_BASE64) {
+      localStorage.setItem('bpm_custom_logo', formData.logoUrl);
+    } else {
+      localStorage.removeItem('bpm_custom_logo');
+    }
     updateSettings({
       ...formData,
       taxRatePercent: Number(formData.taxRatePercent) || 0,
@@ -372,20 +422,14 @@ export const SettingsView: React.FC = () => {
                       onChange={(e) => {
                         const file = e.target.files?.[0];
                         if (file) {
-                          const reader = new FileReader();
-                          reader.onload = (event) => {
-                            if (event.target?.result) {
-                              setFormData({ ...formData, logoUrl: event.target.result as string });
-                            }
-                          };
-                          reader.readAsDataURL(file);
+                          processAndSetLogo(file);
                         }
                       }}
                     />
                   </label>
                   <button
                     type="button"
-                    onClick={() => setFormData({ ...formData, logoUrl: STORE_LOGO_BASE64 })}
+                    onClick={handleResetToTaneFahLogo}
                     className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-slate-300 hover:bg-slate-100 text-slate-700 rounded-lg text-xs font-semibold transition-colors"
                   >
                     <RotateCcw className="w-3.5 h-3.5" />

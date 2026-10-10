@@ -129,9 +129,11 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
           <h1 className="text-lg sm:text-xl font-black text-white tracking-tight uppercase">
             {settings.storeName || 'TANE FAH COLLECTION'}
           </h1>
-          <p className="text-xs text-amber-400 font-medium mt-1">
-            {settings.storeTagline || 'Boutique de Mode & Prêt-à-Porter - Bamako'}
-          </p>
+          {settings.storeTagline ? (
+            <p className="text-xs text-amber-400 font-medium mt-1">
+              {settings.storeTagline}
+            </p>
+          ) : null}
 
           <div className="mt-3 flex items-center justify-center gap-2 text-[11px] text-indigo-300 bg-indigo-950/40 border border-indigo-900/50 py-1.5 px-3 rounded-xl max-w-xs mx-auto">
             <Monitor className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
