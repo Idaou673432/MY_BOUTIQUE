@@ -139,29 +139,21 @@ export const getThermalBrandHeaderHtml = (
   is58: boolean = false
 ): string => {
   const rawStoreName = (settings.storeName || settings.shopName || 'TANE FAH COLLECTION').trim();
-  const address = settings.address || settings.shopAddress || 'Grand Marché de Bamako, Rue 18 x 25, Bamako - Mali';
-  const phone = settings.phone || settings.shopPhone || '+223 76 00 00 00 / +223 66 00 00 00';
+  const address = settings.address || settings.shopAddress || '';
+  const phone = settings.phone || settings.shopPhone || '';
   const logoSrc = settings.logoUrl || STORE_LOGO_BASE64;
+  const coords = [address, phone ? `Tél : ${phone}` : ''].filter(Boolean).join(' • ');
 
   return `
     <div class="store-header-box center">
-      <div style="text-align: center; margin: 0 auto 4px auto;">
+      <div style="text-align: center; margin: 0 auto 3px auto;">
         <img class="receipt-logo" src="${logoSrc}" alt="${rawStoreName}" />
       </div>
-
-      <!-- Coordonnées de l'établissement -->
-      <div class="store-coords-row">
-        ${address ? `
-        <div class="coord-item">
-          <svg class="coord-icon" viewBox="0 0 24 24"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/></svg>
-          <span>${address}</span>
-        </div>` : ''}
-        ${phone ? `
-        <div class="coord-item">
-          <svg class="coord-icon" viewBox="0 0 24 24"><path d="M6.62 10.79c1.44 2.83 3.76 5.14 6.59 6.59l2.2-2.2c.27-.27.67-.36 1.02-.24 1.12.37 2.33.57 3.57.57.55 0 1 .45 1 1V20c0 .55-.45 1-1 1-9.39 0-17-7.61-17-17 0-.55.45-1 1-1h3.5c.55 0 1 .45 1 1 0 1.25.2 2.45.57 3.57.11.35.03.74-.25 1.02l-2.2 2.2z"/></svg>
-          <span>${phone}</span>
-        </div>` : ''}
+      ${coords ? `
+      <div style="font-size: ${is58 ? '7.5px' : '8.5px'}; font-weight: 700; color: #111111; text-align: center; margin: 1px 0 3px; line-height: 1.2;">
+        ${coords}
       </div>
+      ` : ''}
     </div>
   `;
 };
@@ -287,15 +279,16 @@ export const generateThermalReceiptHtml = (
     }
     .receipt-logo {
       display: block;
-      margin: 0 auto 4px auto;
-      width: ${is58 ? '135px' : '170px'};
+      margin: 0 auto 3px auto;
+      width: ${is58 ? '130px' : '165px'};
       max-width: 90%;
       height: auto;
       object-fit: contain;
-      filter: none !important;
-      -webkit-filter: none !important;
-      image-rendering: -webkit-optimize-contrast;
-      image-rendering: crisp-edges;
+      filter: contrast(300%) grayscale(100%) !important;
+      -webkit-filter: contrast(300%) grayscale(100%) !important;
+      image-rendering: -webkit-optimize-contrast !important;
+      image-rendering: crisp-edges !important;
+      image-rendering: pixelated !important;
       -webkit-print-color-adjust: exact !important;
       print-color-adjust: exact !important;
     }
@@ -659,6 +652,11 @@ export const generateThermalReceiptHtml = (
         padding: 0 !important;
       }
       .receipt-logo {
+        filter: contrast(300%) grayscale(100%) !important;
+        -webkit-filter: contrast(300%) grayscale(100%) !important;
+        image-rendering: -webkit-optimize-contrast !important;
+        image-rendering: crisp-edges !important;
+        image-rendering: pixelated !important;
         -webkit-print-color-adjust: exact !important;
         print-color-adjust: exact !important;
       }
@@ -845,29 +843,10 @@ export const generateCreditDebtThermalTicketHtml = (
 ): string => {
   const is58 = widthMm === 58;
   const currency = settings.currency || 'FCFA';
-  const storeName = (settings.storeName || settings.shopName || 'BOUTIQUE MALI').toUpperCase();
-  const address = settings.address || settings.shopAddress || '';
+  const storeName = (settings.storeName || settings.shopName || 'TANE FAH COLLECTION').toUpperCase();
   const phone = settings.phone || settings.shopPhone || '';
-  const email = settings.email || settings.shopEmail || '';
-  const nif = settings.nifRccm || '';
-
-  const fontSize = is58 ? '11px' : '13px';
-  const headerFontSize = is58 ? '16px' : '19px';
-  const maxContentWidth = is58 ? '44mm' : '64mm';
-
-  const isClientCredit = record.type === 'CLIENT_CREDIT';
-  const title = isClientCredit
-    ? 'REÇU DE CRÉANCE CLIENT'
-    : 'RECONNAISSANCE DE DETTE';
-  const subtitle = isClientCredit
-    ? 'ENGAGEMENT DE PAIEMENT DU CLIENT'
-    : 'BON D\'ENGAGEMENT FOURNISSEUR';
-
-  const creditor = isClientCredit ? storeName : record.partyName;
-  const creditorPhone = isClientCredit ? phone : (record.partyPhone || '—');
-  const debtor = isClientCredit ? record.partyName : storeName;
-  const debtorPhone = isClientCredit ? (record.partyPhone || '—') : phone;
-  const isSettled = record.status === 'SOLDE' || record.remainingAmount <= 0.001;
+  const logoSrc = settings.logoUrl || STORE_LOGO_BASE64;
+  const maxContentWidth = is58 ? '44mm' : '66mm';
 
   return `
 <!DOCTYPE html>
@@ -875,7 +854,7 @@ export const generateCreditDebtThermalTicketHtml = (
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Ticket_Solde_${record.id.slice(-6).toUpperCase()}</title>
+  <title>Ticket_Dette_${record.partyName.replace(/\s+/g, '_')}</title>
   <style>
     @page {
       margin: 0;
@@ -889,111 +868,151 @@ export const generateCreditDebtThermalTicketHtml = (
       print-color-adjust: exact !important;
     }
     body {
-      font-family: Arial, Helvetica, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-      font-size: ${fontSize};
-      font-weight: 600;
-      line-height: 1.35;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      font-size: ${is58 ? '9.5px' : '11px'};
+      font-weight: 700;
+      line-height: 1.3;
       color: #000000 !important;
       background: #ffffff !important;
-      padding: ${is58 ? "1.5mm" : "3mm"};
+      padding: ${is58 ? "1.5mm 1mm" : "2mm 2mm"};
       width: ${widthMm}mm;
       max-width: ${widthMm}mm;
       margin: 0 auto;
-      -webkit-print-color-adjust: exact !important;
-      print-color-adjust: exact !important;
       -webkit-font-smoothing: antialiased;
     }
     .ticket-container {
       width: 100%;
       max-width: ${maxContentWidth};
-      margin-left: 0.5mm;
-      margin-right: auto;
-      padding-right: 2.5mm;
+      margin: 0 auto;
     }
     .center { text-align: center; }
     .right { text-align: right; }
-    .left { text-align: left; }
     .bold { font-weight: 900 !important; }
     .uppercase { text-transform: uppercase; }
-    .divider {
+
+    /* Ultra high-contrast intense pure black logo */
+    .receipt-logo {
+      display: block;
+      margin: 0 auto 3px auto;
+      width: ${is58 ? '105px' : '130px'};
+      max-width: 85%;
+      height: auto;
+      object-fit: contain;
+      filter: contrast(300%) grayscale(100%) !important;
+      -webkit-filter: contrast(300%) grayscale(100%) !important;
+      image-rendering: -webkit-optimize-contrast !important;
+      image-rendering: crisp-edges !important;
+      image-rendering: pixelated !important;
+      -webkit-print-color-adjust: exact !important;
+      print-color-adjust: exact !important;
+    }
+    .store-phone {
+      font-size: ${is58 ? '7px' : '8px'};
+      font-weight: 700;
+      color: #333333;
+      text-align: center;
+      margin-bottom: 2px;
+    }
+
+    /* Black Pill Title Banner */
+    .receipt-banner {
+      background: #000000 !important;
+      color: #ffffff !important;
+      text-align: center;
+      font-size: ${is58 ? '11px' : '13px'};
+      font-weight: 900 !important;
+      letter-spacing: 1.5px;
+      padding: 3px 6px;
+      border-radius: 4px;
+      margin: 3px 0;
+      text-transform: uppercase;
+      -webkit-print-color-adjust: exact !important;
+      print-color-adjust: exact !important;
+    }
+
+    .dashed-line {
       border-top: 1.5px dashed #000000;
       margin: 4px 0;
     }
-    .solid-divider {
-      border-top: 2px solid #000000;
-      margin: 4px 0;
+
+    .meta-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      font-size: ${is58 ? '8.5px' : '9.5px'};
+      margin-bottom: 2px;
+      color: #000000 !important;
     }
-    .double-divider {
-      border-top: 3px double #000000;
+
+    /* Client Info Box - Compact & Reduced */
+    .client-box {
+      border: 1px solid #000000;
+      border-radius: 3px;
+      padding: 3px 5px;
+      margin: 3px 0;
+      background: #fafafa;
+    }
+    .client-field {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      font-size: ${is58 ? '9.5px' : '11px'};
+      margin-bottom: 0px;
+    }
+    .client-label {
+      font-weight: 800 !important;
+      text-transform: uppercase;
+      font-size: ${is58 ? '8px' : '9px'};
+    }
+    .client-val {
+      font-weight: 900 !important;
+    }
+    .client-phone-sub {
+      font-size: ${is58 ? '7.5px' : '8.5px'};
+      font-weight: 700;
+      color: #333333;
+      text-align: right;
+      margin-top: 1px;
+    }
+
+    /* Amounts Box */
+    .amount-box {
+      border: 2px solid #000000;
+      border-radius: 4px;
+      padding: 5px 6px;
       margin: 5px 0;
     }
-    .store-name {
-      font-size: ${headerFontSize};
-      font-weight: 900 !important;
-      text-transform: uppercase;
-      line-height: 1.1;
-      margin-bottom: 2px;
-    }
-    .doc-title {
-      font-size: ${is58 ? '13px' : '15px'};
-      font-weight: 900 !important;
-      text-transform: uppercase;
-      margin-top: 3px;
-      border: 1.5px solid #000000;
-      padding: 3px 2px;
-      text-align: center;
-    }
-    .doc-subtitle {
-      font-size: ${is58 ? '10px' : '11.5px'};
-      text-align: center;
-      margin: 2px 0 4px;
-    }
-    .row {
+    .amount-row-paid {
       display: flex;
       justify-content: space-between;
-      margin-bottom: 2px;
-      font-size: ${fontSize};
-      line-height: 1.2;
-    }
-    .total-box {
-      border: 2px solid #000000;
-      padding: 5px 4px;
-      margin: 6px 0;
-      background: #ffffff;
-    }
-    .big-balance {
-      font-size: ${is58 ? '14px' : '16px'};
-      font-weight: 900 !important;
-      text-align: center;
-      padding: 4px 0 2px;
-      border-top: 1.5px dashed #000000;
-      margin-top: 4px;
-    }
-    .payment-table {
-      width: 100%;
-      border-collapse: collapse;
+      align-items: center;
       font-size: ${is58 ? '10.5px' : '12px'};
-      margin: 4px 0;
+      font-weight: 800;
+      padding-bottom: 3px;
+      border-bottom: 1.5px dashed #000000;
+      margin-bottom: 3px;
     }
-    .payment-table th, .payment-table td {
-      border-bottom: 1px dashed #000000;
-      padding: 2px 1px;
-    }
-    .signatures {
+    .amount-row-remaining {
       display: flex;
       justify-content: space-between;
-      margin-top: 10px;
-      padding-top: 4px;
-      border-top: 1px dashed #000000;
+      align-items: center;
+      font-size: ${is58 ? '12px' : '13.5px'};
+      font-weight: 900 !important;
+      color: #000000;
     }
-    .sig-col {
-      width: 48%;
+    .remaining-num {
+      font-size: ${is58 ? '14px' : '17px'};
+      font-weight: 900 !important;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, monospace;
+    }
+
+    .footer-note {
       text-align: center;
-      font-size: ${is58 ? '10px' : '11.5px'};
+      font-size: ${is58 ? '8.5px' : '9.5px'};
+      font-weight: 800;
+      margin-top: 3px;
     }
-    .sig-space {
-      height: 38px;
-    }
+
     .no-print-toolbar {
       display: flex;
       gap: 6px;
@@ -1004,17 +1023,17 @@ export const generateCreditDebtThermalTicketHtml = (
       background: #000000;
       color: #ffffff !important;
       border: none;
-      padding: 8px;
+      padding: 7px;
       font-size: 11px;
       font-weight: 900;
       cursor: pointer;
       border-radius: 4px;
     }
     .btn-close {
-      background: #e2e8f0;
-      color: #000000 !important;
+      background: #64748b;
+      color: #ffffff !important;
       border: none;
-      padding: 8px 12px;
+      padding: 7px 12px;
       font-size: 11px;
       font-weight: 900;
       cursor: pointer;
@@ -1030,151 +1049,83 @@ export const generateCreditDebtThermalTicketHtml = (
       .ticket-container {
         width: 100% !important;
         max-width: ${maxContentWidth} !important;
-        margin-left: 0.5mm !important;
-        margin-right: auto !important;
-        padding-right: 2.5mm !important;
+        margin: 0 auto !important;
+        padding: 0 !important;
+      }
+      .receipt-logo {
+        filter: contrast(300%) grayscale(100%) !important;
+        -webkit-filter: contrast(300%) grayscale(100%) !important;
+        image-rendering: -webkit-optimize-contrast !important;
+        image-rendering: crisp-edges !important;
+        image-rendering: pixelated !important;
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
       }
     }
   </style>
 </head>
 <body>
   <div class="no-print-toolbar">
-    <button class="btn-print" onclick="window.print()">🖨️ IMPRIMER CE TICKET 80mm</button>
+    <button class="btn-print" onclick="window.print()">🖨️ IMPRIMER CE REÇU</button>
     <button class="btn-close" onclick="window.close()">✕ Fermer</button>
   </div>
 
   <div class="ticket-container">
-    ${getThermalBrandHeaderHtml(settings, is58)}
-
-    <div class="doc-title">${title}</div>
-    <div class="doc-subtitle">${subtitle}</div>
-
-    <div class="solid-divider"></div>
-
-    <div class="row">
-      <span>N° DOSSIER:</span>
-      <span class="bold">CD-${record.id.slice(-6).toUpperCase()}</span>
-    </div>
-    <div class="row">
-      <span>DATE ÉMISSION:</span>
-      <span>${formatDate(record.createdAt || record.date)}</span>
-    </div>
-    <div class="row">
-      <span>ÉCHÉANCE:</span>
-      <span class="bold">${record.dueDate ? formatDate(record.dueDate) : 'Non définie'}</span>
-    </div>
-    <div class="row">
-      <span>STATUT:</span>
-      <span class="bold">${isSettled ? 'SOLDÉ (100% PAYÉ)' : 'EN COURS (NON SOLDÉ)'}</span>
+    <!-- Store Header -->
+    <div class="center">
+      <img class="receipt-logo" src="${logoSrc}" alt="${storeName}" />
+      ${phone ? `<div class="store-phone">Tél : ${phone}</div>` : ''}
     </div>
 
-    <div class="divider"></div>
-
-    <div class="row">
-      <span>CRÉANCIER:</span>
-      <span class="bold uppercase">${creditor}</span>
-    </div>
-    <div class="row">
-      <span>TÉL CRÉANCIER:</span>
-      <span>${creditorPhone}</span>
-    </div>
-    <div class="row" style="margin-top:2px;">
-      <span>DÉBITEUR:</span>
-      <span class="bold uppercase">${debtor}</span>
-    </div>
-    <div class="row">
-      <span>TÉL DÉBITEUR:</span>
-      <span>${debtorPhone}</span>
-    </div>
-    ${record.partyAddress ? `
-    <div class="row">
-      <span>ADRESSE:</span>
-      <span>${record.partyAddress}</span>
-    </div>
-    ` : ''}
-
-    <div class="divider"></div>
-
-    <div>
-      <span class="bold">OBJET / MOTIF:</span><br>
-      <span>${record.title}</span>
-      ${record.notes ? `<div style="font-size:10px; font-style:italic; margin-top:2px;">Note: ${record.notes}</div>` : ''}
+    <!-- Title Banner -->
+    <div class="receipt-banner">
+      REÇU DE DETTE
     </div>
 
-    <div class="total-box">
-      <div class="row">
-        <span>MONTANT INITIAL:</span>
-        <span class="bold">${formatMoney(record.initialAmount, currency)}</span>
+    <!-- Date & Ref -->
+    <div class="meta-row">
+      <span>RÉF : CD-${record.id.slice(-6).toUpperCase()}</span>
+      <span>${formatDateTime(record.date || record.createdAt || new Date().toISOString())}</span>
+    </div>
+
+    <div class="dashed-line"></div>
+
+    <!-- Client Info: NOM & NUMÉRO RÉDUIT -->
+    <div class="client-box">
+      <div class="client-field">
+        <span class="client-label">CLIENT :</span>
+        <span class="client-val uppercase">${record.partyName}</span>
       </div>
-      <div class="row">
-        <span>DÉJÀ VERSÉ:</span>
+      ${record.partyPhone ? `
+      <div class="client-phone-sub">
+        N° : ${record.partyPhone}
+      </div>
+      ` : ''}
+    </div>
+
+    <!-- Exact Amounts: MONTANT PAYÉ & RESTE À PAYER -->
+    <div class="amount-box">
+      <div class="amount-row-paid">
+        <span>MONTANT PAYÉ :</span>
         <span class="bold">${formatMoney(record.paidAmount, currency)}</span>
       </div>
-      <div class="big-balance">
-        SOLDE RESTANT DÛ:<br>
-        <span style="font-size:${is58 ? '16px' : '19px'};">${formatMoney(record.remainingAmount, currency)}</span>
+      <div class="amount-row-remaining">
+        <span>RESTE À PAYER :</span>
+        <span class="remaining-num">${formatMoney(record.remainingAmount, currency)}</span>
       </div>
     </div>
 
-    ${record.payments && record.payments.length > 0 ? `
-    <div class="bold uppercase" style="font-size:10px; margin-top:4px;">
-      VERSEMENTS EFFECTUÉS (${record.payments.length}) :
-    </div>
-    <table class="payment-table">
-      <thead>
-        <tr>
-          <th class="left">Date</th>
-          <th class="left">Mode</th>
-          <th class="right">Montant</th>
-        </tr>
-      </thead>
-      <tbody>
-        ${record.payments.map(p => `
-          <tr>
-            <td>${formatDate(p.date)}</td>
-            <td>${getPaymentMethodLabel(p.paymentMethod)}</td>
-            <td class="right bold">${formatMoney(p.amount, currency)}</td>
-          </tr>
-        `).join('')}
-      </tbody>
-    </table>
-    ` : ''}
+    <div class="dashed-line"></div>
 
-    <div style="font-size:${is58 ? '10px' : '11.5px'}; margin: 6px 0; line-height: 1.25;">
-      <strong>ENGAGEMENT FORMEL :</strong> Le Débiteur désigné reconnaît devoir valablement au Créancier 
-      la somme restante de <strong>${formatMoney(record.remainingAmount, currency)}</strong>.
-      ${isSettled 
-        ? 'Dossier intégralement soldé et acquitté.' 
-        : `Engagement de règlement complet au plus tard le ${record.dueDate ? formatDate(record.dueDate) : 'dans les délais convenus'}.`
-      }
-    </div>
-
-    <div class="signatures">
-      <div class="sig-col">
-        <strong>LE DÉBITEUR</strong><br>
-        <span style="font-size:8px;">(Signature & Accord)</span>
-        <div style="height:36px; border-bottom:1.5px dotted #000000; margin-top:8px;"></div>
-      </div>
-      <div class="sig-col">
-        <strong>LE CRÉANCIER</strong><br>
-        <span style="font-size:8px;">(Signature & Cachet)</span>
-        <div style="height:36px; border-bottom:1.5px dotted #000000; margin-top:8px;"></div>
-      </div>
-    </div>
-
-    <div class="divider"></div>
-    <div class="center" style="font-size:9px; margin-top:4px;">
-      Ticket édité le ${formatDateTime(new Date().toISOString())}<br>
-      Document légal valant preuve et engagement.
+    <div class="footer-note">
+      Merci pour votre confiance !
     </div>
   </div>
 
   <script>
     window.addEventListener('load', function() {
       setTimeout(function() {
-        try {
-          window.print();
-        } catch(e) {}
+        try { window.print(); } catch(e) {}
       }, 300);
     });
   </script>
@@ -1185,24 +1136,24 @@ export const generateCreditDebtThermalTicketHtml = (
 
 /**
  * Generates an 80mm thermal receipt HTML for an individual credit repayment (Reçu de versement)
+ * Ultra-compact mini-ticket displaying strictly: Client Name, Phone, Amount Paid, and Remaining Debt.
  */
 export const generateCreditPaymentThermalTicketHtml = (
   payment: CreditPayment,
   partyName: string,
-  partyType: 'CLIENT' | 'FOURNISSEUR',
-  remainingDebt: number,
+  partyType: 'CLIENT' | 'FOURNISSEUR' = 'CLIENT',
+  remainingDebt: number = 0,
   settings: StoreSettings,
   notes?: string,
-  widthMm: 80 | 58 = 80
+  widthMm: 80 | 58 = 80,
+  partyPhone?: string
 ): string => {
   const is58 = widthMm === 58;
   const currency = settings.currency || 'FCFA';
-  const storeName = (settings.storeName || settings.shopName || 'BOUTIQUE MALI').toUpperCase();
-  const address = settings.address || settings.shopAddress || '';
+  const storeName = (settings.storeName || settings.shopName || 'TANE FAH COLLECTION').toUpperCase();
   const phone = settings.phone || settings.shopPhone || '';
-
-  const fontSize = is58 ? '11px' : '13px';
-  const maxContentWidth = is58 ? '44mm' : '64mm';
+  const logoSrc = settings.logoUrl || STORE_LOGO_BASE64;
+  const maxContentWidth = is58 ? '44mm' : '66mm';
 
   return `
 <!DOCTYPE html>
@@ -1210,7 +1161,7 @@ export const generateCreditPaymentThermalTicketHtml = (
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Reçu_${payment.receiptNumber || 'REC'}</title>
+  <title>Reçu_Paiement_${partyName.replace(/\s+/g, '_')}</title>
   <style>
     @page {
       margin: 0;
@@ -1224,68 +1175,151 @@ export const generateCreditPaymentThermalTicketHtml = (
       print-color-adjust: exact !important;
     }
     body {
-      font-family: Arial, Helvetica, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-      font-size: ${fontSize};
-      font-weight: 600;
-      line-height: 1.35;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      font-size: ${is58 ? '9.5px' : '11px'};
+      font-weight: 700;
+      line-height: 1.3;
       color: #000000 !important;
       background: #ffffff !important;
-      padding: ${is58 ? "1.5mm" : "3mm"};
+      padding: ${is58 ? "1.5mm 1mm" : "2mm 2mm"};
       width: ${widthMm}mm;
       max-width: ${widthMm}mm;
       margin: 0 auto;
-      -webkit-print-color-adjust: exact !important;
-      print-color-adjust: exact !important;
       -webkit-font-smoothing: antialiased;
     }
     .ticket-container {
       width: 100%;
       max-width: ${maxContentWidth};
-      margin-left: 0.5mm;
-      margin-right: auto;
-      padding-right: 2.5mm;
+      margin: 0 auto;
     }
     .center { text-align: center; }
     .right { text-align: right; }
     .bold { font-weight: 900 !important; }
     .uppercase { text-transform: uppercase; }
-    .divider {
+
+    /* Ultra high-contrast intense pure black logo */
+    .receipt-logo {
+      display: block;
+      margin: 0 auto 3px auto;
+      width: ${is58 ? '105px' : '130px'};
+      max-width: 85%;
+      height: auto;
+      object-fit: contain;
+      filter: contrast(300%) grayscale(100%) !important;
+      -webkit-filter: contrast(300%) grayscale(100%) !important;
+      image-rendering: -webkit-optimize-contrast !important;
+      image-rendering: crisp-edges !important;
+      image-rendering: pixelated !important;
+      -webkit-print-color-adjust: exact !important;
+      print-color-adjust: exact !important;
+    }
+    .store-phone {
+      font-size: ${is58 ? '7px' : '8px'};
+      font-weight: 700;
+      color: #333333;
+      text-align: center;
+      margin-bottom: 2px;
+    }
+
+    /* Black Pill Title Banner */
+    .receipt-banner {
+      background: #000000 !important;
+      color: #ffffff !important;
+      text-align: center;
+      font-size: ${is58 ? '11px' : '13px'};
+      font-weight: 900 !important;
+      letter-spacing: 1.5px;
+      padding: 3px 6px;
+      border-radius: 4px;
+      margin: 3px 0;
+      text-transform: uppercase;
+      -webkit-print-color-adjust: exact !important;
+      print-color-adjust: exact !important;
+    }
+
+    .dashed-line {
       border-top: 1.5px dashed #000000;
       margin: 4px 0;
     }
-    .solid-divider {
-      border-top: 2px solid #000000;
-      margin: 4px 0;
-    }
-    .doc-title {
-      font-size: ${is58 ? '12px' : '14px'};
-      border: 1.5px solid #000000;
-      padding: 3px 2px;
-      text-align: center;
-      margin: 3px 0 2px;
-    }
-    .row {
+
+    .meta-row {
       display: flex;
       justify-content: space-between;
+      align-items: baseline;
+      font-size: ${is58 ? '8.5px' : '9.5px'};
       margin-bottom: 2px;
+      color: #000000 !important;
     }
-    .total-box {
-      border: 2px solid #000000;
-      padding: 6px 4px;
-      margin: 6px 0;
+
+    /* Client Info Box - Compact & Reduced */
+    .client-box {
+      border: 1px solid #000000;
+      border-radius: 3px;
+      padding: 3px 5px;
+      margin: 3px 0;
+      background: #fafafa;
     }
-    .signatures {
+    .client-field {
       display: flex;
       justify-content: space-between;
-      margin-top: 10px;
-      padding-top: 4px;
-      border-top: 1px dashed #000000;
+      align-items: baseline;
+      font-size: ${is58 ? '9.5px' : '11px'};
+      margin-bottom: 0px;
     }
-    .sig-col {
-      width: 48%;
+    .client-label {
+      font-weight: 800 !important;
+      text-transform: uppercase;
+      font-size: ${is58 ? '8px' : '9px'};
+    }
+    .client-val {
+      font-weight: 900 !important;
+    }
+    .client-phone-sub {
+      font-size: ${is58 ? '7.5px' : '8.5px'};
+      font-weight: 700;
+      color: #333333;
+      text-align: right;
+      margin-top: 1px;
+    }
+
+    /* Amounts Box */
+    .amount-box {
+      border: 2px solid #000000;
+      border-radius: 4px;
+      padding: 5px 6px;
+      margin: 5px 0;
+    }
+    .amount-row-paid {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: ${is58 ? '10.5px' : '12px'};
+      font-weight: 800;
+      padding-bottom: 3px;
+      border-bottom: 1.5px dashed #000000;
+      margin-bottom: 3px;
+    }
+    .amount-row-remaining {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: ${is58 ? '12px' : '13.5px'};
+      font-weight: 900 !important;
+      color: #000000;
+    }
+    .remaining-num {
+      font-size: ${is58 ? '14px' : '17px'};
+      font-weight: 900 !important;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, monospace;
+    }
+
+    .footer-note {
       text-align: center;
-      font-size: 10.5px;
+      font-size: ${is58 ? '8.5px' : '9.5px'};
+      font-weight: 800;
+      margin-top: 3px;
     }
+
     .no-print-toolbar {
       display: flex;
       gap: 6px;
@@ -1296,17 +1330,17 @@ export const generateCreditPaymentThermalTicketHtml = (
       background: #000000;
       color: #ffffff !important;
       border: none;
-      padding: 8px;
+      padding: 7px;
       font-size: 11px;
       font-weight: 900;
       cursor: pointer;
       border-radius: 4px;
     }
     .btn-close {
-      background: #e2e8f0;
-      color: #000000 !important;
+      background: #64748b;
+      color: #ffffff !important;
       border: none;
-      padding: 8px 12px;
+      padding: 7px 12px;
       font-size: 11px;
       font-weight: 900;
       cursor: pointer;
@@ -1322,95 +1356,83 @@ export const generateCreditPaymentThermalTicketHtml = (
       .ticket-container {
         width: 100% !important;
         max-width: ${maxContentWidth} !important;
-        margin-left: 0.5mm !important;
-        margin-right: auto !important;
-        padding-right: 2.5mm !important;
+        margin: 0 auto !important;
+        padding: 0 !important;
+      }
+      .receipt-logo {
+        filter: contrast(300%) grayscale(100%) !important;
+        -webkit-filter: contrast(300%) grayscale(100%) !important;
+        image-rendering: -webkit-optimize-contrast !important;
+        image-rendering: crisp-edges !important;
+        image-rendering: pixelated !important;
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
       }
     }
   </style>
 </head>
 <body>
   <div class="no-print-toolbar">
-    <button class="btn-print" onclick="window.print()">🖨️ IMPRIMER CE REÇU 80mm</button>
+    <button class="btn-print" onclick="window.print()">🖨️ IMPRIMER CE REÇU</button>
     <button class="btn-close" onclick="window.close()">✕ Fermer</button>
   </div>
 
   <div class="ticket-container">
-    ${getThermalBrandHeaderHtml(settings, is58)}
+    <!-- Store Header -->
+    <div class="center">
+      <img class="receipt-logo" src="${logoSrc}" alt="${storeName}" />
+      ${phone ? `<div class="store-phone">Tél : ${phone}</div>` : ''}
+    </div>
 
-    <div class="doc-title bold">
-      REÇU DE RÈGLEMENT ${partyType === 'CLIENT' ? 'CRÉDIT' : 'DETTE'}
+    <!-- Title Banner -->
+    <div class="receipt-banner">
+      REÇU DE DETTE
     </div>
-    <div class="center" style="font-size:9px; margin-bottom:4px;">Document officiel remis aux parties</div>
 
-    <div class="solid-divider"></div>
+    <!-- Date & Ref -->
+    <div class="meta-row">
+      <span>RÉF : ${payment.receiptNumber || ('REC-' + (payment.id ? payment.id.slice(-6).toUpperCase() : '001'))}</span>
+      <span>${formatDateTime(payment.date || new Date().toISOString())}</span>
+    </div>
 
-    <div class="row">
-      <span>N° REÇU:</span>
-      <span class="bold">${payment.receiptNumber || 'REC-001'}</span>
-    </div>
-    <div class="row">
-      <span>DATE & HEURE:</span>
-      <span>${formatDateTime(payment.date)}</span>
-    </div>
-    <div class="row">
-      <span>${partyType === 'CLIENT' ? 'CLIENT (DÉBITEUR):' : 'FOURNISSEUR (CRÉANCIER):'}</span>
-      <span class="bold uppercase">${partyName}</span>
-    </div>
-    <div class="row">
-      <span>MODE DE RÈGLEMENT:</span>
-      <span class="bold">${getPaymentMethodLabel(payment.paymentMethod)}</span>
-    </div>
-    ${payment.receivedBy ? `
-    <div class="row">
-      <span>ENCAISSÉ / ÉMIS PAR:</span>
-      <span>${payment.receivedBy}</span>
-    </div>
-    ` : ''}
+    <div class="dashed-line"></div>
 
-    <div class="total-box">
-      <div class="row" style="font-size:${is58 ? '14px' : '16px'};">
-        <span>MONTANT RÉGLÉ:</span>
+    <!-- Client Info: NOM & NUMÉRO RÉDUIT -->
+    <div class="client-box">
+      <div class="client-field">
+        <span class="client-label">CLIENT :</span>
+        <span class="client-val uppercase">${partyName}</span>
+      </div>
+      ${partyPhone ? `
+      <div class="client-phone-sub">
+        N° : ${partyPhone}
+      </div>
+      ` : ''}
+    </div>
+
+    <!-- Exact Amounts: MONTANT PAYÉ & RESTE À PAYER -->
+    <div class="amount-box">
+      <div class="amount-row-paid">
+        <span>MONTANT PAYÉ :</span>
         <span class="bold">${formatMoney(payment.amount, currency)}</span>
       </div>
-      <div class="row" style="margin-top:4px; padding-top:4px; border-top:1px dashed #000000; font-size:${is58 ? '12px' : '14px'};">
-        <span>NOUVEAU RESTE DÛ:</span>
-        <span class="bold">${formatMoney(remainingDebt, currency)}</span>
+      <div class="amount-row-remaining">
+        <span>RESTE À PAYER :</span>
+        <span class="remaining-num">${formatMoney(remainingDebt, currency)}</span>
       </div>
     </div>
 
-    ${(notes || payment.notes) ? `
-    <div style="font-size:10px; margin: 4px 0;">
-      <strong>Note:</strong> ${notes || payment.notes}
-    </div>
-    ` : ''}
+    <div class="dashed-line"></div>
 
-    <div class="signatures">
-      <div class="sig-col">
-        <strong>LE DÉBITEUR</strong><br>
-        <span style="font-size:8px;">(Accusé de versement)</span>
-        <div style="height:36px; border-bottom:1.5px dotted #000000; margin-top:8px;"></div>
-      </div>
-      <div class="sig-col">
-        <strong>POUR LA BOUTIQUE</strong><br>
-        <span style="font-size:8px;">(Signature & Cachet)</span>
-        <div style="height:36px; border-bottom:1.5px dotted #000000; margin-top:8px;"></div>
-      </div>
-    </div>
-
-    <div class="divider"></div>
-    <div class="center" style="font-size:9px;">
-      Merci pour votre confiance !<br>
-      Ce reçu fait foi de paiement libératoire.
+    <div class="footer-note">
+      Merci pour votre confiance !
     </div>
   </div>
 
   <script>
     window.addEventListener('load', function() {
       setTimeout(function() {
-        try {
-          window.print();
-        } catch(e) {}
+        try { window.print(); } catch(e) {}
       }, 300);
     });
   </script>
@@ -1623,28 +1645,25 @@ export const generatePartyCreditBalanceThermalTicketHtml = (params: {
   </div>
 
   <div class="ticket-container">
-    ${getThermalBrandHeaderHtml(settings, is58)}
+    <!-- Store Header Compact (No store address, reduced phone) -->
+    <div class="center" style="margin-bottom: 3px;">
+      <img class="receipt-logo" src="${settings.logoUrl || STORE_LOGO_BASE64}" alt="${storeName}" style="display:block; margin:0 auto 2px; max-width:85%; width:${is58 ? '105px' : '130px'}; filter: contrast(300%) grayscale(100%) !important; -webkit-filter: contrast(300%) grayscale(100%) !important; image-rendering: pixelated !important;" />
+      ${phone ? `<div style="font-size:${is58 ? '7px' : '8px'}; font-weight:700; color:#333; text-align:center; margin-bottom:2px;">Tél : ${phone}</div>` : ''}
+    </div>
 
-    <div class="center" style="font-size:${is58 ? '10px' : '11px'}; margin:4px 0 3px; font-weight:700;">
-      Situation arrêtée le ${formatDateTime(new Date().toISOString())}
+    <div class="center" style="font-size:${is58 ? '9px' : '10.5px'}; margin:3px 0 2px; font-weight:800;">
+      Situation de Dette au ${formatDateTime(new Date().toISOString())}
     </div>
 
     <div class="solid-divider"></div>
 
     <div class="row">
-      <span class="label">${partyType === 'CLIENT' ? 'CLIENT :' : 'FOURNISSEUR :'}</span>
+      <span class="label">${partyType === 'CLIENT' ? 'CLIENT :' : 'TIERS :'}</span>
       <span class="value uppercase bold">${partyName}</span>
     </div>
-    ${partyPhone ? `
-    <div class="row">
-      <span class="label">TÉLÉPHONE :</span>
-      <span class="value bold">${partyPhone}</span>
-    </div>
-    ` : ''}
-    ${partyAddress ? `
-    <div class="row">
-      <span class="label">ADRESSE :</span>
-      <span class="value bold">${partyAddress}</span>
+    ${(partyPhone || partyAddress) ? `
+    <div style="font-size: ${is58 ? '7.5px' : '8.5px'}; color: #333333; text-align: right; margin-top: -1px; margin-bottom: 2px;">
+      ${[partyPhone ? `Tél : ${partyPhone}` : '', partyAddress ? `Adr : ${partyAddress}` : ''].filter(Boolean).join(' • ')}
     </div>
     ` : ''}
     ${creditLimit !== undefined && creditLimit > 0 ? `

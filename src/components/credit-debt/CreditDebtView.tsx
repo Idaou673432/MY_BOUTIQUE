@@ -302,7 +302,8 @@ export const CreditDebtView: React.FC<CreditDebtViewProps> = ({ initialType = 'A
       record.remainingAmount,
       settings,
       payment.notes,
-      80
+      80,
+      record.partyPhone
     );
     printTicketIn80mm(html);
   };
@@ -316,7 +317,8 @@ export const CreditDebtView: React.FC<CreditDebtViewProps> = ({ initialType = 'A
       record.remainingAmount,
       settings,
       payment.notes,
-      80
+      80,
+      record.partyPhone
     );
     printTicketIn80mm(html);
   };
