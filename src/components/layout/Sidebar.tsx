@@ -40,6 +40,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentTab, onSelectTab, isOpe
 
   const pendingDebtsCount = (creditDebtRecords || []).filter(r => r.status === 'EN_COURS').length;
   const sentQuotesCount = (quotes || []).filter(q => q.status === 'ENVOYE' || q.status === 'BROUILLON').length;
+  const inventoryDiscrepancyCount = metrics.inventoryDiscrepancyCount || 0;
 
   const allPrincipalItems = [
     {
@@ -107,6 +108,10 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentTab, onSelectTab, isOpe
       id: 'inventory',
       label: 'Inventaires Mensuels',
       icon: ClipboardList,
+      badge: inventoryDiscrepancyCount > 0 
+        ? `${inventoryDiscrepancyCount} écart${inventoryDiscrepancyCount > 1 ? 's' : ''}` 
+        : undefined,
+      badgeColor: 'bg-rose-500 text-white font-bold animate-pulse shadow-xs',
     },
   ];
 
@@ -168,6 +173,11 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentTab, onSelectTab, isOpe
               onSelectTab(item.id);
               onCloseMobile();
             }}
+            title={
+              item.id === 'inventory' && inventoryDiscrepancyCount > 0
+                ? `${inventoryDiscrepancyCount} écart(s) de stock physique détecté(s) dans la session en cours`
+                : undefined
+            }
             className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-medium transition-all cursor-pointer ${
               isActive
                 ? 'bg-indigo-600 text-white font-bold shadow-xs'
@@ -177,22 +187,30 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentTab, onSelectTab, isOpe
             }`}
           >
             <div className="flex items-center gap-2.5">
-              <Icon
-                className={`w-4 h-4 shrink-0 ${
-                  isActive
-                    ? 'text-white'
-                    : item.highlight
-                    ? 'text-indigo-400'
-                    : 'text-gray-400'
-                }`}
-              />
+              <div className="relative">
+                <Icon
+                  className={`w-4 h-4 shrink-0 ${
+                    isActive
+                      ? 'text-white'
+                      : item.highlight
+                      ? 'text-indigo-400'
+                      : 'text-gray-400'
+                  }`}
+                />
+                {item.id === 'inventory' && inventoryDiscrepancyCount > 0 && !isActive && (
+                  <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-rose-500 ring-2 ring-gray-900 animate-ping" />
+                )}
+              </div>
               <span className="truncate">{item.label}</span>
             </div>
 
             {item.badge && (
               <span
-                className={`px-1.5 py-0.5 rounded text-[9px] font-bold shrink-0 ${item.badgeColor || 'bg-gray-700 text-gray-200'}`}
+                className={`px-1.5 py-0.5 rounded text-[9px] font-bold shrink-0 flex items-center gap-1 ${item.badgeColor || 'bg-gray-700 text-gray-200'}`}
               >
+                {item.id === 'inventory' && inventoryDiscrepancyCount > 0 && (
+                  <span className="w-1.5 h-1.5 rounded-full bg-white animate-ping shrink-0" />
+                )}
                 {item.badge}
               </span>
             )}

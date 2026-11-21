@@ -17,7 +17,8 @@ import {
 } from 'lucide-react';
 import { useStore } from '../../context/StoreContext';
 import { Expense, ExpenseCategory, PaymentMethod } from '../../types';
-import { formatMoney, formatDate, formatDateTime, getPaymentMethodLabel } from '../../utils/formatters';
+import { formatMoney, formatDate, formatDateTime, getPaymentMethodLabel, getLocalDateKey } from '../../utils/formatters';
+import { ConfirmModal } from '../common/ConfirmModal';
 
 export const ExpensesView: React.FC = () => {
   const { expenses, addExpense, deleteExpense, settings, currentUser } = useStore();
@@ -27,6 +28,7 @@ export const ExpensesView: React.FC = () => {
   const [showAddModal, setShowAddModal] = useState(false);
 
   // Form state
+  const [expenseDate, setExpenseDate] = useState<string>(() => getLocalDateKey());
   const [category, setCategory] = useState<ExpenseCategory>('ELECTRICITE_EAU');
   const [description, setDescription] = useState('');
   const [amount, setAmount] = useState<number>(0);
@@ -34,6 +36,7 @@ export const ExpensesView: React.FC = () => {
   const [beneficiary, setBeneficiary] = useState('');
   const [receiptNumber, setReceiptNumber] = useState('');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [expenseToDelete, setExpenseToDelete] = useState<Expense | null>(null);
 
   const filteredExpenses = useMemo(() => {
     const q = (searchTerm || '').toLowerCase().trim();
@@ -69,7 +72,14 @@ export const ExpensesView: React.FC = () => {
       return;
     }
 
+    const todayKey = getLocalDateKey();
+    const resolvedDate =
+      expenseDate && expenseDate !== todayKey
+        ? new Date(`${expenseDate}T12:00:00`).toISOString()
+        : new Date().toISOString();
+
     addExpense({
+      date: resolvedDate,
       category,
       description: description.trim(),
       amount: Number(amount),
@@ -79,6 +89,7 @@ export const ExpensesView: React.FC = () => {
     });
 
     setShowAddModal(false);
+    setExpenseDate(getLocalDateKey());
     setDescription('');
     setAmount(0);
     setBeneficiary('');
@@ -125,7 +136,7 @@ export const ExpensesView: React.FC = () => {
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement('a');
     link.setAttribute('href', encodedUri);
-    link.setAttribute('download', `journal_depenses_${new Date().toISOString().split('T')[0]}.csv`);
+    link.setAttribute('download', `journal_depenses_${getLocalDateKey()}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -248,8 +259,9 @@ export const ExpensesView: React.FC = () => {
                     {!isVendeur && (
                       <td className="p-3.5 text-right">
                         <button
-                          onClick={() => deleteExpense(expense.id)}
-                          className="p-1 text-slate-400 hover:text-rose-600 rounded-lg"
+                          type="button"
+                          onClick={() => setExpenseToDelete(expense)}
+                          className="p-1 text-slate-400 hover:text-rose-600 rounded-lg cursor-pointer"
                           title="Supprimer"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
@@ -298,22 +310,34 @@ export const ExpensesView: React.FC = () => {
                 </div>
               )}
 
-              <div>
-                <label className="font-semibold text-slate-700 block mb-1">Catégorie de Dépense *</label>
-                <select
-                  value={category}
-                  onChange={(e) => setCategory(e.target.value as ExpenseCategory)}
-                  className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-rose-500 focus:outline-none"
-                >
-                  <option value="ELECTRICITE_EAU">Électricité / Eau / Internet</option>
-                  <option value="LOYER">Loyer Commercial</option>
-                  <option value="SALAIRES">Salaires & Rémunérations</option>
-                  <option value="TRANSPORT">Transport & Logistique</option>
-                  <option value="EMBALLAGE">Sacs & Emballages</option>
-                  <option value="ENTRETIEN">Entretien & Maintenance</option>
-                  <option value="IMPOTS_TAXES">Impôts & Taxes</option>
-                  <option value="AUTRE">Autre Dépense</option>
-                </select>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="font-semibold text-slate-700 block mb-1">Date de la dépense *</label>
+                  <input
+                    type="date"
+                    required
+                    value={expenseDate}
+                    onChange={(e) => setExpenseDate(e.target.value)}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-rose-500 focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="font-semibold text-slate-700 block mb-1">Catégorie de Dépense *</label>
+                  <select
+                    value={category}
+                    onChange={(e) => setCategory(e.target.value as ExpenseCategory)}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-rose-500 focus:outline-none"
+                  >
+                    <option value="ELECTRICITE_EAU">Électricité / Eau / Internet</option>
+                    <option value="LOYER">Loyer Commercial</option>
+                    <option value="SALAIRES">Salaires & Rémunérations</option>
+                    <option value="TRANSPORT">Transport & Logistique</option>
+                    <option value="EMBALLAGE">Sacs & Emballages</option>
+                    <option value="ENTRETIEN">Entretien & Maintenance</option>
+                    <option value="IMPOTS_TAXES">Impôts & Taxes</option>
+                    <option value="AUTRE">Autre Dépense</option>
+                  </select>
+                </div>
               </div>
 
               <div>
@@ -402,6 +426,25 @@ export const ExpensesView: React.FC = () => {
           </form>
         </div>
       )}
+
+      <ConfirmModal
+        isOpen={Boolean(expenseToDelete)}
+        title="Supprimer cette dépense ?"
+        message={
+          expenseToDelete
+            ? `Voulez-vous supprimer la dépense "${expenseToDelete.description}" (${formatMoney(expenseToDelete.amount, settings.currency)}) ?`
+            : ''
+        }
+        confirmLabel="Supprimer"
+        variant="danger"
+        onConfirm={() => {
+          if (expenseToDelete) {
+            deleteExpense(expenseToDelete.id);
+          }
+          setExpenseToDelete(null);
+        }}
+        onCancel={() => setExpenseToDelete(null)}
+      />
     </div>
   );
 };

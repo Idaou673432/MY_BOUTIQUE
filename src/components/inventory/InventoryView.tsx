@@ -352,6 +352,11 @@ export const InventoryView: React.FC = () => {
             >
               <ClipboardList className="w-3.5 h-3.5" />
               <span>Sessions de Comptage</span>
+              {sessionStats.itemsWithEcart > 0 && activeSession?.status === 'EN_COURS' && (
+                <span className="ml-1 px-1.5 py-0.5 rounded-full text-[10px] font-black bg-rose-500 text-white animate-pulse shadow-xs">
+                  {sessionStats.itemsWithEcart} écart{sessionStats.itemsWithEcart > 1 ? 's' : ''}
+                </span>
+              )}
             </button>
 
             <button
@@ -423,6 +428,10 @@ export const InventoryView: React.FC = () => {
               const isAnnule = session.status === 'ANNULE';
               const sessionTitle = session.title || `Inventaire #${session.id.slice(-4)}`;
 
+              const sessionEcarts = (session.items || []).filter(
+                (it) => it.counted && it.difference !== 0
+              ).length;
+
               return (
                 <button
                   key={session.id}
@@ -446,6 +455,12 @@ export const InventoryView: React.FC = () => {
                   >
                     {isValidated ? 'Validé' : isAnnule ? 'Annulé' : 'En cours'}
                   </span>
+                  {sessionEcarts > 0 && session.status === 'EN_COURS' && (
+                    <span className="px-1.5 py-0.5 rounded text-[10px] font-black bg-rose-500 text-white animate-pulse shadow-xs flex items-center gap-1">
+                      <span className="w-1.5 h-1.5 rounded-full bg-white animate-ping" />
+                      {sessionEcarts} écart{sessionEcarts > 1 ? 's' : ''}
+                    </span>
+                  )}
                 </button>
               );
             })
@@ -673,6 +688,47 @@ export const InventoryView: React.FC = () => {
             )}
           </div>
 
+          {/* VISUAL ALERT BANNER FOR DETECTED DISCREPANCIES AFTER PHYSICAL COUNT */}
+          {sessionStats.itemsWithEcart > 0 && activeSession.status === 'EN_COURS' && (
+            <div className="bg-gradient-to-r from-rose-50 via-rose-100/60 to-amber-50 border-2 border-rose-300 rounded-2xl p-4 sm:p-5 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4 text-rose-950 animate-in fade-in slide-in-from-top-2">
+              <div className="flex items-center gap-3.5">
+                <div className="w-11 h-11 rounded-2xl bg-rose-600 text-white flex items-center justify-center shrink-0 shadow-sm">
+                  <AlertTriangle className="w-6 h-6 animate-pulse" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h3 className="text-sm sm:text-base font-black text-rose-950 tracking-tight">
+                      {sessionStats.itemsWithEcart} écart{sessionStats.itemsWithEcart > 1 ? 's' : ''} de stock détecté{sessionStats.itemsWithEcart > 1 ? 's' : ''} après saisie physique
+                    </h3>
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-black uppercase bg-rose-600 text-white shadow-xs">
+                      Écarts constatés
+                    </span>
+                  </div>
+                  <p className="text-xs text-rose-700 font-medium mt-1">
+                    Pertes constatées : <span className="font-bold text-rose-900">{formatMoney(sessionStats.totalLossesValue, settings.currency)}</span> • Surplus constatés : <span className="font-bold text-emerald-800">{formatMoney(sessionStats.totalSurplusValue, settings.currency)}</span>
+                    {sessionStats.netDifferenceValue !== 0 && (
+                      <span className="font-bold"> (Net : {sessionStats.netDifferenceValue > 0 ? '+' : ''}{formatMoney(sessionStats.netDifferenceValue, settings.currency)})</span>
+                    )}.
+                    {isVendeur ? ' Vérifiez les quantités ou informez le responsable.' : ' Renseignez les justifications sur chaque ligne avec écart avant validation.'}
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setEcartOnlyFilter(prev => !prev)}
+                className={`px-4 py-2.5 rounded-xl text-xs font-black transition-all shrink-0 cursor-pointer flex items-center justify-center gap-2 shadow-xs ${
+                  ecartOnlyFilter
+                    ? 'bg-rose-700 text-white ring-2 ring-rose-400'
+                    : 'bg-white text-rose-700 border-2 border-rose-300 hover:bg-rose-100'
+                }`}
+              >
+                <AlertTriangle className="w-4 h-4 shrink-0" />
+                <span>{ecartOnlyFilter ? 'Afficher tous les articles' : `Voir les ${sessionStats.itemsWithEcart} articles avec écart`}</span>
+              </button>
+            </div>
+          )}
+
           {/* SEARCH & FILTERS */}
           <div className="bg-white p-3 rounded-2xl border border-slate-200 shadow-xs flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
             <div className="relative flex-1">
@@ -704,12 +760,17 @@ export const InventoryView: React.FC = () => {
               onClick={() => setEcartOnlyFilter(!ecartOnlyFilter)}
               className={`px-3 py-2 rounded-xl text-xs font-bold border transition-colors flex items-center justify-center gap-1.5 ${
                 ecartOnlyFilter
-                  ? 'bg-amber-500 text-white border-amber-600 shadow-xs'
+                  ? 'bg-rose-600 text-white border-rose-700 shadow-xs'
+                  : sessionStats.itemsWithEcart > 0
+                  ? 'bg-rose-50 text-rose-700 border-rose-300 hover:bg-rose-100 font-extrabold'
                   : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
               }`}
             >
-              <AlertTriangle className="w-3.5 h-3.5" />
-              Écarts seulement ({sessionStats.itemsWithEcart})
+              <AlertTriangle className={`w-3.5 h-3.5 ${sessionStats.itemsWithEcart > 0 ? 'text-rose-600 animate-pulse' : ''}`} />
+              <span>Écarts seulement ({sessionStats.itemsWithEcart})</span>
+              {sessionStats.itemsWithEcart > 0 && !ecartOnlyFilter && (
+                <span className="w-2 h-2 rounded-full bg-rose-500 animate-ping" />
+              )}
             </button>
           </div>
 
@@ -782,9 +843,10 @@ export const InventoryView: React.FC = () => {
                                 <input
                                   type="number"
                                   min="0"
+                                  step="any"
                                   value={item.realStock}
                                   onChange={(e) => {
-                                    const val = e.target.value === '' ? 0 : parseInt(e.target.value, 10);
+                                    const val = e.target.value === '' ? 0 : parseFloat(e.target.value);
                                     handleCountChange(item.productId, isNaN(val) ? 0 : val);
                                   }}
                                   className="w-16 text-center py-1 px-1 bg-white border border-indigo-300 rounded-lg text-xs font-black text-indigo-900 focus:ring-2 focus:ring-indigo-500 focus:outline-none"

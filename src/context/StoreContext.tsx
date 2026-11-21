@@ -51,7 +51,14 @@ import {
 } from '../data/initialData';
 import { STORE_LOGO_BASE64 } from '../assets/logoBase64';
 import { BUSINESS_PRESETS } from '../data/industryPresets';
-import { generateId, generateInvoiceNumber, generateOrderNumber, generateQuoteNumber } from '../utils/formatters';
+import {
+  generateId,
+  generateInvoiceNumber,
+  generateOrderNumber,
+  generateQuoteNumber,
+  getLocalDateKey,
+  getNextSequenceNumber,
+} from '../utils/formatters';
 
 interface StoreContextType {
   // Firebase Sync State
@@ -148,6 +155,18 @@ interface StoreContextType {
     remainingDebt?: number
   ) => { success: boolean; sale?: Sale; message?: string };
   cancelSale: (saleId: string, reason: string) => { success: boolean; message?: string };
+  updateSale: (
+    saleId: string,
+    updates: {
+      items: SaleItem[];
+      paymentMethod: PaymentMethod;
+      amountReceived: number;
+      customerId?: string;
+      notes?: string;
+      remainingDebt?: number;
+    },
+    correctionReason?: string
+  ) => { success: boolean; sale?: Sale; message?: string };
 
   // Quotes (Devis & Factures Proforma)
   quotes: Quote[];
@@ -171,12 +190,35 @@ interface StoreContextType {
     paymentMethod: PaymentMethod,
     notes?: string
   ) => { success: boolean; message?: string; receipt?: CreditPayment };
+  updateCreditPayment: (
+    recordId: string,
+    paymentId: string,
+    updates: {
+      amount: number;
+      paymentMethod: PaymentMethod;
+      notes?: string;
+      date?: string;
+    },
+    correctionReason?: string
+  ) => { success: boolean; message?: string; updatedRecord?: CreditDebtRecord; updatedPayment?: CreditPayment };
   cancelCreditPayment: (
     recordIdOrPaymentId: string,
     paymentId?: string,
     reason?: string
   ) => { success: boolean; message?: string };
   updateCreditDebtRecord: (id: string, updates: Partial<CreditDebtRecord>) => void;
+  correctCreditDebtRecord: (
+    id: string,
+    updates: {
+      partyName: string;
+      partyPhone?: string;
+      title: string;
+      initialAmount: number;
+      dueDate?: string;
+      notes?: string;
+    },
+    correctionReason?: string
+  ) => { success: boolean; message?: string; updatedRecord?: CreditDebtRecord };
   deleteCreditDebtRecord: (id: string) => boolean;
 
   // Expenses & Cash
@@ -218,6 +260,7 @@ interface StoreContextType {
     totalStockValue: number;
     lowStockCount: number;
     outOfStockCount: number;
+    inventoryDiscrepancyCount: number;
     currentCashBalance: number;
     totalCustomerDebt: number;
     totalSupplierDebt: number;
@@ -633,30 +676,30 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     if (activityLogs && activityLogs.length > 0) localStorage.setItem('bpm_activity_logs_backup', JSON.stringify(activityLogs));
   }, [activityLogs]);
 
-  // Fingerprint calculation to detect genuine data changes and avoid quota-wasting write loops
+  // Fingerprint calculation to detect genuine data changes across all collections and settings
   const computeFingerprint = useCallback(() => {
     return JSON.stringify({
-      products: products.map(p => `${p.id}:${p.name}:${p.currentStock}:${p.salePrice}:${p.purchasePrice}:${p.updatedAt || ''}`),
-      salesCount: sales.length,
-      salesLatestId: sales[0]?.id || '',
-      customersCount: customers.length,
-      customerBalances: customers.map(c => `${c.id}:${c.creditBalance}`),
-      creditDebts: creditDebtRecords.map(r => `${r.id}:${r.remainingAmount}:${r.status}`),
-      suppliersCount: suppliers.length,
-      supplierDebts: suppliers.map(s => `${s.id}:${s.debtBalance}`),
-      purchasesCount: purchases.length,
-      expensesCount: expenses.length,
+      products: (products || []).map(p => `${p.id}:${p.name}:${p.currentStock}:${p.salePrice}:${p.purchasePrice}:${p.active}:${p.updatedAt || ''}`),
+      sales: (sales || []).map(s => `${s.id}:${s.status}:${s.totalAmount}:${s.amountReceived}:${s.remainingDue || 0}:${(s.items || []).length}:${s.customerId || ''}`),
+      quotes: (quotes || []).map(q => `${q.id}:${q.status}:${q.totalAmount}:${(q.items || []).length}:${q.convertedSaleId || ''}`),
+      customers: (customers || []).map(c => `${c.id}:${c.name}:${c.creditBalance}:${c.totalSpent}`),
+      creditDebts: (creditDebtRecords || []).map(r => `${r.id}:${r.initialAmount}:${r.remainingAmount}:${r.status}:${(r.payments || []).length}:${r.title}`),
+      suppliers: (suppliers || []).map(s => `${s.id}:${s.companyName}:${s.debtBalance}:${s.totalPurchased}`),
+      purchases: (purchases || []).map(p => `${p.id}:${p.status}:${p.totalAmount}:${p.paidAmount}`),
+      expenses: (expenses || []).map(e => `${e.id}:${e.amount}:${e.date}`),
       cashRegId: cashRegister?.id || '',
       cashRegOpen: cashRegister?.isOpen || false,
-      cashTxCount: cashTransactions.length,
-      inventoriesCount: inventories.length,
-      categoriesCount: categories.length,
-      usersCount: users.length,
-      settingsStore: settings.storeName,
+      cashRegClosing: cashRegister?.closingBalanceReal ?? '',
+      cashTxCount: (cashTransactions || []).length,
+      inventories: (inventories || []).map(i => `${i.id}:${i.status}:${i.totalProductsCounted}:${i.netDifferenceValue}`),
+      categoriesCount: (categories || []).length,
+      users: (users || []).map(u => `${u.id}:${u.role}:${u.active}:${u.pin}`),
+      settings,
     });
   }, [
     products,
     sales,
+    quotes,
     customers,
     creditDebtRecords,
     suppliers,
@@ -667,7 +710,7 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     inventories,
     categories,
     users,
-    settings.storeName,
+    settings,
   ]);
 
   // Startup and Cross-Reconciliation: ensure customer credits and supplier debts are tracked in creditDebtRecords
@@ -1124,16 +1167,19 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     reason: string,
     referenceId?: string
   ): boolean => {
-    const product = (products || []).find(p => p.id === productId);
+    const currentProducts = stateRef.current.products || products || [];
+    const currentSettings = stateRef.current.settings || settings;
+    const product = currentProducts.find(p => p.id === productId);
     if (!product) return false;
 
     const previousStock = product.currentStock;
-    const newStock = previousStock + quantity;
+    const newStock = Math.round((previousStock + quantity) * 1000) / 1000;
 
-    if (newStock < 0 && !settings.allowNegativeStock) {
+    if (newStock < 0 && !currentSettings.allowNegativeStock) {
       return false; // Prevent negative stock
     }
 
+    const nowIso = new Date().toISOString();
     const movement: StockMovement = {
       id: generateId('mov'),
       productId,
@@ -1145,50 +1191,51 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       unitCost: product.purchasePrice,
       userId: currentUser.id,
       userName: currentUser.name,
-      date: new Date().toISOString(),
+      date: nowIso,
       reason,
       referenceId,
     };
 
-    setStockMovements(prev => [movement, ...prev]);
-    setProducts(prev =>
-      prev.map(p =>
-        p.id === productId
-          ? { ...p, currentStock: newStock, updatedAt: new Date().toISOString() }
-          : p
-      )
+    const nextMovs = [movement, ...(stateRef.current.stockMovements || stockMovements || [])];
+    stateRef.current.stockMovements = nextMovs;
+    setStockMovements(nextMovs);
+
+    const nextProducts = currentProducts.map(p =>
+      p.id === productId
+        ? { ...p, currentStock: newStock, updatedAt: nowIso }
+        : p
     );
+    stateRef.current.products = nextProducts;
+    setProducts(nextProducts);
 
     return true;
   };
 
   // Products
   const addProduct = (pData: Omit<Product, 'id' | 'createdAt' | 'updatedAt'>): Product => {
+    const nowIso = new Date().toISOString();
     const newProd: Product = {
       ...pData,
       id: generateId('prod'),
       code: pData.code || `ART-${Math.floor(1000 + Math.random() * 9000)}`,
       barcode: pData.barcode || `${Math.floor(600000000000 + Math.random() * 99999999999)}`,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
+      createdAt: nowIso,
+      updatedAt: nowIso,
     };
 
     hasLocalMutations.current = true;
     setIsCloudSynced(false);
 
-    let nextProducts: Product[] = [];
-    setProducts(prev => {
-      nextProducts = [newProd, ...(prev || [])];
-      stateRef.current.products = nextProducts;
-      try {
-        localStorage.setItem(STORAGE_KEYS.PRODUCTS, JSON.stringify(nextProducts));
-        localStorage.setItem('bpm_products_backup', JSON.stringify(nextProducts));
-        localStorage.setItem('bpm_products_recovery_catalog', JSON.stringify(nextProducts));
-      } catch (err) {
-        console.warn('LocalStorage write warning:', err);
-      }
-      return nextProducts;
-    });
+    const nextProducts = [newProd, ...(stateRef.current.products || products || [])];
+    stateRef.current.products = nextProducts;
+    setProducts(nextProducts);
+    try {
+      localStorage.setItem(STORAGE_KEYS.PRODUCTS, JSON.stringify(nextProducts));
+      localStorage.setItem('bpm_products_backup', JSON.stringify(nextProducts));
+      localStorage.setItem('bpm_products_recovery_catalog', JSON.stringify(nextProducts));
+    } catch (err) {
+      console.warn('LocalStorage write warning:', err);
+    }
 
     // If initial stock is positive, record initial movement
     if (newProd.currentStock > 0) {
@@ -1203,14 +1250,12 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         unitCost: newProd.purchasePrice,
         userId: currentUser.id,
         userName: currentUser.name,
-        date: new Date().toISOString(),
+        date: nowIso,
         reason: 'Stock initial à la création du produit',
       };
-      setStockMovements(prev => {
-        const nextMovs = [initialMov, ...(prev || [])];
-        stateRef.current.stockMovements = nextMovs;
-        return nextMovs;
-      });
+      const nextMovs = [initialMov, ...(stateRef.current.stockMovements || stockMovements || [])];
+      stateRef.current.stockMovements = nextMovs;
+      setStockMovements(nextMovs);
     }
 
     logActivity('Ajout produit', 'STOCK', newProd.name, `Prix vente: ${newProd.salePrice}, Stock: ${newProd.currentStock}`);
@@ -1530,7 +1575,7 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
 
     const purchase: Purchase = {
       id: generateId('purch'),
-      orderNumber: generateOrderNumber(purchases.length),
+      orderNumber: generateOrderNumber((purchases || []).length, (purchases || []).map(p => p.orderNumber)),
       supplierId,
       supplierName: sup ? sup.companyName : 'Fournisseur inconnu',
       date: new Date().toISOString(),
@@ -1544,12 +1589,12 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       createdBy: currentUser.name,
     };
 
-    setPurchases(prev => [purchase, ...prev]);
+    setPurchases(prev => [purchase, ...(prev || [])]);
 
     // Update supplier total purchased and debt
     if (sup) {
       setSuppliers(prev =>
-        prev.map(s =>
+        (prev || []).map(s =>
           s.id === supplierId
             ? {
                 ...s,
@@ -1612,7 +1657,6 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
           purchase.id
         );
       });
-      purchase.receivedDate = new Date().toISOString();
     } else if (status === 'ANNULE' && purchase.status === 'RECU') {
       // If cancelling an already received purchase, deduct the stock that was received
       (purchase.items || []).forEach(it => {
@@ -1812,17 +1856,23 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       return { success: false, message: 'Le panier est vide. Veuillez ajouter au moins un produit.' };
     }
 
+    const currentProducts = stateRef.current.products || products || [];
+    const currentSales = stateRef.current.sales || sales || [];
+    const currentCustomers = stateRef.current.customers || customers || [];
+    const currentCreditDebts = stateRef.current.creditDebtRecords || creditDebtRecords || [];
+    const currentSettings = stateRef.current.settings || settings;
+
     // Verify stock availability
     for (const item of items) {
       if (item.productId.startsWith('custom_')) {
         continue;
       }
-      const prod = (products || []).find(p => p.id === item.productId);
+      const prod = currentProducts.find(p => p.id === item.productId);
       if (!prod) {
         // Custom or on-the-fly item: skip stock validation
         continue;
       }
-      if (!settings.allowNegativeStock && prod.currentStock < item.quantity) {
+      if (!currentSettings.allowNegativeStock && prod.currentStock < item.quantity) {
         return {
           success: false,
           message: `Stock insuffisant pour "${prod.name}". Stock actuel: ${prod.currentStock}, Quantité demandée: ${item.quantity}`,
@@ -1831,7 +1881,7 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     }
 
     const subtotal = items.reduce((sum, it) => sum + it.total, 0);
-    const taxAmount = settings.taxEnabled ? (subtotal * settings.taxRatePercent) / 100 : 0;
+    const taxAmount = currentSettings.taxEnabled ? (subtotal * currentSettings.taxRatePercent) / 100 : 0;
     const totalAmount = Math.round(subtotal + taxAmount);
     const totalCost = items.reduce((sum, it) => sum + it.unitCost * it.quantity, 0);
     const totalMargin = totalAmount - totalCost;
@@ -1839,23 +1889,22 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     // Calcul précis de la dette restante et de la monnaie rendue
     const computedDebt = remainingDebt !== undefined
       ? Math.max(0, remainingDebt)
-      : (paymentMethod === 'CREDIT'
-          ? Math.max(0, totalAmount - (amountReceived || 0))
-          : Math.max(0, totalAmount - (amountReceived || 0)));
+      : Math.max(0, totalAmount - (amountReceived || 0));
 
     const effectiveRemainingDue = computedDebt;
     const changeGiven = paymentMethod === 'ESPECES' ? Math.max(0, amountReceived - totalAmount) : 0;
 
-    const cust = customerId ? (customers || []).find(c => c.id === customerId) : undefined;
+    const cust = customerId ? currentCustomers.find(c => c.id === customerId) : undefined;
 
-    const prefix = settings.invoicePrefix || 'FAC-';
+    const prefix = currentSettings.invoicePrefix || 'FAC-';
     const year = new Date().getFullYear();
-    const padded = String((sales || []).length + 1).padStart(4, '0');
+    const nextSeq = getNextSequenceNumber(currentSales.map(s => s.invoiceNumber), currentSales.length);
+    const padded = String(nextSeq).padStart(4, '0');
     const invoiceNumber = `${prefix}${year}-${padded}`;
 
     // Ensure all items carry productUnit and productCode
     const enrichedItems: SaleItem[] = items.map(it => {
-      const prod = (products || []).find(p => p.id === it.productId);
+      const prod = currentProducts.find(p => p.id === it.productId);
       return {
         ...it,
         productCode: it.productCode || prod?.code,
@@ -1887,12 +1936,14 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     };
 
     // 1. Save Sale
-    setSales(prev => [sale, ...(prev || [])]);
+    const nextSales = [sale, ...currentSales];
+    stateRef.current.sales = nextSales;
+    setSales(nextSales);
 
     // 2. Decrease Stock automatically and create movement for each item
     items.forEach(it => {
       if (!it.productId.startsWith('custom_')) {
-        const prod = (products || []).find(p => p.id === it.productId);
+        const prod = (stateRef.current.products || currentProducts).find(p => p.id === it.productId);
         if (prod) {
           createStockMovement(
             it.productId,
@@ -1906,14 +1957,14 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     });
 
     // 3. Auto-create CreditDebtRecord & synchronize Customer credit balance
-    let updatedCustomers = customers || [];
-    let updatedCreditDebtRecords = creditDebtRecords || [];
+    let updatedCustomers = currentCustomers;
+    let updatedCreditDebtRecords = currentCreditDebts;
     const debtAmountToTrack = effectiveRemainingDue > 0 ? effectiveRemainingDue : (paymentMethod === 'CREDIT' ? totalAmount : 0);
 
     if (debtAmountToTrack > 0) {
       let linkedCust = cust;
       if (!linkedCust && sale.customerName && sale.customerName !== 'Client au comptant') {
-        const foundByName = (customers || []).find(
+        const foundByName = currentCustomers.find(
           c => c.name.trim().toLowerCase() === sale.customerName!.trim().toLowerCase()
         );
         if (foundByName) {
@@ -1968,13 +2019,15 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       };
 
       updatedCreditDebtRecords = [creditRecord, ...updatedCreditDebtRecords];
+      stateRef.current.creditDebtRecords = updatedCreditDebtRecords;
       setCreditDebtRecords(updatedCreditDebtRecords);
       localStorage.setItem(STORAGE_KEYS.CREDIT_DEBT_RECORDS, JSON.stringify(updatedCreditDebtRecords));
+      stateRef.current.customers = updatedCustomers;
       setCustomers(updatedCustomers);
       localStorage.setItem(STORAGE_KEYS.CUSTOMERS, JSON.stringify(updatedCustomers));
     } else if (cust) {
       // Normal paid sale with known customer: update salesCount and totalSpent
-      updatedCustomers = (customers || []).map(c =>
+      updatedCustomers = currentCustomers.map(c =>
         c.id === cust.id
           ? {
               ...c,
@@ -1983,6 +2036,7 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
             }
           : c
       );
+      stateRef.current.customers = updatedCustomers;
       setCustomers(updatedCustomers);
       localStorage.setItem(STORAGE_KEYS.CUSTOMERS, JSON.stringify(updatedCustomers));
     }
@@ -2005,7 +2059,9 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     // Sync all affected entities to cloud
     hasLocalMutations.current = true;
     syncToCloudNow(false, {
-      sales: [sale, ...(sales || [])],
+      sales: nextSales,
+      products: stateRef.current.products,
+      stockMovements: stateRef.current.stockMovements,
       customers: updatedCustomers,
       creditDebtRecords: updatedCreditDebtRecords,
     });
@@ -2014,14 +2070,19 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   };
 
   const cancelSale = (saleId: string, reason: string): { success: boolean; message?: string } => {
-    const sale = (sales || []).find(s => s.id === saleId);
+    const currentSales = stateRef.current.sales || sales || [];
+    const currentProducts = stateRef.current.products || products || [];
+    const currentCustomers = stateRef.current.customers || customers || [];
+    const currentCreditDebts = stateRef.current.creditDebtRecords || creditDebtRecords || [];
+
+    const sale = currentSales.find(s => s.id === saleId);
     if (!sale) return { success: false, message: 'Vente introuvable.' };
     if (sale.status === 'ANNULEE') return { success: false, message: 'Cette vente est déjà annulée.' };
 
     // Restock all items
     sale.items.forEach(it => {
       if (!it.productId.startsWith('custom_')) {
-        const prod = (products || []).find(p => p.id === it.productId);
+        const prod = (stateRef.current.products || currentProducts).find(p => p.id === it.productId);
         if (prod) {
           createStockMovement(
             it.productId,
@@ -2034,28 +2095,39 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       }
     });
 
-    // Revert customer credit or total spent
-    if (sale.customerId) {
+    // Revert customer credit or total spent (match by customerId OR fallback by customerName)
+    let updatedCustomers = currentCustomers;
+    const targetCust = currentCustomers.find(
+      c =>
+        (sale.customerId && c.id === sale.customerId) ||
+        (sale.customerName && c.name.trim().toLowerCase() === sale.customerName.trim().toLowerCase())
+    );
+    if (targetCust) {
       const debtAmount = sale.remainingDue ?? (sale.paymentMethod === 'CREDIT' ? sale.totalAmount : 0);
-      setCustomers(prev =>
-        prev.map(c =>
-          c.id === sale.customerId
-            ? {
-                ...c,
-                totalSpent: Math.max(0, c.totalSpent - sale.totalAmount),
-                salesCount: Math.max(0, c.salesCount - 1),
-                creditBalance: Math.max(0, (c.creditBalance || 0) - debtAmount),
-              }
-            : c
-        )
+      updatedCustomers = currentCustomers.map(c =>
+        c.id === targetCust.id
+          ? {
+              ...c,
+              totalSpent: Math.max(0, (c.totalSpent || 0) - sale.totalAmount),
+              salesCount: Math.max(0, (c.salesCount || 0) - 1),
+              creditBalance: Math.max(0, Math.round(((c.creditBalance || 0) - debtAmount) * 100) / 100),
+            }
+          : c
       );
+      stateRef.current.customers = updatedCustomers;
+      setCustomers(updatedCustomers);
+      localStorage.setItem(STORAGE_KEYS.CUSTOMERS, JSON.stringify(updatedCustomers));
     }
 
     // Cancel matching credit debt record if credit sale or had remaining debt
+    let updatedCreditDebts = currentCreditDebts;
     if ((sale.remainingDue && sale.remainingDue > 0) || sale.paymentMethod === 'CREDIT') {
-      setCreditDebtRecords(prev =>
-        (prev || []).filter(r => !(r.referenceId === sale.id || r.title?.includes(sale.invoiceNumber) || r.notes?.includes(sale.invoiceNumber)))
+      updatedCreditDebts = currentCreditDebts.filter(
+        r => !(r.referenceId === sale.id || r.title?.includes(sale.invoiceNumber) || r.notes?.includes(sale.invoiceNumber))
       );
+      stateRef.current.creditDebtRecords = updatedCreditDebts;
+      setCreditDebtRecords(updatedCreditDebts);
+      localStorage.setItem(STORAGE_KEYS.CREDIT_DEBT_RECORDS, JSON.stringify(updatedCreditDebts));
     }
 
     // Cash transaction refund if cash sale or cash advance on credit sale
@@ -2071,16 +2143,345 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       }
     }
 
-    setSales(prev => prev.map(s => (s.id === saleId ? { ...s, status: 'ANNULEE' } : s)));
+    const updatedSales = currentSales.map(s => (s.id === saleId ? { ...s, status: 'ANNULEE' as const } : s));
+    stateRef.current.sales = updatedSales;
+    setSales(updatedSales);
+    localStorage.setItem(STORAGE_KEYS.SALES, JSON.stringify(updatedSales));
+
     logActivity('Annulation de vente', 'VENTE', sale.invoiceNumber, `Motif: ${reason}`);
+
+    hasLocalMutations.current = true;
+    syncToCloudNow(false, {
+      sales: updatedSales,
+      products: stateRef.current.products,
+      stockMovements: stateRef.current.stockMovements,
+      customers: updatedCustomers,
+      creditDebtRecords: updatedCreditDebts,
+    });
 
     return { success: true };
   };
 
+  const updateSale = (
+    saleId: string,
+    updates: {
+      items: SaleItem[];
+      paymentMethod: PaymentMethod;
+      amountReceived: number;
+      customerId?: string;
+      notes?: string;
+      remainingDebt?: number;
+    },
+    correctionReason?: string
+  ): { success: boolean; sale?: Sale; message?: string } => {
+    const currentSales = stateRef.current.sales || sales || [];
+    const currentProducts = stateRef.current.products || products || [];
+    const currentStockMovements = stateRef.current.stockMovements || stockMovements || [];
+    const currentCustomers = stateRef.current.customers || customers || [];
+    const currentCreditDebts = stateRef.current.creditDebtRecords || creditDebtRecords || [];
+    const currentSettings = stateRef.current.settings || settings;
+
+    const oldSale = currentSales.find(s => s.id === saleId);
+    if (!oldSale) return { success: false, message: 'Facture introuvable.' };
+    if (oldSale.status === 'ANNULEE') {
+      return { success: false, message: 'Impossible de corriger une facture annulée.' };
+    }
+    if (!updates.items || updates.items.length === 0) {
+      return { success: false, message: 'La facture doit contenir au moins un article.' };
+    }
+
+    // 1. Compute net stock delta per productId (delta > 0 means stock increases / returned; delta < 0 means stock decreases)
+    const oldQtyByProd: Record<string, number> = {};
+    (oldSale.items || []).forEach(it => {
+      if (it.productId && !it.productId.startsWith('custom_')) {
+        oldQtyByProd[it.productId] = (oldQtyByProd[it.productId] || 0) + it.quantity;
+      }
+    });
+
+    const newQtyByProd: Record<string, number> = {};
+    updates.items.forEach(it => {
+      if (it.productId && !it.productId.startsWith('custom_')) {
+        newQtyByProd[it.productId] = (newQtyByProd[it.productId] || 0) + it.quantity;
+      }
+    });
+
+    const allProductIds = Array.from(new Set([...Object.keys(oldQtyByProd), ...Object.keys(newQtyByProd)]));
+    for (const prodId of allProductIds) {
+      const oldQty = oldQtyByProd[prodId] || 0;
+      const newQty = newQtyByProd[prodId] || 0;
+      const deltaStock = oldQty - newQty;
+      if (deltaStock < 0) {
+        const prod = currentProducts.find(p => p.id === prodId);
+        if (prod && !currentSettings.allowNegativeStock && prod.currentStock + deltaStock < 0) {
+          return {
+            success: false,
+            message: `Stock insuffisant pour "${prod.name}". Stock disponible: ${prod.currentStock}, supplément demandé: ${Math.abs(deltaStock)}.`,
+          };
+        }
+      }
+    }
+
+    // Apply stock movements & product stock updates cleanly in one pass
+    const nowIso = new Date().toISOString();
+    const newMovements: StockMovement[] = [];
+    const updatedProducts = currentProducts.map(p => {
+      const oldQty = oldQtyByProd[p.id] || 0;
+      const newQty = newQtyByProd[p.id] || 0;
+      const deltaStock = oldQty - newQty;
+      if (deltaStock === 0) return p;
+
+      const prevStock = p.currentStock;
+      const nextStock = Math.round((prevStock + deltaStock) * 1000) / 1000;
+      newMovements.push({
+        id: generateId('mov'),
+        productId: p.id,
+        productName: p.name,
+        quantity: deltaStock,
+        type: deltaStock > 0 ? 'RETOUR_CLIENT' : 'CORRECTION_MANUELLE',
+        previousStock: prevStock,
+        newStock: nextStock,
+        unitCost: p.purchasePrice,
+        userId: currentUser.id,
+        userName: currentUser.name,
+        date: nowIso,
+        reason: `Correction facture ${oldSale.invoiceNumber}${correctionReason ? ` : ${correctionReason}` : ''}`,
+        referenceId: oldSale.id,
+      });
+      return {
+        ...p,
+        currentStock: nextStock,
+        updatedAt: nowIso,
+      };
+    });
+
+    const updatedStockMovements = newMovements.length > 0
+      ? [...newMovements, ...currentStockMovements]
+      : currentStockMovements;
+
+    if (newMovements.length > 0) {
+      stateRef.current.products = updatedProducts;
+      stateRef.current.stockMovements = updatedStockMovements;
+      setProducts(updatedProducts);
+      setStockMovements(updatedStockMovements);
+      localStorage.setItem(STORAGE_KEYS.PRODUCTS, JSON.stringify(updatedProducts));
+      localStorage.setItem(STORAGE_KEYS.STOCK_MOVEMENTS, JSON.stringify(updatedStockMovements));
+    }
+
+    // 2. Recalculate invoice totals
+    const enrichedItems: SaleItem[] = updates.items.map(it => {
+      const prod = updatedProducts.find(p => p.id === it.productId);
+      const lineTotal = Math.round(it.unitPrice * it.quantity * (1 - (it.discountPercent || 0) / 100));
+      const unitCost = it.unitCost ?? prod?.purchasePrice ?? 0;
+      return {
+        ...it,
+        productCode: it.productCode || prod?.code,
+        productUnit: it.productUnit || prod?.unit || 'pièce',
+        unitCost,
+        total: lineTotal,
+        margin: lineTotal - unitCost * it.quantity,
+      };
+    });
+
+    const subtotal = enrichedItems.reduce((sum, it) => sum + it.total, 0);
+    const taxAmount = currentSettings.taxEnabled ? (subtotal * currentSettings.taxRatePercent) / 100 : 0;
+    const totalAmount = Math.round(subtotal + taxAmount);
+    const totalCost = enrichedItems.reduce((sum, it) => sum + it.unitCost * it.quantity, 0);
+    const totalMargin = totalAmount - totalCost;
+    const discountTotal = enrichedItems.reduce(
+      (sum, it) => sum + (it.unitPrice * it.quantity * (it.discountPercent || 0)) / 100,
+      0
+    );
+
+    const effectiveRemainingDue =
+      updates.remainingDebt !== undefined
+        ? Math.max(0, updates.remainingDebt)
+        : Math.max(0, totalAmount - (updates.amountReceived || 0));
+    const changeGiven =
+      updates.paymentMethod === 'ESPECES' ? Math.max(0, updates.amountReceived - totalAmount) : 0;
+
+    const newCust = updates.customerId ? currentCustomers.find(c => c.id === updates.customerId) : undefined;
+
+    const updatedSale: Sale = {
+      ...oldSale,
+      items: enrichedItems,
+      subtotal,
+      discountTotal,
+      taxAmount,
+      totalAmount,
+      totalCost,
+      totalMargin,
+      paymentMethod: updates.paymentMethod,
+      amountReceived: updates.amountReceived,
+      changeGiven,
+      remainingDue: effectiveRemainingDue,
+      customerId: updates.customerId || undefined,
+      customerName: newCust ? newCust.name : undefined,
+      notes: updates.notes,
+    };
+
+    const updatedSales = currentSales.map(s => (s.id === saleId ? updatedSale : s));
+    stateRef.current.sales = updatedSales;
+    setSales(updatedSales);
+    localStorage.setItem(STORAGE_KEYS.SALES, JSON.stringify(updatedSales));
+
+    // 3. Synchronize Customers & CreditDebtRecords
+    const oldDebt = oldSale.remainingDue ?? (oldSale.paymentMethod === 'CREDIT' ? oldSale.totalAmount : 0);
+    const newDebt =
+      effectiveRemainingDue > 0
+        ? effectiveRemainingDue
+        : updates.paymentMethod === 'CREDIT'
+        ? totalAmount
+        : 0;
+
+    let updatedCustomers = currentCustomers;
+    if (oldSale.customerId === updatedSale.customerId) {
+      if (updatedSale.customerId) {
+        updatedCustomers = updatedCustomers.map(c =>
+          c.id === updatedSale.customerId
+            ? {
+                ...c,
+                totalSpent: Math.max(0, (c.totalSpent || 0) - oldSale.totalAmount + totalAmount),
+                creditBalance: Math.max(0, Math.round(((c.creditBalance || 0) - oldDebt + newDebt) * 100) / 100),
+              }
+            : c
+        );
+      }
+    } else {
+      if (oldSale.customerId) {
+        updatedCustomers = updatedCustomers.map(c =>
+          c.id === oldSale.customerId
+            ? {
+                ...c,
+                totalSpent: Math.max(0, (c.totalSpent || 0) - oldSale.totalAmount),
+                salesCount: Math.max(0, (c.salesCount || 0) - 1),
+                creditBalance: Math.max(0, Math.round(((c.creditBalance || 0) - oldDebt) * 100) / 100),
+              }
+            : c
+        );
+      }
+      if (updatedSale.customerId) {
+        updatedCustomers = updatedCustomers.map(c =>
+          c.id === updatedSale.customerId
+            ? {
+                ...c,
+                totalSpent: (c.totalSpent || 0) + totalAmount,
+                salesCount: (c.salesCount || 0) + 1,
+                creditBalance: Math.max(0, Math.round(((c.creditBalance || 0) + newDebt) * 100) / 100),
+              }
+            : c
+        );
+      }
+    }
+    stateRef.current.customers = updatedCustomers;
+    setCustomers(updatedCustomers);
+    localStorage.setItem(STORAGE_KEYS.CUSTOMERS, JSON.stringify(updatedCustomers));
+
+    let updatedCreditDebtRecords = currentCreditDebts;
+    const linkedRecord = updatedCreditDebtRecords.find(r => r.referenceId === oldSale.id);
+
+    if (linkedRecord) {
+      if (newDebt > 0) {
+        const newRemaining = Math.max(0, Math.round((newDebt - (linkedRecord.paidAmount || 0)) * 100) / 100);
+        updatedCreditDebtRecords = updatedCreditDebtRecords.map(r =>
+          r.id === linkedRecord.id
+            ? {
+                ...r,
+                partyId: newCust ? newCust.id : (updates.customerId || 'client_credit'),
+                partyName: newCust ? newCust.name : (updatedSale.customerName || 'Client à crédit'),
+                partyPhone: newCust?.phone,
+                partyAddress: newCust?.address,
+                initialAmount: newDebt,
+                remainingAmount: newRemaining,
+                status: newRemaining <= 0.001 ? 'SOLDE' : 'EN_COURS',
+                notes: `Correction facture ${updatedSale.invoiceNumber}. Total: ${totalAmount}, Donné: ${updates.amountReceived}, Reste en dette: ${newDebt}. ${updates.notes || ''}`,
+              }
+            : r
+        );
+      } else {
+        if ((linkedRecord.payments || []).length === 0) {
+          updatedCreditDebtRecords = updatedCreditDebtRecords.filter(r => r.id !== linkedRecord.id);
+        } else {
+          updatedCreditDebtRecords = updatedCreditDebtRecords.map(r =>
+            r.id === linkedRecord.id
+              ? {
+                  ...r,
+                  initialAmount: r.paidAmount,
+                  remainingAmount: 0,
+                  status: 'SOLDE',
+                }
+              : r
+          );
+        }
+      }
+    } else if (newDebt > 0) {
+      const creditRecord: CreditDebtRecord = {
+        id: generateId('cd'),
+        type: 'CLIENT_CREDIT',
+        partyId: newCust ? newCust.id : (updates.customerId || 'client_credit'),
+        partyName: newCust ? newCust.name : (updatedSale.customerName || 'Client à crédit'),
+        partyPhone: newCust?.phone,
+        partyAddress: newCust?.address,
+        title: `Dette Vente ${updatedSale.invoiceNumber} (Reste à payer)`,
+        initialAmount: newDebt,
+        paidAmount: 0,
+        remainingAmount: newDebt,
+        status: 'EN_COURS',
+        payments: [],
+        dueDate: new Date(Date.now() + 15 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+        date: nowIso,
+        notes: `Reste à payer vente ${updatedSale.invoiceNumber}. Total: ${totalAmount}, Donné: ${updates.amountReceived}, Reste en dette: ${newDebt}. ${updates.notes || ''}`,
+        referenceId: updatedSale.id,
+        createdAt: nowIso,
+      };
+      updatedCreditDebtRecords = [creditRecord, ...updatedCreditDebtRecords];
+    }
+    stateRef.current.creditDebtRecords = updatedCreditDebtRecords;
+    setCreditDebtRecords(updatedCreditDebtRecords);
+    localStorage.setItem(STORAGE_KEYS.CREDIT_DEBT_RECORDS, JSON.stringify(updatedCreditDebtRecords));
+
+    // 4. Adjust cash register if cash difference occurred
+    const oldCashIn =
+      oldSale.paymentMethod === 'ESPECES' || (oldSale.paymentMethod === 'CREDIT' && oldSale.amountReceived > 0)
+        ? Math.min(oldSale.amountReceived, oldSale.totalAmount)
+        : 0;
+    const newCashIn =
+      updates.paymentMethod === 'ESPECES' || (updates.paymentMethod === 'CREDIT' && updates.amountReceived > 0)
+        ? Math.min(updates.amountReceived, totalAmount)
+        : 0;
+    const cashDelta = newCashIn - oldCashIn;
+
+    if (cashDelta !== 0 && cashRegister && cashRegister.isOpen) {
+      addCashTransaction(
+        cashDelta > 0 ? 'VENTE' : 'REMBOURSEMENT_CLIENT',
+        cashDelta,
+        `Correction facture ${oldSale.invoiceNumber} (${cashDelta > 0 ? '+' : ''}${cashDelta})`,
+        'ESPECES'
+      );
+    }
+
+    logActivity(
+      'Correction de facture',
+      'VENTE',
+      oldSale.invoiceNumber,
+      `Ancien total: ${oldSale.totalAmount} -> Nouveau total: ${totalAmount}. Motif: ${correctionReason || "Erreur d'ajout"}`
+    );
+
+    hasLocalMutations.current = true;
+    syncToCloudNow(false, {
+      sales: updatedSales,
+      products: updatedProducts,
+      stockMovements: updatedStockMovements,
+      customers: updatedCustomers,
+      creditDebtRecords: updatedCreditDebtRecords,
+    });
+
+    return { success: true, sale: updatedSale };
+  };
+
   // --- QUOTES (DEVIS & FACTURES PROFORMA) ---
   const addQuote = (quoteData: Omit<Quote, 'id' | 'quoteNumber' | 'createdAt' | 'userId' | 'userName'>): Quote => {
-    const count = (quotes || []).length;
-    const quoteNumber = generateQuoteNumber(count);
+    const currentQuotes = stateRef.current.quotes || quotes || [];
+    const quoteNumber = generateQuoteNumber(currentQuotes.length, currentQuotes.map(q => q.quoteNumber));
 
     const newQuote: Quote = {
       ...quoteData,
@@ -2092,7 +2493,9 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       status: quoteData.status || 'ENVOYE',
     };
 
-    setQuotes(prev => [newQuote, ...(prev || [])]);
+    const nextQuotes = [newQuote, ...currentQuotes];
+    stateRef.current.quotes = nextQuotes;
+    setQuotes(nextQuotes);
     logActivity('Création de Devis', 'VENTE', newQuote.quoteNumber, `Client: ${newQuote.customerName}, Montant: ${newQuote.totalAmount}`);
     return newQuote;
   };
@@ -2501,12 +2904,251 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     };
   };
 
+  const updateCreditPayment = (
+    recordId: string,
+    paymentId: string,
+    updates: {
+      amount: number;
+      paymentMethod: PaymentMethod;
+      notes?: string;
+      date?: string;
+    },
+    correctionReason?: string
+  ): { success: boolean; message?: string; updatedRecord?: CreditDebtRecord; updatedPayment?: CreditPayment } => {
+    const targetRecord = (creditDebtRecords || []).find(r => r.id === recordId);
+    if (!targetRecord) {
+      return { success: false, message: 'Dossier de crédit ou dette introuvable.' };
+    }
+
+    const oldPayment = (targetRecord.payments || []).find(p => p.id === paymentId);
+    if (!oldPayment) {
+      return { success: false, message: 'Reçu de versement introuvable.' };
+    }
+
+    if (!updates.amount || updates.amount <= 0) {
+      return { success: false, message: 'Le montant du reçu doit être supérieur à zéro.' };
+    }
+
+    const otherPaymentsTotal = (targetRecord.payments || [])
+      .filter(p => p.id !== paymentId)
+      .reduce((sum, p) => sum + (p.amount || 0), 0);
+    const maxAllowed = Math.max(0, Math.round((targetRecord.initialAmount - otherPaymentsTotal) * 100) / 100);
+
+    if (updates.amount > maxAllowed + 0.01) {
+      return {
+        success: false,
+        message: `Le montant corrigé (${updates.amount}) dépasse le plafond restant du dossier (${maxAllowed}).`,
+      };
+    }
+
+    const newAmount = Math.min(updates.amount, maxAllowed);
+    const updatedPayment: CreditPayment = {
+      ...oldPayment,
+      amount: newAmount,
+      paymentMethod: updates.paymentMethod,
+      notes: updates.notes !== undefined ? updates.notes : oldPayment.notes,
+      date: updates.date || oldPayment.date,
+    };
+
+    const updatedPayments = (targetRecord.payments || []).map(p => (p.id === paymentId ? updatedPayment : p));
+    const newPaidAmount = Math.round(updatedPayments.reduce((sum, p) => sum + (p.amount || 0), 0) * 100) / 100;
+    const newRemainingAmount = Math.max(0, Math.round((targetRecord.initialAmount - newPaidAmount) * 100) / 100);
+    const newStatus: 'SOLDE' | 'EN_COURS' = newRemainingAmount <= 0.001 ? 'SOLDE' : 'EN_COURS';
+
+    const updatedRecord: CreditDebtRecord = {
+      ...targetRecord,
+      paidAmount: newPaidAmount,
+      remainingAmount: newRemainingAmount,
+      status: newStatus,
+      payments: updatedPayments,
+    };
+
+    const updatedCreditDebtRecords = (creditDebtRecords || []).map(r => (r.id === recordId ? updatedRecord : r));
+    setCreditDebtRecords(updatedCreditDebtRecords);
+    localStorage.setItem(STORAGE_KEYS.CREDIT_DEBT_RECORDS, JSON.stringify(updatedCreditDebtRecords));
+
+    const amountDelta = newAmount - oldPayment.amount;
+    let updatedCustomers = customers;
+    let updatedSuppliers = suppliers;
+    const isClient = targetRecord.type === 'CLIENT_CREDIT';
+
+    if (isClient) {
+      const cust = (customers || []).find(
+        c =>
+          (targetRecord.partyId && c.id === targetRecord.partyId) ||
+          (c.name && targetRecord.partyName && c.name.trim().toLowerCase() === targetRecord.partyName.trim().toLowerCase())
+      );
+      if (cust && amountDelta !== 0) {
+        const newCustBalance = Math.max(0, Math.round(((cust.creditBalance || 0) - amountDelta) * 100) / 100);
+        updatedCustomers = (customers || []).map(c => (c.id === cust.id ? { ...c, creditBalance: newCustBalance } : c));
+        setCustomers(updatedCustomers);
+        localStorage.setItem(STORAGE_KEYS.CUSTOMERS, JSON.stringify(updatedCustomers));
+      }
+
+      const oldCashEffect = oldPayment.paymentMethod === 'ESPECES' ? oldPayment.amount : 0;
+      const newCashEffect = updates.paymentMethod === 'ESPECES' ? newAmount : 0;
+      const cashDelta = newCashEffect - oldCashEffect;
+      if (cashDelta !== 0 && cashRegister && cashRegister.isOpen) {
+        addCashTransaction(
+          cashDelta > 0 ? 'PAIEMENT_DETTE_CLIENT' : 'SORTIE',
+          cashDelta,
+          `Correction reçu ${oldPayment.receiptNumber || ''} (${targetRecord.partyName})${correctionReason ? ` - ${correctionReason}` : ''}`,
+          'ESPECES'
+        );
+      }
+    } else {
+      const sup = (suppliers || []).find(
+        s =>
+          (targetRecord.partyId && s.id === targetRecord.partyId) ||
+          (s.companyName && targetRecord.partyName && s.companyName.trim().toLowerCase() === targetRecord.partyName.trim().toLowerCase())
+      );
+      if (sup && amountDelta !== 0) {
+        const newSupBalance = Math.max(0, Math.round(((sup.debtBalance || 0) - amountDelta) * 100) / 100);
+        updatedSuppliers = (suppliers || []).map(s => (s.id === sup.id ? { ...s, debtBalance: newSupBalance } : s));
+        setSuppliers(updatedSuppliers);
+        localStorage.setItem(STORAGE_KEYS.SUPPLIERS, JSON.stringify(updatedSuppliers));
+      }
+
+      const oldCashEffect = oldPayment.paymentMethod === 'ESPECES' ? -oldPayment.amount : 0;
+      const newCashEffect = updates.paymentMethod === 'ESPECES' ? -newAmount : 0;
+      const cashDelta = newCashEffect - oldCashEffect;
+      if (cashDelta !== 0 && cashRegister && cashRegister.isOpen) {
+        addCashTransaction(
+          cashDelta > 0 ? 'ENTREE' : 'PAIEMENT_DETTE_FOURNISSEUR',
+          cashDelta,
+          `Correction reçu ${oldPayment.receiptNumber || ''} (${targetRecord.partyName})${correctionReason ? ` - ${correctionReason}` : ''}`,
+          'ESPECES'
+        );
+      }
+    }
+
+    logActivity(
+      'Correction reçu validé',
+      isClient ? 'CLIENT' : 'FOURNISSEUR',
+      targetRecord.partyName,
+      `Reçu ${oldPayment.receiptNumber || oldPayment.id} corrigé: ${oldPayment.amount} -> ${newAmount} (${updates.paymentMethod})${correctionReason ? `. Motif: ${correctionReason}` : ''}`
+    );
+
+    hasLocalMutations.current = true;
+    syncToCloudNow(false, {
+      creditDebtRecords: updatedCreditDebtRecords,
+      customers: updatedCustomers,
+      suppliers: updatedSuppliers,
+    });
+
+    return {
+      success: true,
+      message: `Reçu ${oldPayment.receiptNumber || ''} corrigé avec succès ! Nouveau reste dû : ${newRemainingAmount}`,
+      updatedRecord,
+      updatedPayment,
+    };
+  };
+
   const updateCreditDebtRecord = (id: string, updates: Partial<CreditDebtRecord>) => {
     const newRecords = (creditDebtRecords || []).map(r => (r.id === id ? { ...r, ...updates } : r));
     setCreditDebtRecords(newRecords);
     localStorage.setItem(STORAGE_KEYS.CREDIT_DEBT_RECORDS, JSON.stringify(newRecords));
     hasLocalMutations.current = true;
     syncToCloudNow(false, { creditDebtRecords: newRecords });
+  };
+
+  const correctCreditDebtRecord = (
+    id: string,
+    updates: {
+      partyName: string;
+      partyPhone?: string;
+      title: string;
+      initialAmount: number;
+      dueDate?: string;
+      notes?: string;
+    },
+    correctionReason?: string
+  ): { success: boolean; message?: string; updatedRecord?: CreditDebtRecord } => {
+    const oldRecord = (creditDebtRecords || []).find(r => r.id === id);
+    if (!oldRecord) {
+      return { success: false, message: 'Dossier introuvable.' };
+    }
+    if (!updates.initialAmount || updates.initialAmount <= 0) {
+      return { success: false, message: 'Le montant initial doit être supérieur à zéro.' };
+    }
+    if (updates.initialAmount < (oldRecord.paidAmount || 0) - 0.01) {
+      return {
+        success: false,
+        message: `Le montant total (${updates.initialAmount}) ne peut pas être inférieur au total déjà versé (${oldRecord.paidAmount}).`,
+      };
+    }
+
+    const newRemaining = Math.max(0, Math.round((updates.initialAmount - (oldRecord.paidAmount || 0)) * 100) / 100);
+    const newStatus: 'EN_COURS' | 'SOLDE' = newRemaining <= 0.001 ? 'SOLDE' : 'EN_COURS';
+
+    const updatedRecord: CreditDebtRecord = {
+      ...oldRecord,
+      partyName: updates.partyName.trim() || oldRecord.partyName,
+      partyPhone: updates.partyPhone !== undefined ? updates.partyPhone.trim() : oldRecord.partyPhone,
+      title: updates.title.trim() || oldRecord.title,
+      initialAmount: updates.initialAmount,
+      remainingAmount: newRemaining,
+      status: newStatus,
+      dueDate: updates.dueDate !== undefined ? updates.dueDate : oldRecord.dueDate,
+      notes: updates.notes !== undefined ? updates.notes : oldRecord.notes,
+    };
+
+    const updatedCreditDebtRecords = (creditDebtRecords || []).map(r => (r.id === id ? updatedRecord : r));
+    setCreditDebtRecords(updatedCreditDebtRecords);
+    localStorage.setItem(STORAGE_KEYS.CREDIT_DEBT_RECORDS, JSON.stringify(updatedCreditDebtRecords));
+
+    const remainingDelta = newRemaining - (oldRecord.remainingAmount || 0);
+    let updatedCustomers = customers;
+    let updatedSuppliers = suppliers;
+    const isClient = oldRecord.type === 'CLIENT_CREDIT';
+
+    if (remainingDelta !== 0) {
+      if (isClient) {
+        const cust = (customers || []).find(
+          c =>
+            (oldRecord.partyId && c.id === oldRecord.partyId) ||
+            (c.name && oldRecord.partyName && c.name.trim().toLowerCase() === oldRecord.partyName.trim().toLowerCase())
+        );
+        if (cust) {
+          const newCustBalance = Math.max(0, Math.round(((cust.creditBalance || 0) + remainingDelta) * 100) / 100);
+          updatedCustomers = (customers || []).map(c => (c.id === cust.id ? { ...c, creditBalance: newCustBalance } : c));
+          setCustomers(updatedCustomers);
+          localStorage.setItem(STORAGE_KEYS.CUSTOMERS, JSON.stringify(updatedCustomers));
+        }
+      } else {
+        const sup = (suppliers || []).find(
+          s =>
+            (oldRecord.partyId && s.id === oldRecord.partyId) ||
+            (s.companyName && oldRecord.partyName && s.companyName.trim().toLowerCase() === oldRecord.partyName.trim().toLowerCase())
+        );
+        if (sup) {
+          const newSupBalance = Math.max(0, Math.round(((sup.debtBalance || 0) + remainingDelta) * 100) / 100);
+          updatedSuppliers = (suppliers || []).map(s => (s.id === sup.id ? { ...s, debtBalance: newSupBalance } : s));
+          setSuppliers(updatedSuppliers);
+          localStorage.setItem(STORAGE_KEYS.SUPPLIERS, JSON.stringify(updatedSuppliers));
+        }
+      }
+    }
+
+    logActivity(
+      'Correction dossier crédit/dette',
+      isClient ? 'CLIENT' : 'FOURNISSEUR',
+      updatedRecord.partyName,
+      `Dossier "${updatedRecord.title}" corrigé: ${oldRecord.initialAmount} -> ${updates.initialAmount}${correctionReason ? ` (${correctionReason})` : ''}`
+    );
+
+    hasLocalMutations.current = true;
+    syncToCloudNow(false, {
+      creditDebtRecords: updatedCreditDebtRecords,
+      customers: updatedCustomers,
+      suppliers: updatedSuppliers,
+    });
+
+    return {
+      success: true,
+      message: 'Dossier corrigé avec succès !',
+      updatedRecord,
+    };
   };
 
   const deleteCreditDebtRecord = (id: string): boolean => {
@@ -2563,10 +3205,11 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     const exp: Expense = {
       ...eData,
       id: generateId('exp'),
+      date: eData.date || new Date().toISOString(),
       userId: currentUser.id,
       userName: currentUser.name,
     };
-    setExpenses(prev => [exp, ...prev]);
+    setExpenses(prev => [exp, ...(prev || [])]);
 
     // If paid cash and register open, register cash out
     if (exp.paymentMethod === 'ESPECES' && cashRegister && cashRegister.isOpen) {
@@ -2908,7 +3551,7 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   // High-Level Metrics Computation
   const metrics = useMemo(() => {
     const now = new Date();
-    const todayStr = now.toISOString().split('T')[0];
+    const todayStr = getLocalDateKey(now);
     const currentMonth = now.getMonth();
     const currentYear = now.getFullYear();
 
@@ -2919,7 +3562,7 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     // Sales metrics
     const completedSales = sales.filter(s => s.status === 'COMPLETEE');
     
-    const todaySalesList = completedSales.filter(s => s.date.startsWith(todayStr));
+    const todaySalesList = completedSales.filter(s => getLocalDateKey(s.date) === todayStr);
     const todaySales = todaySalesList.reduce((sum, s) => sum + s.totalAmount, 0);
     const todayMargin = todaySalesList.reduce((sum, s) => sum + s.totalMargin, 0);
 
@@ -2968,6 +3611,13 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     const totalCustomerDebt = customers.reduce((sum, c) => sum + c.creditBalance, 0);
     const totalSupplierDebt = suppliers.reduce((sum, s) => sum + s.debtBalance, 0);
 
+    // Inventory Discrepancy metrics (écarts constatés sur sessions d'inventaire en cours après saisie physique)
+    const activeInventories = (inventories || []).filter(inv => inv.status === 'EN_COURS');
+    const inventoryDiscrepancyCount = activeInventories.reduce((sum, inv) => {
+      const ecarts = (inv.items || []).filter(item => item.counted && item.difference !== 0).length;
+      return sum + ecarts;
+    }, 0);
+
     // Shop Health algorithm
     const healthReasons: string[] = [];
     let health: 'GOOD' | 'WARNING' | 'CRITICAL' = 'GOOD';
@@ -2979,6 +3629,9 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     if (lowStockCount >= 3) {
       healthReasons.push(`${lowStockCount} produits sous le stock minimum`);
       if ((health as string) !== 'CRITICAL') health = 'WARNING';
+    }
+    if (inventoryDiscrepancyCount > 0) {
+      healthReasons.push(`${inventoryDiscrepancyCount} écart(s) de stock en cours de vérification`);
     }
     if (cashRegister && cashRegister.discrepancy && Math.abs(cashRegister.discrepancy) > 1000) {
       healthReasons.push(`Écart de caisse de ${cashRegister.discrepancy} constaté`);
@@ -3008,13 +3661,14 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       totalStockValue,
       lowStockCount,
       outOfStockCount,
+      inventoryDiscrepancyCount,
       currentCashBalance,
       totalCustomerDebt,
       totalSupplierDebt,
       shopHealth: health,
       shopHealthReasons: healthReasons,
     };
-  }, [sales, products, expenses, purchases, cashRegister, cashTransactions, customers, suppliers, settings.currency]);
+  }, [sales, products, expenses, purchases, cashRegister, cashTransactions, customers, suppliers, inventories, settings.currency]);
 
   // Reset & Backup Tools
   const resetAllDataToZero = async () => {
@@ -3169,10 +3823,14 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     try {
       const parsed = JSON.parse(jsonData);
       if (parsed.products && parsed.settings) {
-        if (parsed.settings) setSettings(parsed.settings);
+        const cleanSettings = cleanSettingStrings(parsed.settings);
+        setSettings(cleanSettings);
         if (parsed.users) setUsers(parsed.users);
         if (parsed.categories) setCategories(parsed.categories);
-        if (parsed.products) setProducts(parsed.products);
+        if (parsed.products) {
+          setProducts(parsed.products);
+          stateRef.current.products = parsed.products;
+        }
         if (parsed.suppliers) setSuppliers(parsed.suppliers);
         if (parsed.customers) setCustomers(parsed.customers);
         if (parsed.stockMovements) setStockMovements(parsed.stockMovements);
@@ -3181,10 +3839,33 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         if (parsed.creditDebtRecords) setCreditDebtRecords(parsed.creditDebtRecords);
         if (parsed.purchases) setPurchases(parsed.purchases);
         if (parsed.expenses) setExpenses(parsed.expenses);
-        if (parsed.cashRegister) setCashRegister(parsed.cashRegister);
+        if (parsed.cashRegister !== undefined) setCashRegister(parsed.cashRegister);
         if (parsed.cashTransactions) setCashTransactions(parsed.cashTransactions);
         if (parsed.inventories) setInventories(parsed.inventories);
         if (parsed.activityLogs) setActivityLogs(parsed.activityLogs);
+
+        stateRef.current = {
+          ...stateRef.current,
+          settings: cleanSettings,
+          users: parsed.users || stateRef.current.users,
+          categories: parsed.categories || stateRef.current.categories,
+          products: parsed.products || stateRef.current.products,
+          suppliers: parsed.suppliers || stateRef.current.suppliers,
+          customers: parsed.customers || stateRef.current.customers,
+          stockMovements: parsed.stockMovements || stateRef.current.stockMovements,
+          sales: parsed.sales || stateRef.current.sales,
+          quotes: parsed.quotes || stateRef.current.quotes,
+          creditDebtRecords: parsed.creditDebtRecords || stateRef.current.creditDebtRecords,
+          purchases: parsed.purchases || stateRef.current.purchases,
+          expenses: parsed.expenses || stateRef.current.expenses,
+          cashRegister: parsed.cashRegister !== undefined ? parsed.cashRegister : stateRef.current.cashRegister,
+          cashTransactions: parsed.cashTransactions || stateRef.current.cashTransactions,
+          inventories: parsed.inventories || stateRef.current.inventories,
+          activityLogs: parsed.activityLogs || stateRef.current.activityLogs,
+        };
+
+        hasLocalMutations.current = true;
+        syncToCloudNow(true, stateRef.current);
         logActivity('Restauration sauvegarde', 'SYSTEME', 'Base de données', 'Import de fichier JSON réussi');
         return true;
       }
@@ -3245,6 +3926,7 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         sales: sales || [],
         createSale,
         cancelSale,
+        updateSale,
         quotes: quotes || [],
         addQuote,
         updateQuote,
@@ -3253,8 +3935,10 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         creditDebtRecords: creditDebtRecords || [],
         addCreditDebtRecord,
         recordCreditPayment,
+        updateCreditPayment,
         cancelCreditPayment,
         updateCreditDebtRecord,
+        correctCreditDebtRecord,
         deleteCreditDebtRecord,
         expenses: expenses || [],
         addExpense,

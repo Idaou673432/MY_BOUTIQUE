@@ -20,12 +20,15 @@ import {
   ChevronRight,
   Check,
   Calendar,
-  AlertCircle
+  AlertCircle,
+  Edit3
 } from 'lucide-react';
 import { useStore } from '../../context/StoreContext';
-import { Quote, QuoteItem, Customer, Product } from '../../types';
+import { Quote, QuoteItem, Customer, Product, PaymentMethod } from '../../types';
 import { STORE_LOGO_BASE64 } from '../../assets/logoBase64';
 import { formatMoney, formatDate, formatDateTime } from '../../utils/formatters';
+import { executeDirectPrint } from '../../utils/printService';
+import { ConfirmModal } from '../common/ConfirmModal';
 
 export const QuotesView: React.FC = () => {
   const {
@@ -60,9 +63,16 @@ export const QuotesView: React.FC = () => {
   const [itemPrice, setItemPrice] = useState('');
   const [itemQuantity, setItemQuantity] = useState('1');
 
-  // View / Print Modal
+  // View / Print / Confirm / Convert Modals
   const [selectedQuoteForPrint, setSelectedQuoteForPrint] = useState<Quote | null>(null);
   const [showPrintModal, setShowPrintModal] = useState(false);
+  const [quoteError, setQuoteError] = useState<string | null>(null);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [quoteToDelete, setQuoteToDelete] = useState<Quote | null>(null);
+  const [quoteToConvert, setQuoteToConvert] = useState<Quote | null>(null);
+  const [convertPaymentMethod, setConvertPaymentMethod] = useState<PaymentMethod>('ESPECES');
+  const [convertAmountReceived, setConvertAmountReceived] = useState<string>('0');
+  const [convertError, setConvertError] = useState<string | null>(null);
 
   // Filtered Quotes
   const filteredQuotes = useMemo(() => {
@@ -82,6 +92,7 @@ export const QuotesView: React.FC = () => {
   // Open Create Quote Modal
   const handleOpenCreateModal = () => {
     setEditingQuote(null);
+    setQuoteError(null);
     setQuoteCustomerName('');
     setQuoteCustomerPhone('');
     setQuoteCustomerId('');
@@ -93,17 +104,32 @@ export const QuotesView: React.FC = () => {
     setShowQuoteModal(true);
   };
 
+  // Open Edit Quote Modal
+  const handleOpenEditModal = (quote: Quote) => {
+    setEditingQuote(quote);
+    setQuoteError(null);
+    setQuoteCustomerId(quote.customerId || '');
+    setQuoteCustomerName(quote.customerName || '');
+    setQuoteCustomerPhone(quote.customerPhone || '');
+    setQuoteValidUntil(quote.validUntil ? quote.validUntil.slice(0, 10) : '');
+    setQuoteNotes(quote.notes || '');
+    setQuoteTerms(quote.terms || 'Offre valable 30 jours. Prix TTC.');
+    setQuoteItems((quote.items || []).map(it => ({ ...it })));
+    setShowQuoteModal(true);
+  };
+
   // Add Item to current quote
   const handleAddItemToQuote = () => {
-    const qty = Math.max(1, parseFloat(itemQuantity) || 1);
+    setQuoteError(null);
+    const qty = Math.max(0.01, parseFloat(itemQuantity) || 1);
     const price = parseFloat(itemPrice) || 0;
 
     if (price <= 0) {
-      alert('Le prix unitaire doit être supérieur à 0.');
+      setQuoteError('Le prix unitaire doit être supérieur à 0.');
       return;
     }
 
-    let pId = selectedProductId;
+    const pId = selectedProductId;
     let pName = customItemName.trim();
     let pCode = 'ART';
     let pUnit = 'unité';
@@ -118,11 +144,11 @@ export const QuotesView: React.FC = () => {
     }
 
     if (!pName) {
-      alert('Veuillez sélectionner un article ou saisir une désignation.');
+      setQuoteError('Veuillez sélectionner un article ou saisir une désignation.');
       return;
     }
 
-    const total = qty * price;
+    const total = Math.round(qty * price);
     const newItem: QuoteItem = {
       productId: pId || `custom_${Date.now()}`,
       productName: pName,
@@ -149,8 +175,9 @@ export const QuotesView: React.FC = () => {
   // Save Quote
   const handleSaveQuote = (e: React.FormEvent) => {
     e.preventDefault();
+    setQuoteError(null);
     if (quoteItems.length === 0) {
-      alert('Veuillez ajouter au moins un article au devis.');
+      setQuoteError('Veuillez ajouter au moins un article au devis.');
       return;
     }
 
@@ -166,7 +193,7 @@ export const QuotesView: React.FC = () => {
     }
 
     if (!cName) {
-      alert('Veuillez renseigner le nom du client.');
+      setQuoteError('Veuillez renseigner le nom du client.');
       return;
     }
 
@@ -187,15 +214,16 @@ export const QuotesView: React.FC = () => {
       });
     } else {
       addQuote({
+        date: new Date().toISOString(),
         customerId: quoteCustomerId || undefined,
         customerName: cName,
         customerPhone: cPhone,
         items: quoteItems,
         subtotal,
-        discountAmount: 0,
+        discountTotal: 0,
         taxAmount: 0,
         totalAmount,
-        validUntil: quoteValidUntil || undefined,
+        validUntil: quoteValidUntil || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
         notes: quoteNotes || undefined,
         terms: quoteTerms || undefined,
         status: 'ENVOYE',
@@ -203,17 +231,31 @@ export const QuotesView: React.FC = () => {
     }
 
     setShowQuoteModal(false);
+    setToastMessage(editingQuote ? `✅ Devis ${editingQuote.quoteNumber} mis à jour.` : '✅ Nouveau devis enregistré.');
+    setTimeout(() => setToastMessage(null), 4500);
   };
 
-  // Convert Quote into Sale
-  const handleConvertQuote = (quote: Quote) => {
-    if (confirm(`Convertir immédiatement le devis ${quote.quoteNumber} en vente effective avec encaissement et déstockage ?`)) {
-      const res = convertQuoteToSale(quote.id, 'ESPECES');
-      if (res.success) {
-        alert('Devis converti avec succès en vente et déstocké !');
-      } else {
-        alert(res.message || 'Erreur lors de la conversion.');
-      }
+  // Open Conversion Modal
+  const handleOpenConvertModal = (quote: Quote) => {
+    setQuoteToConvert(quote);
+    setConvertPaymentMethod('ESPECES');
+    setConvertAmountReceived(String(quote.totalAmount));
+    setConvertError(null);
+  };
+
+  // Execute Quote -> Sale conversion
+  const handleConfirmConvertQuote = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!quoteToConvert) return;
+    setConvertError(null);
+    const amountNum = convertPaymentMethod === 'CREDIT' ? 0 : Math.max(0, parseFloat(convertAmountReceived) || 0);
+    const res = convertQuoteToSale(quoteToConvert.id, convertPaymentMethod, amountNum);
+    if (res.success && res.sale) {
+      setToastMessage(`✅ Devis ${quoteToConvert.quoteNumber} converti en facture ${res.sale.invoiceNumber} et déstocké !`);
+      setTimeout(() => setToastMessage(null), 5000);
+      setQuoteToConvert(null);
+    } else {
+      setConvertError(res.message || 'Erreur lors de la conversion du devis.');
     }
   };
 
@@ -285,12 +327,14 @@ export const QuotesView: React.FC = () => {
           <div style="display: flex; align-items: center; gap: 14px;">
             <img class="quote-logo" src="${settings.logoUrl || STORE_LOGO_BASE64}" alt="Logo" />
             <div>
-              <div class="shop-brand-title">TANE FAH</div>
-              <div class="shop-brand-subtitle">C O L L E C T I O N</div>
+              ${(!settings.storeName || settings.storeName.toUpperCase().includes('TANE FAH'))
+                ? `<div class="shop-brand-title">TANE FAH</div><div class="shop-brand-subtitle">C O L L E C T I O N</div>`
+                : `<div class="shop-brand-title">${settings.storeName || settings.shopName || 'MA BOUTIQUE'}</div>`
+              }
               ${settings.storeTagline ? `<div class="shop-brand-tagline">— ${settings.storeTagline} —</div>` : ''}
-              <div style="font-size: 11px; color: #475569; margin-top: 2px;">${settings.address || ''}</div>
-              <div style="font-size: 11px; color: #475569;">Tél : ${settings.phone || ''}</div>
-              ${settings.email ? `<div style="font-size: 11px; color: #475569;">Email : ${settings.email}</div>` : ''}
+              <div style="font-size: 11px; color: #475569; margin-top: 2px;">${settings.address || settings.shopAddress || ''}</div>
+              <div style="font-size: 11px; color: #475569;">Tél : ${settings.phone || settings.shopPhone || ''}</div>
+              ${(settings.email || settings.shopEmail) ? `<div style="font-size: 11px; color: #475569;">Email : ${settings.email || settings.shopEmail}</div>` : ''}
             </div>
           </div>
           <div>
@@ -360,21 +404,13 @@ export const QuotesView: React.FC = () => {
       </html>
     `;
 
-    const printWin = window.open('', '_blank', 'width=850,height=900');
-    if (printWin) {
-      printWin.document.write(html);
-      printWin.document.close();
-      printWin.focus();
-      setTimeout(() => {
-        printWin.print();
-      }, 300);
-    }
+    executeDirectPrint(html);
   };
 
   // WhatsApp Share
   const handleShareWhatsApp = (quote: Quote) => {
     let text = `*DEVIS PROFORMA N° ${quote.quoteNumber}*\n`;
-    text += `*Boutique :* ${settings.shopName}\n`;
+    text += `*Boutique :* ${settings.storeName || settings.shopName || 'Ma Boutique'}\n`;
     text += `*Client :* ${quote.customerName}\n`;
     text += `*Date :* ${formatDate(quote.createdAt)}\n\n`;
     text += `*ARTICLES PROPOSÉS :*\n`;
@@ -384,17 +420,35 @@ export const QuotesView: React.FC = () => {
     text += `\n*TOTAL NET : ${formatMoney(quote.totalAmount, settings.currency)}*\n`;
     if (quote.validUntil) text += `Valide jusqu'au: ${formatDate(quote.validUntil)}\n`;
     if (quote.terms) text += `Conditions: ${quote.terms}\n`;
-    text += `\nMerci de nous contacter au ${settings.phone || ''} pour confirmation.`;
+    text += `\nMerci de nous contacter au ${settings.phone || settings.shopPhone || ''} pour confirmation.`;
 
     const phone = quote.customerPhone ? quote.customerPhone.replace(/[^0-9]/g, '') : '';
     const url = phone
       ? `https://wa.me/${phone}?text=${encodeURIComponent(text)}`
       : `https://wa.me/?text=${encodeURIComponent(text)}`;
-    window.open(url, '_blank');
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.target = '_blank';
+    anchor.rel = 'noopener noreferrer';
+    document.body.appendChild(anchor);
+    anchor.click();
+    document.body.removeChild(anchor);
   };
 
   return (
     <div className="space-y-5">
+      {toastMessage && (
+        <div className="p-3 bg-emerald-900 text-white text-xs font-bold rounded-xl shadow-lg flex items-center justify-between animate-in fade-in">
+          <span>{toastMessage}</span>
+          <button
+            type="button"
+            onClick={() => setToastMessage(null)}
+            className="text-emerald-200 hover:text-white cursor-pointer"
+          >
+            ✕
+          </button>
+        </div>
+      )}
       {/* HEADER */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-5 rounded-2xl border border-slate-200 shadow-xs">
         <div>
@@ -514,35 +568,45 @@ export const QuotesView: React.FC = () => {
                         <div className="flex items-center justify-end gap-1.5">
                           {!isConverted && (
                             <button
-                              onClick={() => handleConvertQuote(quote)}
-                              className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-[11px] font-bold flex items-center gap-1 shadow-xs"
+                              type="button"
+                              onClick={() => handleOpenConvertModal(quote)}
+                              className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-[11px] font-bold flex items-center gap-1 shadow-xs cursor-pointer"
                               title="Transformer ce devis en vente"
                             >
                               <ShoppingBag className="w-3 h-3" />
                               Convertir
                             </button>
                           )}
+                          {!isConverted && (
+                            <button
+                              type="button"
+                              onClick={() => handleOpenEditModal(quote)}
+                              className="p-1.5 text-amber-600 hover:bg-amber-50 rounded-lg cursor-pointer"
+                              title="Modifier ce devis"
+                            >
+                              <Edit3 className="w-4 h-4" />
+                            </button>
+                          )}
                           <button
+                            type="button"
                             onClick={() => printQuoteDoc(quote)}
-                            className="p-1.5 text-slate-600 hover:text-indigo-600 hover:bg-slate-100 rounded-lg"
+                            className="p-1.5 text-slate-600 hover:text-indigo-600 hover:bg-slate-100 rounded-lg cursor-pointer"
                             title="Imprimer le devis"
                           >
                             <Printer className="w-4 h-4" />
                           </button>
                           <button
+                            type="button"
                             onClick={() => handleShareWhatsApp(quote)}
-                            className="p-1.5 text-emerald-600 hover:bg-emerald-50 rounded-lg"
+                            className="p-1.5 text-emerald-600 hover:bg-emerald-50 rounded-lg cursor-pointer"
                             title="Envoyer par WhatsApp"
                           >
                             <Share2 className="w-4 h-4" />
                           </button>
                           <button
-                            onClick={() => {
-                              if (confirm(`Supprimer le devis ${quote.quoteNumber} ?`)) {
-                                deleteQuote(quote.id);
-                              }
-                            }}
-                            className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-slate-100 rounded-lg"
+                            type="button"
+                            onClick={() => setQuoteToDelete(quote)}
+                            className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-slate-100 rounded-lg cursor-pointer"
                             title="Supprimer"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
@@ -586,6 +650,12 @@ export const QuotesView: React.FC = () => {
             </div>
 
             <div className="p-5 space-y-4 text-xs max-h-[85vh] overflow-y-auto">
+              {quoteError && (
+                <div className="p-2.5 bg-rose-50 border border-rose-200 rounded-xl text-rose-700 font-semibold flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                  <span>{quoteError}</span>
+                </div>
+              )}
               {/* Client selection */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
@@ -806,6 +876,113 @@ export const QuotesView: React.FC = () => {
           </form>
         </div>
       )}
+
+      {/* CONVERT QUOTE TO SALE MODAL */}
+      {quoteToConvert && (
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <form
+            onSubmit={handleConfirmConvertQuote}
+            className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-md overflow-hidden animate-in fade-in"
+          >
+            <div className="p-4 bg-emerald-700 text-white flex items-center justify-between">
+              <h3 className="font-bold text-sm flex items-center gap-2">
+                <ShoppingBag className="w-4 h-4" />
+                Convertir le Devis {quoteToConvert.quoteNumber}
+              </h3>
+              <button
+                type="button"
+                onClick={() => setQuoteToConvert(null)}
+                className="text-white hover:opacity-80 cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+            <div className="p-5 space-y-3 text-xs">
+              {convertError && (
+                <div className="p-2.5 bg-rose-50 border border-rose-200 rounded-lg text-rose-700 font-semibold">
+                  ⚠️ {convertError}
+                </div>
+              )}
+              <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl flex justify-between items-center">
+                <span className="text-slate-600 font-semibold">Total du devis ({quoteToConvert.customerName}) :</span>
+                <strong className="text-base font-black text-emerald-700">
+                  {formatMoney(quoteToConvert.totalAmount, settings.currency)}
+                </strong>
+              </div>
+              <div>
+                <label className="font-semibold text-slate-700 block mb-1">Mode de paiement *</label>
+                <select
+                  value={convertPaymentMethod}
+                  onChange={(e) => {
+                    const method = e.target.value as PaymentMethod;
+                    setConvertPaymentMethod(method);
+                    setConvertAmountReceived(method === 'CREDIT' ? '0' : String(quoteToConvert.totalAmount));
+                  }}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-lg font-bold bg-white"
+                >
+                  <option value="ESPECES">Espèces</option>
+                  <option value="MOBILE_MONEY">Mobile Money (Wave / OM)</option>
+                  <option value="CARTE_BANCAIRE">Carte Bancaire</option>
+                  <option value="VIREMENT">Virement Bancaire</option>
+                  <option value="CREDIT">À Crédit (Dette client)</option>
+                </select>
+              </div>
+              {convertPaymentMethod !== 'CREDIT' && (
+                <div>
+                  <label className="font-semibold text-slate-700 block mb-1">
+                    Montant encaissé ({settings.currency}) *
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="any"
+                    required
+                    value={convertAmountReceived}
+                    onChange={(e) => setConvertAmountReceived(e.target.value)}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg font-black text-sm text-emerald-700"
+                  />
+                </div>
+              )}
+            </div>
+            <div className="p-4 bg-slate-50 border-t border-slate-200 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setQuoteToConvert(null)}
+                className="px-4 py-2 text-xs text-slate-600 hover:bg-slate-200 rounded-xl cursor-pointer"
+              >
+                Annuler
+              </button>
+              <button
+                type="submit"
+                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold shadow-xs cursor-pointer"
+              >
+                Valider la Vente & Déstocker
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      <ConfirmModal
+        isOpen={Boolean(quoteToDelete)}
+        title="Supprimer ce devis ?"
+        message={
+          quoteToDelete
+            ? `Voulez-vous supprimer définitivement le devis ${quoteToDelete.quoteNumber} (${quoteToDelete.customerName}) ?`
+            : ''
+        }
+        confirmLabel="Supprimer"
+        variant="danger"
+        onConfirm={() => {
+          if (quoteToDelete) {
+            deleteQuote(quoteToDelete.id);
+            setToastMessage(`Devis ${quoteToDelete.quoteNumber} supprimé.`);
+            setTimeout(() => setToastMessage(null), 4000);
+          }
+          setQuoteToDelete(null);
+        }}
+        onCancel={() => setQuoteToDelete(null)}
+      />
     </div>
   );
 };

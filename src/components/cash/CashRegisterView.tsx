@@ -94,6 +94,28 @@ export const CashRegisterView: React.FC<CashRegisterViewProps> = ({ onNavigate }
     });
   }, [cashTransactions, typeFilter]);
 
+  // Compute running balance per cash register chronologically (oldest -> newest)
+  const txBalanceAfterMap = useMemo(() => {
+    const map = new Map<string, number>();
+    const all = [...(cashTransactions || [])].sort(
+      (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()
+    );
+    const runningByRegister: Record<string, number> = {};
+    all.forEach((tx) => {
+      const regKey = tx.cashRegisterId || 'default';
+      if (tx.type === 'OUVERTURE') {
+        runningByRegister[regKey] = Number(tx.amount) || 0;
+      } else if (tx.type === 'FERMETURE') {
+        // Closing entry does not add cash; preserve current register balance
+        runningByRegister[regKey] = runningByRegister[regKey] ?? 0;
+      } else {
+        runningByRegister[regKey] = (runningByRegister[regKey] || 0) + (Number(tx.amount) || 0);
+      }
+      map.set(tx.id, runningByRegister[regKey]);
+    });
+    return map;
+  }, [cashTransactions]);
+
   const handleOpenRegister = (e: React.FormEvent) => {
     e.preventDefault();
     const success = openCashRegister(Number(openingBalanceInput));
@@ -139,7 +161,14 @@ export const CashRegisterView: React.FC<CashRegisterViewProps> = ({ onNavigate }
       return;
     }
 
-    const signAmount = transType === 'DEPENSE' || transType === 'RETRAIT' ? -Math.abs(Number(transAmount)) : Math.abs(Number(transAmount));
+    const isOutflow =
+      transType === 'DEPENSE' ||
+      transType === 'RETRAIT' ||
+      transType === 'SORTIE' ||
+      transType === 'PAIEMENT_DETTE_FOURNISSEUR' ||
+      transType === 'REMBOURSEMENT_CLIENT' ||
+      transType === 'VERSEMENT';
+    const signAmount = isOutflow ? -Math.abs(Number(transAmount)) : Math.abs(Number(transAmount));
     addCashTransaction(transType, signAmount, transReason.trim(), 'ESPECES');
     setShowTransactionModal(false);
     setTransAmount(0);
@@ -214,10 +243,11 @@ export const CashRegisterView: React.FC<CashRegisterViewProps> = ({ onNavigate }
               <button
                 type="button"
                 onClick={() => {
-                  setTransType('ENTREE_MANUELLE');
+                  setTransType('ENTREE');
+                  setTransError(null);
                   setShowTransactionModal(true);
                 }}
-                className="flex items-center gap-1 px-3 py-2 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 rounded-xl text-xs font-bold border border-emerald-200"
+                className="flex items-center gap-1 px-3 py-2 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 rounded-xl text-xs font-bold border border-emerald-200 cursor-pointer"
               >
                 <PlusCircle className="w-3.5 h-3.5" />
                 Apport Cash
@@ -365,9 +395,13 @@ export const CashRegisterView: React.FC<CashRegisterViewProps> = ({ onNavigate }
           >
             <option value="all">Tous les types de flux</option>
             <option value="VENTE">Encaissements Ventes</option>
+            <option value="ENTREE">Apports / Entrées manuelles</option>
+            <option value="PAIEMENT_DETTE_CLIENT">Règlements Crédits Clients</option>
             <option value="DEPENSE">Dépenses boutique</option>
             <option value="RETRAIT">Retraits propriétaire</option>
-            <option value="ENTREE_MANUELLE">Apports / Entrées manuelles</option>
+            <option value="SORTIE">Autres sorties</option>
+            <option value="PAIEMENT_DETTE_FOURNISSEUR">Paiements Fournisseurs</option>
+            <option value="REMBOURSEMENT_CLIENT">Remboursements Clients</option>
             <option value="OUVERTURE">Fonds d'ouverture</option>
             <option value="FERMETURE">Clôtures de caisse (Rapports Z)</option>
           </select>
@@ -389,11 +423,10 @@ export const CashRegisterView: React.FC<CashRegisterViewProps> = ({ onNavigate }
               {filteredTransactions.length > 0 ? (
                 filteredTransactions.map((tx) => {
                   const badge = getCashTransactionTypeBadge(tx.type);
-                  const isPositive =
-                    tx.type === 'VENTE' ||
-                    tx.type === 'ENTREE_MANUELLE' ||
-                    tx.type === 'REGLEMENT_CLIENT' ||
-                    tx.type === 'OUVERTURE';
+                  const numericAmt = Number(tx.amount) || 0;
+                  const isClosing = tx.type === 'FERMETURE';
+                  const isPositive = numericAmt > 0;
+                  const balanceAfter = txBalanceAfterMap.get(tx.id) ?? currentBalance;
 
                   return (
                     <tr key={tx.id} className="hover:bg-slate-50/80 transition-colors">
@@ -409,13 +442,17 @@ export const CashRegisterView: React.FC<CashRegisterViewProps> = ({ onNavigate }
                       </td>
                       <td className="p-3.5 text-slate-800 font-medium">{tx.reason}</td>
                       <td className="p-3.5 text-right font-black">
-                        <span className={isPositive ? 'text-emerald-600' : 'text-rose-600'}>
-                          {isPositive ? '+' : '-'}
-                          {formatMoney(tx.amount, settings.currency)}
-                        </span>
+                        {isClosing ? (
+                          <span className="text-slate-500">—</span>
+                        ) : (
+                          <span className={isPositive ? 'text-emerald-600' : 'text-rose-600'}>
+                            {isPositive ? '+' : '-'}
+                            {formatMoney(Math.abs(numericAmt), settings.currency)}
+                          </span>
+                        )}
                       </td>
                       <td className="p-3.5 text-right font-mono font-bold text-slate-900">
-                        {formatMoney(tx.balanceAfter, settings.currency)}
+                        {formatMoney(balanceAfter, settings.currency)}
                       </td>
                       <td className="p-3.5 text-slate-500 text-[11px]">{tx.userName}</td>
                     </tr>
@@ -619,11 +656,13 @@ export const CashRegisterView: React.FC<CashRegisterViewProps> = ({ onNavigate }
           >
             <div
               className={`p-4 text-white flex items-center justify-between ${
-                transType === 'ENTREE_MANUELLE' ? 'bg-emerald-700' : 'bg-rose-700'
+                transType === 'ENTREE' || transType === 'PAIEMENT_DETTE_CLIENT' ? 'bg-emerald-700' : 'bg-rose-700'
               }`}
             >
               <h3 className="font-bold text-sm">
-                {transType === 'ENTREE_MANUELLE' ? 'Apport / Entrée de Cash' : 'Dépense / Sortie de Cash'}
+                {transType === 'ENTREE' || transType === 'PAIEMENT_DETTE_CLIENT'
+                  ? 'Apport / Entrée de Cash'
+                  : 'Dépense / Sortie de Cash'}
               </h3>
               <button
                 type="button"
@@ -650,8 +689,9 @@ export const CashRegisterView: React.FC<CashRegisterViewProps> = ({ onNavigate }
                 >
                   <option value="DEPENSE">Dépense courante boutique</option>
                   <option value="RETRAIT">Retrait propriétaire</option>
-                  <option value="REGLEMENT_FOURNISSEUR">Paiement direct fournisseur</option>
-                  <option value="ENTREE_MANUELLE">Apport personnel en caisse</option>
+                  <option value="SORTIE">Sortie de caisse diverse</option>
+                  <option value="PAIEMENT_DETTE_FOURNISSEUR">Paiement direct fournisseur</option>
+                  <option value="ENTREE">Apport personnel / Entrée en caisse</option>
                 </select>
               </div>
 
@@ -696,7 +736,7 @@ export const CashRegisterView: React.FC<CashRegisterViewProps> = ({ onNavigate }
               <button
                 type="submit"
                 className={`px-4 py-2 text-white rounded-xl text-xs font-bold shadow-xs ${
-                  transType === 'ENTREE_MANUELLE'
+                  transType === 'ENTREE' || transType === 'PAIEMENT_DETTE_CLIENT'
                     ? 'bg-emerald-600 hover:bg-emerald-700'
                     : 'bg-rose-600 hover:bg-rose-700'
                 }`}

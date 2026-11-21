@@ -29,7 +29,8 @@ import {
   RotateCcw,
   AlertTriangle,
   Laptop,
-  Headphones
+  Headphones,
+  Edit3
 } from 'lucide-react';
 import { Sale, Customer } from '../../types';
 import { useStore } from '../../context/StoreContext';
@@ -57,6 +58,7 @@ import {
 } from '../../utils/printService';
 import { STORE_LOGO_BASE64 } from '../../assets/logoBase64';
 import { DirectPrinterModal } from './DirectPrinterModal';
+import { EditSaleModal } from '../sales/EditSaleModal';
 
 interface InvoiceModalProps {
   sale: Sale | null;
@@ -66,12 +68,12 @@ interface InvoiceModalProps {
 }
 
 export const InvoiceModal: React.FC<InvoiceModalProps> = ({
-  sale,
+  sale: propSale,
   isOpen,
   onClose,
   initialFormat,
 }) => {
-  const { settings, customers, cancelSale } = useStore();
+  const { settings, customers, sales, cancelSale } = useStore();
   
   const getInitialFormat = (): PrintReceiptFormat => {
     if (initialFormat === 'TICKET_58') return 'TICKET_58';
@@ -88,8 +90,12 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
   const [showPrinterSettings, setShowPrinterSettings] = useState(false);
   const [showPrintMenu, setShowPrintMenu] = useState(false);
   const [showCancelModal, setShowCancelModal] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
   const [cancelReason, setCancelReason] = useState('Erreur de saisie / Demande client');
+  const [cancelError, setCancelError] = useState<string | null>(null);
   const [isCancelling, setIsCancelling] = useState(false);
+
+  const sale = propSale ? (sales || []).find((s) => s.id === propSale.id) || propSale : null;
 
   if (!isOpen || !sale) return null;
 
@@ -241,12 +247,19 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
     );
     const phone = customer?.phone ? customer.phone.replace(/[^0-9]/g, '') : '';
     const url = phone ? `https://wa.me/${phone}?text=${text}` : `https://wa.me/?text=${text}`;
-    window.open(url, '_blank');
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.target = '_blank';
+    anchor.rel = 'noopener noreferrer';
+    document.body.appendChild(anchor);
+    anchor.click();
+    document.body.removeChild(anchor);
   };
 
   const handleExecuteCancelSale = (e: React.FormEvent) => {
     e.preventDefault();
     if (!sale) return;
+    setCancelError(null);
     setIsCancelling(true);
     const res = cancelSale(sale.id, cancelReason.trim() || 'Annulation par le caissier');
     setIsCancelling(false);
@@ -257,7 +270,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
         onClose();
       }, 1200);
     } else {
-      alert(res.message || 'Impossible d’annuler la vente.');
+      setCancelError(res.message || 'Impossible d’annuler la vente.');
     }
   };
 
@@ -365,7 +378,19 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
               )}
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
+              {!isSaleCancelled && (
+                <button
+                  type="button"
+                  onClick={() => setShowEditModal(true)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-800 rounded-lg border border-amber-300 font-bold transition-colors cursor-pointer"
+                  title="Corriger les articles, quantités, prix ou le mode de paiement de ce reçu déjà validé"
+                >
+                  <Edit3 className="w-3.5 h-3.5 text-amber-600" />
+                  <span>Corriger</span>
+                </button>
+              )}
+
               <button
                 type="button"
                 onClick={handleCopySummary}
@@ -507,15 +532,25 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
                   />
                   <div className="space-y-1">
                     <div>
-                      <h1 className="text-2xl sm:text-3xl font-serif font-black tracking-[0.12em] text-slate-950 uppercase leading-none">
-                        TANE FAH
-                      </h1>
-                      <p className="text-xs font-sans font-black text-slate-800 tracking-[0.35em] uppercase leading-tight mt-0.5">
-                        C O L L E C T I O N
-                      </p>
-                      <p className="text-[10px] font-sans font-bold text-slate-600 tracking-wider uppercase leading-tight mt-1">
-                        — {settings.storeTagline || 'HAUTE COUTURE & PRÊT-À-PORTER'} —
-                      </p>
+                      {(!settings.storeName || settings.storeName.toUpperCase().includes('TANE FAH')) ? (
+                        <>
+                          <h1 className="text-2xl sm:text-3xl font-serif font-black tracking-[0.12em] text-slate-950 uppercase leading-none">
+                            TANE FAH
+                          </h1>
+                          <p className="text-xs font-sans font-black text-slate-800 tracking-[0.35em] uppercase leading-tight mt-0.5">
+                            C O L L E C T I O N
+                          </p>
+                        </>
+                      ) : (
+                        <h1 className="text-2xl sm:text-3xl font-serif font-black tracking-[0.06em] text-slate-950 uppercase leading-none">
+                          {settings.storeName || settings.shopName}
+                        </h1>
+                      )}
+                      {settings.storeTagline && (
+                        <p className="text-[10px] font-sans font-bold text-slate-600 tracking-wider uppercase leading-tight mt-1">
+                          — {settings.storeTagline} —
+                        </p>
+                      )}
                     </div>
 
                     <div className="text-[11px] text-slate-950 font-black space-y-0.5 pt-1 leading-snug">
@@ -915,7 +950,9 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
               {/* Friendly Footer Note */}
               <div className="pt-1 text-center text-[9px] text-slate-800 leading-tight">
                 <p className="font-black text-black">Aw ni ce ! Merci pour votre visite !</p>
-                <p className="text-[8px] text-slate-500 mt-0.5">Les articles vendus ne sont ni repris ni échangés.</p>
+                <p className="text-[8px] text-slate-500 mt-0.5">
+                  {sanitizeReceiptFooter(settings.receiptFooterMessage) || 'Les articles vendus ne sont ni repris ni échangés.'}
+                </p>
               </div>
             </div>
           )}
@@ -999,6 +1036,11 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
           </div>
 
           <div className="p-5 space-y-4 text-xs">
+            {cancelError && (
+              <div className="p-2.5 bg-rose-50 border border-rose-300 rounded-lg text-rose-800 font-bold">
+                ⚠️ {cancelError}
+              </div>
+            )}
             <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-rose-900 space-y-1.5">
               <p className="font-bold text-sm">Action irréversible :</p>
               <ul className="list-disc list-inside space-y-0.5 text-[11px]">
@@ -1043,6 +1085,17 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
         </form>
       </div>
     )}
+
+    {/* Edit / Correct Validated Invoice Modal */}
+    <EditSaleModal
+      sale={sale}
+      isOpen={showEditModal}
+      onClose={() => setShowEditModal(false)}
+      onSaved={() => {
+        setPrintFeedback('Facture corrigée et mise à jour avec succès !');
+        setTimeout(() => setPrintFeedback(null), 4000);
+      }}
+    />
 
     {/* Direct Printer Hardware Settings Modal */}
     <DirectPrinterModal

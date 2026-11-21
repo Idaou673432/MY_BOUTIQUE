@@ -21,13 +21,15 @@ import {
   Smartphone,
   CreditCard,
   Clock,
-  Sparkles
+  Sparkles,
+  Edit3
 } from 'lucide-react';
 import { useStore } from '../../context/StoreContext';
 import { Sale } from '../../types';
-import { formatMoney, formatDateTime, formatTimeOnly, getPaymentMethodLabel } from '../../utils/formatters';
+import { formatMoney, formatDateTime, formatTimeOnly, getPaymentMethodLabel, getLocalDateKey } from '../../utils/formatters';
 import { InvoiceModal } from '../common/InvoiceModal';
 import { DailyReportModal } from './DailyReportModal';
+import { EditSaleModal } from './EditSaleModal';
 
 interface SalesHistoryViewProps {
   onNavigate?: (tab: string) => void;
@@ -54,10 +56,13 @@ export const SalesHistoryView: React.FC<SalesHistoryViewProps> = ({ onNavigate }
   // Modals
   const [selectedSaleForReceipt, setSelectedSaleForReceipt] = useState<Sale | null>(null);
   const [showReceiptModal, setShowReceiptModal] = useState(false);
+  const [saleToEdit, setSaleToEdit] = useState<Sale | null>(null);
+  const [showEditModal, setShowEditModal] = useState(false);
   const [saleToCancel, setSaleToCancel] = useState<Sale | null>(null);
   const [cancelReason, setCancelReason] = useState('');
   const [showCancelModal, setShowCancelModal] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   // Daily report modal for printing
   const [dailyReportModalDate, setDailyReportModalDate] = useState<{
@@ -65,14 +70,6 @@ export const SalesHistoryView: React.FC<SalesHistoryViewProps> = ({ onNavigate }
     label: string;
     sales: Sale[];
   } | null>(null);
-
-  // Helper date strings (in YYYY-MM-DD local format)
-  const getLocalDateKey = (d: Date): string => {
-    const year = d.getFullYear();
-    const month = String(d.getMonth() + 1).padStart(2, '0');
-    const day = String(d.getDate()).padStart(2, '0');
-    return `${year}-${month}-${day}`;
-  };
 
   const todayKey = useMemo(() => getLocalDateKey(new Date()), []);
   const yesterdayKey = useMemo(() => {
@@ -124,7 +121,7 @@ export const SalesHistoryView: React.FC<SalesHistoryViewProps> = ({ onNavigate }
   const todaySales = useMemo(() => {
     return (sales || []).filter((s) => {
       if (!s || s.status !== 'COMPLETEE') return false;
-      const saleDateKey = s.date.slice(0, 10);
+      const saleDateKey = getLocalDateKey(s.date);
       return saleDateKey === todayKey;
     });
   }, [sales, todayKey]);
@@ -132,7 +129,7 @@ export const SalesHistoryView: React.FC<SalesHistoryViewProps> = ({ onNavigate }
   const yesterdaySales = useMemo(() => {
     return (sales || []).filter((s) => {
       if (!s || s.status !== 'COMPLETEE') return false;
-      const saleDateKey = s.date.slice(0, 10);
+      const saleDateKey = getLocalDateKey(s.date);
       return saleDateKey === yesterdayKey;
     });
   }, [sales, yesterdayKey]);
@@ -182,7 +179,7 @@ export const SalesHistoryView: React.FC<SalesHistoryViewProps> = ({ onNavigate }
       const matchesStatus = statusFilter === 'all' || s.status === statusFilter;
 
       // Date period filter
-      const saleDateKey = s.date.slice(0, 10);
+      const saleDateKey = getLocalDateKey(s.date);
       let matchesDate = true;
 
       if (datePeriod === 'custom' && customDate) {
@@ -218,7 +215,7 @@ export const SalesHistoryView: React.FC<SalesHistoryViewProps> = ({ onNavigate }
     > = {};
 
     filteredSales.forEach((sale) => {
-      const dateKey = sale.date.slice(0, 10);
+      const dateKey = getLocalDateKey(sale.date);
       if (!groups[dateKey]) {
         groups[dateKey] = {
           dateKey,
@@ -292,6 +289,21 @@ export const SalesHistoryView: React.FC<SalesHistoryViewProps> = ({ onNavigate }
 
   return (
     <div className="space-y-6 pb-12">
+      {toastMessage && (
+        <div className="p-3 bg-emerald-900 text-white text-xs font-bold rounded-xl shadow-lg flex items-center justify-between animate-in fade-in">
+          <div className="flex items-center gap-2">
+            <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+            <span>{toastMessage}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setToastMessage(null)}
+            className="text-emerald-200 hover:text-white cursor-pointer"
+          >
+            ✕
+          </button>
+        </div>
+      )}
       {/* Top Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-4 rounded-2xl border border-slate-200 shadow-xs">
         <div>
@@ -745,6 +757,19 @@ export const SalesHistoryView: React.FC<SalesHistoryViewProps> = ({ onNavigate }
                                     </button>
                                     {!isCancelled && (
                                       <button
+                                        onClick={() => {
+                                          setSaleToEdit(sale);
+                                          setShowEditModal(true);
+                                        }}
+                                        className="px-2 py-1 text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-200 rounded-lg text-[10px] font-bold flex items-center gap-1 cursor-pointer transition-colors"
+                                        title="Corriger cette facture (articles, quantités, prix, paiement)"
+                                      >
+                                        <Edit3 className="w-3.5 h-3.5" />
+                                        <span>Corriger</span>
+                                      </button>
+                                    )}
+                                    {!isCancelled && (
+                                      <button
                                         onClick={() => handleOpenCancelModal(sale)}
                                         className="p-1.5 text-slate-500 hover:text-rose-600 hover:bg-slate-100 rounded-lg cursor-pointer"
                                         title="Annuler cette vente & restocker"
@@ -857,6 +882,19 @@ export const SalesHistoryView: React.FC<SalesHistoryViewProps> = ({ onNavigate }
                             </button>
                             {!isCancelled && (
                               <button
+                                onClick={() => {
+                                  setSaleToEdit(sale);
+                                  setShowEditModal(true);
+                                }}
+                                className="px-2 py-1 text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-200 rounded-lg text-[10px] font-bold flex items-center gap-1 cursor-pointer transition-colors"
+                                title="Corriger cette facture (articles, quantités, prix, paiement)"
+                              >
+                                <Edit3 className="w-3.5 h-3.5" />
+                                <span>Corriger</span>
+                              </button>
+                            )}
+                            {!isCancelled && (
+                              <button
                                 onClick={() => handleOpenCancelModal(sale)}
                                 className="p-1.5 text-slate-500 hover:text-rose-600 hover:bg-slate-100 rounded-lg cursor-pointer"
                                 title="Annuler cette vente & restocker"
@@ -963,6 +1001,24 @@ export const SalesHistoryView: React.FC<SalesHistoryViewProps> = ({ onNavigate }
         sale={selectedSaleForReceipt}
         isOpen={showReceiptModal}
         onClose={() => setShowReceiptModal(false)}
+      />
+
+      {/* EDIT / CORRECT INVOICE MODAL */}
+      <EditSaleModal
+        sale={saleToEdit}
+        isOpen={showEditModal}
+        onClose={() => {
+          setShowEditModal(false);
+          setSaleToEdit(null);
+        }}
+        onSaved={(updatedSale, shouldPrint) => {
+          setToastMessage(`✅ Facture ${updatedSale.invoiceNumber} corrigée et stock mis à jour.`);
+          setTimeout(() => setToastMessage(null), 5000);
+          if (shouldPrint) {
+            setSelectedSaleForReceipt(updatedSale);
+            setShowReceiptModal(true);
+          }
+        }}
       />
 
       {/* PRINTABLE DAILY REPORT MODAL */}

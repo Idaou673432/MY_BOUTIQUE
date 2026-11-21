@@ -27,7 +27,8 @@ import {
   Mail,
   Receipt,
   RotateCcw,
-  History
+  History,
+  Edit3
 } from 'lucide-react';
 import { useStore } from '../../context/StoreContext';
 import { CreditDebtRecord, CreditPayment, PaymentMethod, Customer, Supplier } from '../../types';
@@ -38,6 +39,7 @@ import {
   generateCreditDebtSummaryReportThermalTicketHtml,
   printTicketIn80mm
 } from '../../utils/printService';
+import { ConfirmModal } from '../common/ConfirmModal';
 
 interface CreditDebtViewProps {
   initialType?: 'ALL' | 'CLIENT_CREDIT' | 'SUPPLIER_DEBT';
@@ -50,7 +52,9 @@ export const CreditDebtView: React.FC<CreditDebtViewProps> = ({ initialType = 'A
     suppliers,
     addCreditDebtRecord,
     recordCreditPayment,
+    updateCreditPayment,
     cancelCreditPayment,
+    correctCreditDebtRecord,
     deleteCreditDebtRecord,
     settings,
     currentUser,
@@ -89,6 +93,28 @@ export const CreditDebtView: React.FC<CreditDebtViewProps> = ({ initialType = 'A
   const [showDetailModal, setShowDetailModal] = useState(false);
   const [selectedRecordDetail, setSelectedRecordDetail] = useState<CreditDebtRecord | null>(null);
 
+  // Modal: Edit / Correct an already validated payment receipt
+  const [showEditPaymentModal, setShowEditPaymentModal] = useState(false);
+  const [editPaymentTarget, setEditPaymentTarget] = useState<{ record: CreditDebtRecord; payment: CreditPayment } | null>(null);
+  const [editPaymentAmount, setEditPaymentAmount] = useState('');
+  const [editPaymentMethod, setEditPaymentMethod] = useState<PaymentMethod>('ESPECES');
+  const [editPaymentDate, setEditPaymentDate] = useState('');
+  const [editPaymentNotes, setEditPaymentNotes] = useState('');
+  const [editPaymentReason, setEditPaymentReason] = useState('Correction montant / mode après validation');
+  const [editPaymentError, setEditPaymentError] = useState<string | null>(null);
+
+  // Modal: Edit / Correct an already validated credit/debt record
+  const [showEditRecordModal, setShowEditRecordModal] = useState(false);
+  const [editRecordTarget, setEditRecordTarget] = useState<CreditDebtRecord | null>(null);
+  const [editRecPartyName, setEditRecPartyName] = useState('');
+  const [editRecPartyPhone, setEditRecPartyPhone] = useState('');
+  const [editRecTitle, setEditRecTitle] = useState('');
+  const [editRecAmount, setEditRecAmount] = useState('');
+  const [editRecDueDate, setEditRecDueDate] = useState('');
+  const [editRecNotes, setEditRecNotes] = useState('');
+  const [editRecReason, setEditRecReason] = useState("Correction après erreur d'ajout");
+  const [editRecError, setEditRecError] = useState<string | null>(null);
+
   // Modal: Global payments journal & cancellation
   const [showPaymentsJournalModal, setShowPaymentsJournalModal] = useState(false);
   const [journalFilterType, setJournalFilterType] = useState<'ALL' | 'CLIENT_CREDIT' | 'SUPPLIER_DEBT'>('ALL');
@@ -97,6 +123,18 @@ export const CreditDebtView: React.FC<CreditDebtViewProps> = ({ initialType = 'A
   // Modal: Prompt after creating new credit/debt record
   const [newlyCreatedRecord, setNewlyCreatedRecord] = useState<CreditDebtRecord | null>(null);
   const [showCreatedSuccessModal, setShowCreatedSuccessModal] = useState(false);
+
+  // Toast & ConfirmModals (replaces native alert/confirm/prompt)
+  const [addRecordError, setAddRecordError] = useState<string | null>(null);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [cancelPaymentTarget, setCancelPaymentTarget] = useState<{ record: CreditDebtRecord; payment: CreditPayment } | null>(null);
+  const [cancelPaymentReason, setCancelPaymentReason] = useState('Encaissement enregistré par erreur');
+  const [recordToDelete, setRecordToDelete] = useState<CreditDebtRecord | null>(null);
+
+  const liveSelectedRecordDetail = useMemo(() => {
+    if (!selectedRecordDetail) return null;
+    return (creditDebtRecords || []).find(r => r.id === selectedRecordDetail.id) || selectedRecordDetail;
+  }, [selectedRecordDetail, creditDebtRecords]);
 
   // Statistics calculation
   const stats = useMemo(() => {
@@ -162,6 +200,7 @@ export const CreditDebtView: React.FC<CreditDebtViewProps> = ({ initialType = 'A
     // Open add record modal
   const handleOpenAddModal = (type: 'CLIENT_CREDIT' | 'SUPPLIER_DEBT') => {
     setNewRecordType(type);
+    setAddRecordError(null);
     setSelectedPartyId('');
     setCustomPartyName('');
     setCustomPartyPhone('');
@@ -177,15 +216,16 @@ export const CreditDebtView: React.FC<CreditDebtViewProps> = ({ initialType = 'A
   // Submit add record
   const handleSaveRecord = (e: React.FormEvent) => {
     e.preventDefault();
+    setAddRecordError(null);
     const amount = parseFloat(recordAmount);
     if (!amount || amount <= 0) {
-      alert('Veuillez saisir un montant supérieur à 0.');
+      setAddRecordError('Veuillez saisir un montant supérieur à 0.');
       return;
     }
 
     let partyName = customPartyName.trim();
     let partyPhone = customPartyPhone.trim();
-    let partyId = selectedPartyId;
+    const partyId = selectedPartyId;
 
     if (newRecordType === 'CLIENT_CREDIT') {
       if (selectedPartyId) {
@@ -206,7 +246,7 @@ export const CreditDebtView: React.FC<CreditDebtViewProps> = ({ initialType = 'A
     }
 
     if (!partyName) {
-      alert('Veuillez sélectionner ou renseigner le nom du client ou fournisseur.');
+      setAddRecordError('Veuillez sélectionner ou renseigner le nom du client ou fournisseur.');
       return;
     }
 
@@ -323,59 +363,169 @@ export const CreditDebtView: React.FC<CreditDebtViewProps> = ({ initialType = 'A
     printTicketIn80mm(html);
   };
 
-  // Cancel an accidental payment / encaissement
-  const handleCancelPayment = (record: CreditDebtRecord, payment: CreditPayment) => {
-    const isClient = record.type === 'CLIENT_CREDIT';
-    const partyType = isClient ? 'client' : 'fournisseur';
-    const actionName = isClient ? 'cet encaissement de dette client' : 'ce règlement de dette fournisseur';
-    const balanceEffect = isClient
-      ? `La dette du client "${record.partyName}" sera réactivée (+${formatMoney(payment.amount, settings.currency)}).`
-      : `La dette envers le fournisseur "${record.partyName}" sera réactivée (+${formatMoney(payment.amount, settings.currency)}).`;
+  // Open modal to correct an already validated payment receipt
+  const handleOpenEditPayment = (record: CreditDebtRecord, payment: CreditPayment) => {
+    setEditPaymentTarget({ record, payment });
+    setEditPaymentAmount(String(payment.amount));
+    setEditPaymentMethod(payment.paymentMethod);
+    // Format ISO date for datetime-local input (YYYY-MM-DDTHH:mm)
+    try {
+      const d = new Date(payment.date);
+      const localIso = new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+      setEditPaymentDate(localIso);
+    } catch {
+      setEditPaymentDate('');
+    }
+    setEditPaymentNotes(payment.notes || '');
+    setEditPaymentReason('Correction montant / mode après validation');
+    setEditPaymentError(null);
+    setShowEditPaymentModal(true);
+  };
 
-    const cashEffect = payment.paymentMethod === 'ESPECES'
-      ? isClient
-        ? `\n- La caisse sera ajustée de -${formatMoney(payment.amount, settings.currency)} (Sortie de caisse compensatoire).`
-        : `\n- La caisse sera ajustée de +${formatMoney(payment.amount, settings.currency)} (Entrée de caisse compensatoire).`
-      : '';
+  const handleSaveEditPayment = (shouldPrint: boolean) => {
+    if (!editPaymentTarget) return;
+    setEditPaymentError(null);
 
-    const confirmMsg = `ATTENTION : Souhaitez-vous annuler ${actionName} effectué par erreur ?\n\n` +
-      `• Tiers : ${record.partyName} (${isClient ? 'Client' : 'Fournisseur'})\n` +
-      `• Montant : ${formatMoney(payment.amount, settings.currency)}\n` +
-      `• N° Reçu : ${payment.receiptNumber || 'N/A'}\n` +
-      `• Mode : ${getPaymentMethodLabel(payment.paymentMethod)}\n` +
-      `• Date : ${formatDateTime(payment.date)}\n\n` +
-      `Conséquences :\n` +
-      `- ${balanceEffect}${cashEffect}\n` +
-      `- Le versement sera retiré de l'historique.`;
+    const amount = parseFloat(editPaymentAmount);
+    if (!amount || amount <= 0) {
+      setEditPaymentError('Le montant du reçu doit être supérieur à zéro.');
+      return;
+    }
 
-    if (!window.confirm(confirmMsg)) return;
-
-    const reason = window.prompt("Motif de l'annulation :", "Encaissement enregistré par erreur");
-    if (reason === null) return; // User clicked Cancel on prompt
-
-    const res = cancelCreditPayment(record.id, payment.id, reason.trim() || "Encaissement enregistré par erreur");
-    if (res.success) {
-      // If detail modal is open for this record, update its state
-      if (selectedRecordDetail && selectedRecordDetail.id === record.id) {
-        const updatedRecord = (creditDebtRecords || []).find(r => r.id === record.id);
-        if (updatedRecord) {
-          setSelectedRecordDetail({
-            ...updatedRecord,
-            payments: (updatedRecord.payments || []).filter(p => p.id !== payment.id),
-            paidAmount: Math.max(0, Math.round(((updatedRecord.paidAmount || 0) - payment.amount) * 100) / 100),
-            remainingAmount: Math.round(((updatedRecord.remainingAmount || 0) + payment.amount) * 100) / 100,
-            status: 'EN_COURS',
-          });
-        }
+    let isoDate = editPaymentTarget.payment.date;
+    if (editPaymentDate) {
+      const parsed = new Date(editPaymentDate);
+      if (!isNaN(parsed.getTime())) {
+        isoDate = parsed.toISOString();
       }
-      // If payment modal is open, clear payment message
+    }
+
+    const res = updateCreditPayment(
+      editPaymentTarget.record.id,
+      editPaymentTarget.payment.id,
+      {
+        amount,
+        paymentMethod: editPaymentMethod,
+        notes: editPaymentNotes.trim() || undefined,
+        date: isoDate,
+      },
+      editPaymentReason.trim() || 'Correction reçu validé'
+    );
+
+    if (!res.success || !res.updatedRecord || !res.updatedPayment) {
+      setEditPaymentError(res.message || 'Erreur lors de la correction du reçu.');
+      return;
+    }
+
+    // Refresh open detail / payment modals so UI updates immediately
+    if (selectedRecordDetail && selectedRecordDetail.id === res.updatedRecord.id) {
+      setSelectedRecordDetail(res.updatedRecord);
+    }
+    if (selectedRecordForPayment && selectedRecordForPayment.id === res.updatedRecord.id) {
+      setSelectedRecordForPayment(res.updatedRecord);
+      setPaymentMessage(prev =>
+        prev
+          ? {
+              ...prev,
+              text: res.message || 'Reçu corrigé avec succès !',
+              receipt: res.updatedPayment,
+              newRemaining: res.updatedRecord!.remainingAmount,
+              updatedRecord: res.updatedRecord,
+            }
+          : null
+      );
+    }
+
+    setShowEditPaymentModal(false);
+    setEditPaymentTarget(null);
+
+    if (shouldPrint) {
+      printSpecificPaymentReceipt(res.updatedRecord, res.updatedPayment);
+    }
+  };
+
+  // Open modal to correct a credit/debt dossier
+  const handleOpenEditRecord = (record: CreditDebtRecord) => {
+    setEditRecordTarget(record);
+    setEditRecPartyName(record.partyName);
+    setEditRecPartyPhone(record.partyPhone || '');
+    setEditRecTitle(record.title);
+    setEditRecAmount(String(record.initialAmount));
+    setEditRecDueDate(record.dueDate || '');
+    setEditRecNotes(record.notes || '');
+    setEditRecReason("Correction après erreur d'ajout");
+    setEditRecError(null);
+    setShowEditRecordModal(true);
+  };
+
+  const handleSaveEditRecord = (shouldPrint: boolean) => {
+    if (!editRecordTarget) return;
+    setEditRecError(null);
+    const amount = parseFloat(editRecAmount);
+    if (!amount || amount <= 0) {
+      setEditRecError('Le montant initial doit être supérieur à zéro.');
+      return;
+    }
+    if (!editRecPartyName.trim()) {
+      setEditRecError('Le nom du tiers est obligatoire.');
+      return;
+    }
+
+    const res = correctCreditDebtRecord(
+      editRecordTarget.id,
+      {
+        partyName: editRecPartyName.trim(),
+        partyPhone: editRecPartyPhone.trim() || undefined,
+        title: editRecTitle.trim() || editRecordTarget.title,
+        initialAmount: amount,
+        dueDate: editRecDueDate || undefined,
+        notes: editRecNotes.trim() || undefined,
+      },
+      editRecReason.trim() || "Correction dossier"
+    );
+
+    if (!res.success || !res.updatedRecord) {
+      setEditRecError(res.message || 'Erreur lors de la correction du dossier.');
+      return;
+    }
+
+    if (selectedRecordDetail && selectedRecordDetail.id === res.updatedRecord.id) {
+      setSelectedRecordDetail(res.updatedRecord);
+    }
+
+    setShowEditRecordModal(false);
+    setEditRecordTarget(null);
+
+    if (shouldPrint) {
+      printDebtReceipt(res.updatedRecord);
+    }
+  };
+
+  // Cancel an accidental payment / encaissement via ConfirmModal
+  const handleCancelPayment = (record: CreditDebtRecord, payment: CreditPayment) => {
+    setCancelPaymentReason('Encaissement enregistré par erreur');
+    setCancelPaymentTarget({ record, payment });
+  };
+
+  const executeCancelPayment = () => {
+    if (!cancelPaymentTarget) return;
+    const { record, payment } = cancelPaymentTarget;
+    const res = cancelCreditPayment(
+      record.id,
+      payment.id,
+      cancelPaymentReason.trim() || 'Encaissement enregistré par erreur'
+    );
+    setCancelPaymentTarget(null);
+    if (res.success) {
       if (selectedRecordForPayment && selectedRecordForPayment.id === record.id) {
         setShowPaymentModal(false);
         setPaymentMessage(null);
       }
-      alert(res.message || 'Encaissement annulé avec succès.');
+      setToastMessage(`✅ ${res.message || 'Encaissement annulé avec succès.'}`);
+      setTimeout(() => setToastMessage(null), 5000);
     } else {
-      alert(res.message || "Erreur lors de l'annulation de l'encaissement.");
+      setToastMessage(`⚠️ ${res.message || "Erreur lors de l'annulation de l'encaissement."}`);
+      setTimeout(() => setToastMessage(null), 5000);
     }
   };
 
@@ -421,6 +571,18 @@ export const CreditDebtView: React.FC<CreditDebtViewProps> = ({ initialType = 'A
 
   return (
     <div className="space-y-5">
+      {toastMessage && (
+        <div className="p-3 bg-slate-900 text-white text-xs font-bold rounded-xl shadow-lg flex items-center justify-between animate-in fade-in">
+          <span>{toastMessage}</span>
+          <button
+            type="button"
+            onClick={() => setToastMessage(null)}
+            className="text-slate-300 hover:text-white cursor-pointer"
+          >
+            ✕
+          </button>
+        </div>
+      )}
       {/* HEADER WITH SUMMARY & FAST ACTION BUTTONS */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-5 rounded-2xl border border-slate-200 shadow-xs">
         <div>
@@ -762,6 +924,13 @@ export const CreditDebtView: React.FC<CreditDebtViewProps> = ({ initialType = 'A
                             </button>
                           )}
                           <button
+                            onClick={() => handleOpenEditRecord(record)}
+                            className="p-1.5 text-amber-600 hover:text-amber-800 hover:bg-amber-50 rounded-lg cursor-pointer transition-colors"
+                            title="Corriger ce dossier (montant, nom, téléphone, motif)"
+                          >
+                            <Edit3 className="w-4 h-4" />
+                          </button>
+                          <button
                             onClick={() => printDebtReceipt(record)}
                             className="p-1.5 text-slate-600 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg cursor-pointer transition-colors"
                             title={
@@ -783,12 +952,9 @@ export const CreditDebtView: React.FC<CreditDebtViewProps> = ({ initialType = 'A
                             <Eye className="w-4 h-4" />
                           </button>
                           <button
-                            onClick={() => {
-                              if (confirm(`Supprimer définitivement le dossier "${record.title}" ?`)) {
-                                deleteCreditDebtRecord(record.id);
-                              }
-                            }}
-                            className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-slate-100 rounded-lg"
+                            type="button"
+                            onClick={() => setRecordToDelete(record)}
+                            className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-slate-100 rounded-lg cursor-pointer"
                             title="Supprimer"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
@@ -832,6 +998,12 @@ export const CreditDebtView: React.FC<CreditDebtViewProps> = ({ initialType = 'A
             </div>
 
             <div className="p-5 space-y-3.5 text-xs">
+              {addRecordError && (
+                <div className="p-2.5 bg-rose-50 border border-rose-200 rounded-xl text-rose-700 font-semibold flex items-center gap-2">
+                  <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
+                  <span>{addRecordError}</span>
+                </div>
+              )}
               {/* Type Switch */}
               <div>
                 <label className="font-semibold text-slate-700 block mb-1">Catégorie du dossier</label>
@@ -1076,6 +1248,21 @@ export const CreditDebtView: React.FC<CreditDebtViewProps> = ({ initialType = 'A
                         type="button"
                         onClick={() => {
                           const rec = paymentMessage.updatedRecord || selectedRecordForPayment;
+                          handleOpenEditPayment(rec, paymentMessage.receipt!);
+                        }}
+                        className="w-full py-2 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-300 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer transition-colors"
+                        title="Modifier le montant ou mode de ce reçu déjà validé"
+                      >
+                        <Edit3 className="w-4 h-4 text-amber-600" />
+                        Corriger ce reçu déjà validé
+                      </button>
+                    )}
+
+                    {paymentMessage.receipt && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const rec = paymentMessage.updatedRecord || selectedRecordForPayment;
                           handleCancelPayment(rec, paymentMessage.receipt!);
                         }}
                         className="w-full py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer transition-colors"
@@ -1226,13 +1413,13 @@ export const CreditDebtView: React.FC<CreditDebtViewProps> = ({ initialType = 'A
       )}
 
       {/* MODAL: DETAIL & PAYMENT HISTORY */}
-      {showDetailModal && selectedRecordDetail && (
+      {showDetailModal && liveSelectedRecordDetail && (
         <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-lg overflow-hidden animate-in fade-in">
             <div className="p-4 bg-slate-900 text-white flex items-center justify-between">
               <h3 className="font-bold text-sm flex items-center gap-2">
                 <FileText className="w-4 h-4 text-indigo-400" />
-                Fiche de Suivi : {selectedRecordDetail.partyName}
+                Fiche de Suivi : {liveSelectedRecordDetail.partyName}
               </h3>
               <button
                 type="button"
@@ -1249,23 +1436,23 @@ export const CreditDebtView: React.FC<CreditDebtViewProps> = ({ initialType = 'A
                 <div>
                   <span className="text-[10px] text-slate-500 block">Type de dossier</span>
                   <strong className="text-slate-800">
-                    {selectedRecordDetail.type === 'CLIENT_CREDIT' ? 'Crédit Client (Créance)' : 'Dette Fournisseur'}
+                    {liveSelectedRecordDetail.type === 'CLIENT_CREDIT' ? 'Crédit Client (Créance)' : 'Dette Fournisseur'}
                   </strong>
                 </div>
                 <div>
                   <span className="text-[10px] text-slate-500 block">Date d'ouverture</span>
-                  <strong className="text-slate-800">{formatDate(selectedRecordDetail.createdAt)}</strong>
+                  <strong className="text-slate-800">{formatDate(liveSelectedRecordDetail.createdAt)}</strong>
                 </div>
                 <div>
                   <span className="text-[10px] text-slate-500 block">Montant Initial</span>
                   <strong className="text-slate-800">
-                    {formatMoney(selectedRecordDetail.initialAmount, settings.currency)}
+                    {formatMoney(liveSelectedRecordDetail.initialAmount, settings.currency)}
                   </strong>
                 </div>
                 <div>
                   <span className="text-[10px] text-slate-500 block">Solde Restant Dû</span>
-                  <strong className={`text-sm ${selectedRecordDetail.remainingAmount > 0 ? 'text-rose-700' : 'text-emerald-700'}`}>
-                    {formatMoney(selectedRecordDetail.remainingAmount, settings.currency)}
+                  <strong className={`text-sm ${liveSelectedRecordDetail.remainingAmount > 0 ? 'text-rose-700' : 'text-emerald-700'}`}>
+                    {formatMoney(liveSelectedRecordDetail.remainingAmount, settings.currency)}
                   </strong>
                 </div>
               </div>
@@ -1273,12 +1460,12 @@ export const CreditDebtView: React.FC<CreditDebtViewProps> = ({ initialType = 'A
               {/* Payments History */}
               <div>
                 <h4 className="font-bold text-slate-800 mb-2 flex items-center justify-between">
-                  <span>Historique des Versements ({selectedRecordDetail.payments.length})</span>
-                  {selectedRecordDetail.remainingAmount > 0 && (
+                  <span>Historique des Versements ({liveSelectedRecordDetail.payments.length})</span>
+                  {liveSelectedRecordDetail.remainingAmount > 0 && (
                     <button
                       onClick={() => {
                         setShowDetailModal(false);
-                        handleOpenPayment(selectedRecordDetail);
+                        handleOpenPayment(liveSelectedRecordDetail);
                       }}
                       className="px-2.5 py-1 bg-indigo-600 text-white rounded-lg text-[10px] font-bold"
                     >
@@ -1287,9 +1474,9 @@ export const CreditDebtView: React.FC<CreditDebtViewProps> = ({ initialType = 'A
                   )}
                 </h4>
 
-                {selectedRecordDetail.payments.length > 0 ? (
+                {liveSelectedRecordDetail.payments.length > 0 ? (
                   <div className="divide-y divide-slate-100 border border-slate-200 rounded-xl overflow-hidden">
-                    {selectedRecordDetail.payments.map((p, idx) => (
+                    {liveSelectedRecordDetail.payments.map((p, idx) => (
                       <div key={p.id} className="p-3 hover:bg-slate-50 flex items-center justify-between gap-2">
                         <div>
                           <div className="flex items-center gap-2">
@@ -1308,7 +1495,7 @@ export const CreditDebtView: React.FC<CreditDebtViewProps> = ({ initialType = 'A
                         <div className="flex items-center gap-1.5 shrink-0">
                           <button
                             type="button"
-                            onClick={() => printPaymentReceipt(selectedRecordDetail, idx)}
+                            onClick={() => printPaymentReceipt(liveSelectedRecordDetail, idx)}
                             className="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded text-[10px] font-bold flex items-center gap-1 cursor-pointer transition-colors"
                             title="Imprimer le reçu de ce versement"
                           >
@@ -1316,7 +1503,15 @@ export const CreditDebtView: React.FC<CreditDebtViewProps> = ({ initialType = 'A
                           </button>
                           <button
                             type="button"
-                            onClick={() => handleCancelPayment(selectedRecordDetail, p)}
+                            onClick={() => handleOpenEditPayment(liveSelectedRecordDetail, p)}
+                            className="px-2 py-1 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 rounded text-[10px] font-bold flex items-center gap-1 cursor-pointer transition-colors"
+                            title="Corriger ce reçu déjà validé (montant, mode, date, note)"
+                          >
+                            <Edit3 className="w-3 h-3 text-amber-600" /> Corriger
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleCancelPayment(liveSelectedRecordDetail, p)}
                             className="px-2 py-1 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded text-[10px] font-bold flex items-center gap-1 cursor-pointer transition-colors"
                             title="Annuler ce versement enregistré par erreur (réactive la dette)"
                           >
@@ -1335,16 +1530,26 @@ export const CreditDebtView: React.FC<CreditDebtViewProps> = ({ initialType = 'A
 
               {/* Footer Actions */}
               <div className="pt-3 border-t border-slate-100 flex items-center justify-between gap-2 flex-wrap">
-                <button
-                  type="button"
-                  onClick={() => printDebtReceipt(selectedRecordDetail)}
-                  className="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-xs cursor-pointer transition-colors"
-                >
-                  <Printer className="w-3.5 h-3.5" />
-                  {selectedRecordDetail.type === 'SUPPLIER_DEBT'
-                    ? 'Imprimer la Reconnaissance de Dette (pour le créancier)'
-                    : 'Imprimer le Reçu de Créance Client'}
-                </button>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <button
+                    type="button"
+                    onClick={() => handleOpenEditRecord(liveSelectedRecordDetail)}
+                    className="px-3 py-2 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-300 rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-colors"
+                  >
+                    <Edit3 className="w-3.5 h-3.5 text-amber-600" />
+                    Corriger le dossier
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => printDebtReceipt(liveSelectedRecordDetail)}
+                    className="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-xs cursor-pointer transition-colors"
+                  >
+                    <Printer className="w-3.5 h-3.5" />
+                    {liveSelectedRecordDetail.type === 'SUPPLIER_DEBT'
+                      ? 'Imprimer Reconnaissance de Dette'
+                      : 'Imprimer Reçu de Créance'}
+                  </button>
+                </div>
                 <button
                   type="button"
                   onClick={() => setShowDetailModal(false)}
@@ -1612,6 +1817,15 @@ export const CreditDebtView: React.FC<CreditDebtViewProps> = ({ initialType = 'A
                             </button>
                             <button
                               type="button"
+                              onClick={() => handleOpenEditPayment(record, payment)}
+                              className="px-2.5 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-300 rounded-lg text-xs font-bold flex items-center gap-1 cursor-pointer transition-colors shadow-2xs"
+                              title="Corriger ce reçu déjà validé (montant, mode, date, note)"
+                            >
+                              <Edit3 className="w-3.5 h-3.5 text-amber-600" />
+                              <span>Corriger</span>
+                            </button>
+                            <button
+                              type="button"
                               onClick={() => handleCancelPayment(record, payment)}
                               className="px-2.5 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-lg text-xs font-bold flex items-center gap-1 cursor-pointer transition-colors shadow-2xs"
                               title="Annuler ce versement effectué par erreur (réactive la dette)"
@@ -1641,7 +1855,7 @@ export const CreditDebtView: React.FC<CreditDebtViewProps> = ({ initialType = 'A
             {/* Modal Footer */}
             <div className="p-4 border-t border-slate-200 bg-slate-50 flex items-center justify-between">
               <span className="text-xs text-slate-500">
-                L'annulation d'un encaissement réactive automatiquement le montant sur la dette du tiers et ajuste la caisse.
+                Vous pouvez corriger ou annuler tout reçu déjà validé ; les soldes et la caisse s'ajustent automatiquement.
               </span>
               <button
                 type="button"
@@ -1654,6 +1868,351 @@ export const CreditDebtView: React.FC<CreditDebtViewProps> = ({ initialType = 'A
           </div>
         </div>
       )}
+
+      {/* MODAL: CORRECT AN ALREADY VALIDATED PAYMENT RECEIPT */}
+      {showEditPaymentModal && editPaymentTarget && (
+        <div className="fixed inset-0 z-[60] overflow-y-auto bg-slate-900/70 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-md overflow-hidden animate-in fade-in">
+            <div className="p-4 bg-amber-600 text-white flex items-center justify-between">
+              <h3 className="font-bold text-sm flex items-center gap-2">
+                <Edit3 className="w-4 h-4 text-white" />
+                Corriger un Reçu Déjà Validé
+              </h3>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowEditPaymentModal(false);
+                  setEditPaymentTarget(null);
+                }}
+                className="text-white hover:opacity-80 cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="p-5 space-y-3.5 text-xs">
+              <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-1">
+                <div className="flex justify-between items-center">
+                  <strong className="text-slate-900">{editPaymentTarget.record.partyName}</strong>
+                  <span className="font-mono text-[11px] font-bold text-indigo-700">
+                    {editPaymentTarget.payment.receiptNumber || 'Reçu'}
+                  </span>
+                </div>
+                <p className="text-[11px] text-slate-500">{editPaymentTarget.record.title}</p>
+                <div className="flex justify-between text-[11px] pt-1 border-t border-slate-200">
+                  <span className="text-slate-500">Montant initial du reçu :</span>
+                  <strong className="text-slate-900">
+                    {formatMoney(editPaymentTarget.payment.amount, settings.currency)}
+                  </strong>
+                </div>
+                <div className="flex justify-between text-[11px]">
+                  <span className="text-slate-500">Plafond max autorisé :</span>
+                  <strong className="text-indigo-700">
+                    {formatMoney(editPaymentTarget.payment.amount + editPaymentTarget.record.remainingAmount, settings.currency)}
+                  </strong>
+                </div>
+              </div>
+
+              {editPaymentError && (
+                <div className="p-2.5 bg-rose-50 border border-rose-200 rounded-xl text-rose-700 flex items-center gap-2 font-semibold">
+                  <AlertTriangle className="w-4 h-4 shrink-0 text-rose-600" />
+                  <span>{editPaymentError}</span>
+                </div>
+              )}
+
+              <div>
+                <label className="font-semibold text-slate-700 block mb-1">
+                  Montant corrigé ({settings.currency}) *
+                </label>
+                <input
+                  type="number"
+                  min="1"
+                  max={editPaymentTarget.payment.amount + editPaymentTarget.record.remainingAmount}
+                  step="any"
+                  value={editPaymentAmount}
+                  onChange={e => setEditPaymentAmount(e.target.value)}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm font-black text-indigo-900 focus:ring-2 focus:ring-amber-500 focus:outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="font-semibold text-slate-700 block mb-1">Mode de règlement</label>
+                <div className="grid grid-cols-2 gap-1.5">
+                  {[
+                    { id: 'ESPECES', label: 'Espèces (Caisse)', icon: Banknote },
+                    { id: 'MOBILE_MONEY', label: 'Orange / Wave', icon: Smartphone },
+                    { id: 'VIREMENT', label: 'Virement bancaire', icon: CreditCard },
+                    { id: 'CHEQUE', label: 'Chèque', icon: Building },
+                  ].map(m => {
+                    const Icon = m.icon;
+                    const isSel = editPaymentMethod === m.id;
+                    return (
+                      <button
+                        key={m.id}
+                        type="button"
+                        onClick={() => setEditPaymentMethod(m.id as PaymentMethod)}
+                        className={`p-2 rounded-lg border text-left flex items-center gap-2 cursor-pointer transition-all ${
+                          isSel
+                            ? 'border-amber-600 bg-amber-50 text-amber-900 font-bold'
+                            : 'border-slate-200 bg-white hover:bg-slate-50 text-slate-700'
+                        }`}
+                      >
+                        <Icon className="w-3.5 h-3.5 shrink-0" />
+                        <span className="text-[11px] truncate">{m.label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div>
+                <label className="font-semibold text-slate-700 block mb-1">Date & heure du versement</label>
+                <input
+                  type="datetime-local"
+                  value={editPaymentDate}
+                  onChange={e => setEditPaymentDate(e.target.value)}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs focus:ring-2 focus:ring-amber-500 focus:outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="font-semibold text-slate-700 block mb-1">Notes sur le reçu</label>
+                <input
+                  type="text"
+                  value={editPaymentNotes}
+                  onChange={e => setEditPaymentNotes(e.target.value)}
+                  placeholder="Observation sur le reçu..."
+                  className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs focus:ring-2 focus:ring-amber-500 focus:outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="font-semibold text-slate-700 block mb-1">Motif de correction</label>
+                <input
+                  type="text"
+                  value={editPaymentReason}
+                  onChange={e => setEditPaymentReason(e.target.value)}
+                  placeholder="Ex: Erreur de frappe sur le montant"
+                  className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs focus:ring-2 focus:ring-amber-500 focus:outline-none"
+                />
+              </div>
+
+              <div className="pt-2 flex flex-col sm:flex-row justify-end gap-2 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowEditPaymentModal(false);
+                    setEditPaymentTarget(null);
+                  }}
+                  className="px-3.5 py-2 text-slate-600 hover:bg-slate-100 rounded-xl cursor-pointer font-semibold"
+                >
+                  Annuler
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleSaveEditPayment(false)}
+                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl shadow-xs flex items-center justify-center gap-1.5 cursor-pointer"
+                >
+                  <Check className="w-3.5 h-3.5" />
+                  Enregistrer
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleSaveEditPayment(true)}
+                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl shadow-xs flex items-center justify-center gap-1.5 cursor-pointer"
+                >
+                  <Printer className="w-3.5 h-3.5" />
+                  Enregistrer & Réimprimer
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: CORRECT CREDIT / DEBT DOSSIER */}
+      {showEditRecordModal && editRecordTarget && (
+        <div className="fixed inset-0 z-[60] overflow-y-auto bg-slate-900/70 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-md overflow-hidden animate-in fade-in">
+            <div className="p-4 bg-slate-900 text-white flex items-center justify-between">
+              <h3 className="font-bold text-sm flex items-center gap-2">
+                <Edit3 className="w-4 h-4 text-amber-400" />
+                Corriger le Dossier ({editRecordTarget.type === 'CLIENT_CREDIT' ? 'Crédit Client' : 'Dette Fournisseur'})
+              </h3>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowEditRecordModal(false);
+                  setEditRecordTarget(null);
+                }}
+                className="text-slate-400 hover:text-white cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="p-5 space-y-3.5 text-xs">
+              {editRecError && (
+                <div className="p-2.5 bg-rose-50 border border-rose-200 rounded-xl text-rose-700 flex items-center gap-2 font-semibold">
+                  <AlertTriangle className="w-4 h-4 shrink-0 text-rose-600" />
+                  <span>{editRecError}</span>
+                </div>
+              )}
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="font-semibold text-slate-700 block mb-1">Nom / Société *</label>
+                  <input
+                    type="text"
+                    value={editRecPartyName}
+                    onChange={e => setEditRecPartyName(e.target.value)}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="font-semibold text-slate-700 block mb-1">Téléphone</label>
+                  <input
+                    type="tel"
+                    value={editRecPartyPhone}
+                    onChange={e => setEditRecPartyPhone(e.target.value)}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="font-semibold text-slate-700 block mb-1">Motif / Titre *</label>
+                  <input
+                    type="text"
+                    value={editRecTitle}
+                    onChange={e => setEditRecTitle(e.target.value)}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="font-semibold text-slate-700 block mb-1">
+                    Montant initial ({settings.currency}) *
+                  </label>
+                  <input
+                    type="number"
+                    min={Math.max(1, editRecordTarget.paidAmount || 0)}
+                    step="any"
+                    value={editRecAmount}
+                    onChange={e => setEditRecAmount(e.target.value)}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs font-black text-indigo-900 focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                  />
+                </div>
+              </div>
+
+              {editRecordTarget.paidAmount > 0 && (
+                <p className="text-[11px] text-slate-500 bg-slate-50 p-2 rounded-lg border border-slate-200">
+                  Déjà versé sur ce dossier : <strong>{formatMoney(editRecordTarget.paidAmount, settings.currency)}</strong>. Le nouveau reste dû sera recalculé automatiquement.
+                </p>
+              )}
+
+              <div>
+                <label className="font-semibold text-slate-700 block mb-1">Date d'échéance</label>
+                <input
+                  type="date"
+                  value={editRecDueDate}
+                  onChange={e => setEditRecDueDate(e.target.value)}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="font-semibold text-slate-700 block mb-1">Notes</label>
+                <textarea
+                  rows={2}
+                  value={editRecNotes}
+                  onChange={e => setEditRecNotes(e.target.value)}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="font-semibold text-slate-700 block mb-1">Motif de correction</label>
+                <input
+                  type="text"
+                  value={editRecReason}
+                  onChange={e => setEditRecReason(e.target.value)}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                />
+              </div>
+
+              <div className="pt-2 flex flex-col sm:flex-row justify-end gap-2 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowEditRecordModal(false);
+                    setEditRecordTarget(null);
+                  }}
+                  className="px-3.5 py-2 text-slate-600 hover:bg-slate-100 rounded-xl cursor-pointer font-semibold"
+                >
+                  Annuler
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleSaveEditRecord(false)}
+                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl shadow-xs flex items-center justify-center gap-1.5 cursor-pointer"
+                >
+                  <Check className="w-3.5 h-3.5" />
+                  Enregistrer
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleSaveEditRecord(true)}
+                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl shadow-xs flex items-center justify-center gap-1.5 cursor-pointer"
+                >
+                  <Printer className="w-3.5 h-3.5" />
+                  Enregistrer & Réimprimer
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <ConfirmModal
+        isOpen={Boolean(cancelPaymentTarget)}
+        title="Annuler ce versement ?"
+        message={
+          cancelPaymentTarget
+            ? `Tiers : ${cancelPaymentTarget.record.partyName}\nMontant : ${formatMoney(cancelPaymentTarget.payment.amount, settings.currency)}\nMode : ${getPaymentMethodLabel(cancelPaymentTarget.payment.paymentMethod)}\n\nLa dette sera réactivée (+${formatMoney(cancelPaymentTarget.payment.amount, settings.currency)}), le reçu sera retiré et la caisse ajustée.`
+            : ''
+        }
+        confirmLabel="Oui, annuler le versement"
+        variant="danger"
+        showReasonInput
+        reasonLabel="Motif de l'annulation *"
+        reasonPlaceholder="Encaissement enregistré par erreur..."
+        reasonValue={cancelPaymentReason}
+        onReasonChange={setCancelPaymentReason}
+        onConfirm={executeCancelPayment}
+        onCancel={() => setCancelPaymentTarget(null)}
+      />
+
+      <ConfirmModal
+        isOpen={Boolean(recordToDelete)}
+        title="Supprimer ce dossier ?"
+        message={
+          recordToDelete
+            ? `Voulez-vous supprimer définitivement le dossier "${recordToDelete.title}" (${recordToDelete.partyName}) ?`
+            : ''
+        }
+        confirmLabel="Supprimer"
+        variant="danger"
+        onConfirm={() => {
+          if (recordToDelete) {
+            deleteCreditDebtRecord(recordToDelete.id);
+            setToastMessage(`Dossier "${recordToDelete.title}" supprimé.`);
+            setTimeout(() => setToastMessage(null), 4000);
+          }
+          setRecordToDelete(null);
+        }}
+        onCancel={() => setRecordToDelete(null)}
+      />
     </div>
   );
 };

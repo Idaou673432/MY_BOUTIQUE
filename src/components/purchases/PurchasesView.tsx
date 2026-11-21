@@ -409,9 +409,10 @@ export const PurchasesView: React.FC = () => {
                     <label className="text-[10px] text-slate-500 block">Quantité</label>
                     <input
                       type="number"
-                      min="1"
+                      min="0.01"
+                      step="any"
                       value={itemQty}
-                      onChange={(e) => setItemQty(parseInt(e.target.value, 10) || 1)}
+                      onChange={(e) => setItemQty(parseFloat(e.target.value) || 1)}
                       className="w-full px-2 py-1.5 bg-white border border-slate-300 rounded text-xs font-bold"
                     />
                   </div>

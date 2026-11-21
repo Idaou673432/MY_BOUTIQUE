@@ -39,7 +39,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onToggleSidebar, isSidebarOpen, 
     VENDEUR: { label: 'Vendeur (Caisse)', bg: 'bg-emerald-50 text-emerald-700 border-emerald-200', text: 'text-emerald-700' },
   };
 
-  const totalAlerts = metrics.outOfStockCount + metrics.lowStockCount;
+  const totalAlerts = metrics.outOfStockCount + metrics.lowStockCount + (metrics.inventoryDiscrepancyCount || 0);
 
   // Format today's date nicely in French
   const todayFormatted = new Intl.DateTimeFormat('fr-FR', {
@@ -204,6 +204,24 @@ export const Navbar: React.FC<NavbarProps> = ({ onToggleSidebar, isSidebarOpen, 
                     <div>
                       <p className="font-bold">{metrics.lowStockCount} produit(s) en stock faible</p>
                       <p className="text-[11px] text-amber-700">Sous le seuil d'alerte configuré</p>
+                    </div>
+                  </div>
+                )}
+                {(metrics.inventoryDiscrepancyCount || 0) > 0 && (
+                  <div
+                    onClick={() => {
+                      setShowAlertsDropdown(false);
+                      onNavigate('inventory');
+                    }}
+                    className="p-3 bg-rose-50 hover:bg-rose-100 cursor-pointer flex items-center gap-2.5 text-rose-800 transition-colors"
+                  >
+                    <AlertTriangle className="w-4 h-4 shrink-0 text-rose-600 animate-pulse" />
+                    <div className="flex-1">
+                      <div className="flex items-center justify-between">
+                        <p className="font-bold">{metrics.inventoryDiscrepancyCount} écart(s) de stock en inventaire</p>
+                        <span className="px-1.5 py-0.2 rounded text-[9px] font-black bg-rose-600 text-white">Inventaire</span>
+                      </div>
+                      <p className="text-[11px] text-rose-600">Différences détectées après saisie physique</p>
                     </div>
                   </div>
                 )}

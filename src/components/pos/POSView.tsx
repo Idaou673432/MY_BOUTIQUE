@@ -43,6 +43,7 @@ import { Product, SaleItem, PaymentMethod, Sale } from '../../types';
 import { formatMoney, getPaymentMethodLabel } from '../../utils/formatters';
 import { InvoiceModal } from '../common/InvoiceModal';
 import { DirectPrinterModal } from '../common/DirectPrinterModal';
+import { ConfirmModal } from '../common/ConfirmModal';
 import {
   generateThermalReceiptHtml,
   executeDirectPrint,
@@ -135,6 +136,7 @@ export const POSView: React.FC<POSViewProps> = ({ onNavigate }) => {
   const [lastCompletedSale, setLastCompletedSale] = useState<Sale | null>(null);
   const [showReceiptModal, setShowReceiptModal] = useState(false);
   const [showPrinterSettings, setShowPrinterSettings] = useState(false);
+  const [showCancelLastSaleConfirm, setShowCancelLastSaleConfirm] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [posSortBy, setPosSortBy] = useState<'NAME_ASC' | 'NAME_DESC' | 'DATE_DESC' | 'DATE_ASC' | 'STOCK_DESC' | 'STOCK_ASC'>('NAME_ASC');
 
@@ -752,17 +754,7 @@ export const POSView: React.FC<POSViewProps> = ({ onNavigate }) => {
             </button>
             <button
               type="button"
-              onClick={() => {
-                if (confirm(`Annuler immédiatement la vente ${lastCompletedSale.invoiceNumber} ? Les articles seront remis en stock et la caisse sera ajustée.`)) {
-                  const res = cancelSale(lastCompletedSale.id, 'Annulation immédiate après achat par le caissier');
-                  if (res.success) {
-                    setLastCompletedSale(null);
-                    alert('Vente annulée avec succès. Articles réintégrés en stock.');
-                  } else {
-                    alert(res.message || 'Erreur lors de l’annulation.');
-                  }
-                }
-              }}
+              onClick={() => setShowCancelLastSaleConfirm(true)}
               className="px-3 py-1.5 bg-rose-100 hover:bg-rose-200 text-rose-800 rounded-xl font-bold text-xs flex items-center gap-1.5 transition-all cursor-pointer"
               title="Annuler immédiatement cette vente"
             >
@@ -1255,14 +1247,14 @@ export const POSView: React.FC<POSViewProps> = ({ onNavigate }) => {
               <span className="text-[10px] font-bold text-slate-500">Qté:</span>
               <input
                 type="number"
-                min="1"
-                step="1"
+                min="0.01"
+                step="any"
                 value={qtyToAdd}
                 onChange={(e) => {
-                  const val = parseInt(e.target.value, 10);
-                  setQtyToAdd(isNaN(val) || val < 1 ? 1 : val);
+                  const val = parseFloat(e.target.value);
+                  setQtyToAdd(isNaN(val) || val <= 0 ? 1 : val);
                 }}
-                className="w-10 text-center text-xs font-black text-indigo-900 border-0 focus:outline-none"
+                className="w-12 text-center text-xs font-black text-indigo-900 border-0 focus:outline-none"
               />
             </div>
             <select
@@ -1430,22 +1422,22 @@ export const POSView: React.FC<POSViewProps> = ({ onNavigate }) => {
                       </button>
                       <input
                         type="number"
-                        min="1"
-                        step="1"
+                        min="0.01"
+                        step="any"
                         value={item.quantity === 0 ? '' : item.quantity}
                         onChange={(e) => {
-                          const val = e.target.value === '' ? 0 : parseInt(e.target.value, 10);
+                          const val = e.target.value === '' ? 0 : parseFloat(e.target.value);
                           if (!isNaN(val)) {
                             updateQuantity(item.productId, val);
                           }
                         }}
                         onBlur={(e) => {
-                          const val = parseInt(e.target.value, 10);
+                          const val = parseFloat(e.target.value);
                           if (isNaN(val) || val <= 0) {
                             updateQuantity(item.productId, 1);
                           }
                         }}
-                        className="w-12 text-center py-0.5 text-xs font-black text-slate-900 bg-white border border-slate-300 rounded focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+                        className="w-14 text-center py-0.5 text-xs font-black text-slate-900 bg-white border border-slate-300 rounded focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
                         title="Saisir directement le nombre d'articles"
                       />
                       <button
@@ -2158,15 +2150,16 @@ export const POSView: React.FC<POSViewProps> = ({ onNavigate }) => {
                                 <input
                                   type="number"
                                   min="0"
+                                  step="any"
                                   max={!settings.allowNegativeStock ? prod.currentStock : undefined}
                                   value={qty}
                                   onChange={(e) =>
                                     handleModalQuantityChange(
                                       prod.id,
-                                      parseInt(e.target.value) || 0
+                                      parseFloat(e.target.value) || 0
                                     )
                                   }
-                                  className="w-12 text-center py-0.5 border border-slate-200 rounded font-bold text-xs focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+                                  className="w-14 text-center py-0.5 border border-slate-200 rounded font-bold text-xs focus:ring-1 focus:ring-indigo-500 focus:outline-none"
                                 />
                                 <button
                                   type="button"
@@ -2601,6 +2594,35 @@ export const POSView: React.FC<POSViewProps> = ({ onNavigate }) => {
           </form>
         </div>
       )}
+      <ConfirmModal
+        isOpen={showCancelLastSaleConfirm && Boolean(lastCompletedSale)}
+        title="Annuler immédiatement cette vente ?"
+        message={
+          lastCompletedSale
+            ? `Voulez-vous annuler la facture ${lastCompletedSale.invoiceNumber} ? Les articles seront remis en stock et la caisse sera ajustée.`
+            : ''
+        }
+        confirmLabel="Oui, annuler la vente"
+        variant="danger"
+        onConfirm={() => {
+          if (lastCompletedSale) {
+            const res = cancelSale(
+              lastCompletedSale.id,
+              'Annulation immédiate après achat par le caissier'
+            );
+            if (res.success) {
+              setLastCompletedSale(null);
+              setDrawerStatus('✅ Vente annulée avec succès. Articles réintégrés en stock.');
+              setTimeout(() => setDrawerStatus(null), 5000);
+            } else {
+              setErrorMessage(res.message || "Erreur lors de l'annulation.");
+              setTimeout(() => setErrorMessage(null), 5000);
+            }
+          }
+          setShowCancelLastSaleConfirm(false);
+        }}
+        onCancel={() => setShowCancelLastSaleConfirm(false)}
+      />
       </div>
     </div>
   );

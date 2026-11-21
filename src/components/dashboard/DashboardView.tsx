@@ -18,10 +18,11 @@ import {
   Clock,
   CheckCircle,
   FileSpreadsheet,
-  ArrowRight
+  ArrowRight,
+  ClipboardList
 } from 'lucide-react';
 import { useStore } from '../../context/StoreContext';
-import { formatMoney, formatDate } from '../../utils/formatters';
+import { formatMoney, formatDate, getLocalDateKey } from '../../utils/formatters';
 
 interface DashboardViewProps {
   onNavigate: (tab: string) => void;
@@ -134,11 +135,11 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigate }) => {
     for (let i = 6; i >= 0; i--) {
       const d = new Date();
       d.setDate(d.getDate() - i);
-      const dateStr = d.toISOString().split('T')[0];
+      const dateStr = getLocalDateKey(d);
       const dayLabel = dayNames[d.getDay()];
       
       const dayTotal = sales
-        .filter(s => s.status === 'COMPLETEE' && s.date.startsWith(dateStr))
+        .filter(s => s.status === 'COMPLETEE' && getLocalDateKey(s.date) === dateStr)
         .reduce((sum, s) => sum + s.totalAmount, 0);
 
       days.push({ label: dayLabel, dateStr, amount: dayTotal });
@@ -287,6 +288,43 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigate }) => {
               </button>
             </div>
           )}
+        </div>
+      )}
+
+      {/* INVENTORY DISCREPANCY NOTIFICATION BANNER */}
+      {(metrics.inventoryDiscrepancyCount || 0) > 0 && (
+        <div 
+          onClick={() => onNavigate('inventory')}
+          className="bg-gradient-to-r from-rose-50 via-rose-100/70 to-amber-50 border-2 border-rose-300 rounded-2xl p-3.5 sm:p-4 shadow-xs flex items-center justify-between gap-3 cursor-pointer hover:border-rose-400 transition-all animate-in fade-in"
+        >
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-xl bg-rose-600 text-white flex items-center justify-center shrink-0 shadow-xs">
+              <ClipboardList className="w-5 h-5 animate-pulse" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <p className="text-xs sm:text-sm font-black text-rose-950">
+                  {metrics.inventoryDiscrepancyCount} écart{metrics.inventoryDiscrepancyCount > 1 ? 's' : ''} de stock physique détecté{metrics.inventoryDiscrepancyCount > 1 ? 's' : ''}
+                </p>
+                <span className="px-2 py-0.5 rounded-full text-[9px] font-black uppercase bg-rose-600 text-white shadow-xs">
+                  Inventaire en cours
+                </span>
+              </div>
+              <p className="text-[11px] text-rose-700 font-medium mt-0.5">
+                Des différences entre le stock théorique et physique nécessitent vérification ou justification.
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onNavigate('inventory');
+            }}
+            className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold shrink-0 transition-colors shadow-xs"
+          >
+            <span>Ouvrir l'inventaire</span>
+            <ArrowRight className="w-3.5 h-3.5" />
+          </button>
         </div>
       )}
 
@@ -460,7 +498,11 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigate }) => {
                             {s.paymentMethod}
                           </td>
                           <td className="px-3 py-2 text-center">
-                            {s.paymentMethod === 'CREDIT' ? (
+                            {s.status === 'ANNULEE' ? (
+                              <span className="bg-rose-100 text-rose-700 px-1.5 py-0.5 rounded text-[9px] font-bold">
+                                ANNULÉE
+                              </span>
+                            ) : s.paymentMethod === 'CREDIT' || (s.remainingDue || 0) > 0 ? (
                               <span className="bg-orange-100 text-orange-700 px-1.5 py-0.5 rounded text-[9px] font-bold">
                                 CRÉDIT
                               </span>

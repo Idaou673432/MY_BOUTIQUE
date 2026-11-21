@@ -26,6 +26,7 @@ import {
   generatePartyCreditBalanceThermalTicketHtml,
   printTicketIn80mm
 } from '../../utils/printService';
+import { ConfirmModal } from '../common/ConfirmModal';
 
 interface ThirdPartiesViewProps {
   initialTab?: 'customers' | 'suppliers';
@@ -101,6 +102,14 @@ export const ThirdPartiesView: React.FC<ThirdPartiesViewProps> = ({ initialTab =
     supplierName?: string;
     newBalance?: number;
   } | null>(null);
+
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [cancelPaymentTarget, setCancelPaymentTarget] = useState<{
+    paymentId: string;
+    partyName: string;
+    amount: number;
+  } | null>(null);
+  const [cancelPaymentReason, setCancelPaymentReason] = useState('Encaissement enregistré par erreur');
 
   // Filtered lists
   const filteredCustomers = useMemo(() => {
@@ -299,25 +308,24 @@ export const ThirdPartiesView: React.FC<ThirdPartiesViewProps> = ({ initialTab =
     }
   };
 
-  // Cancel an encaissement or debt payment
+  // Cancel an encaissement or debt payment via ConfirmModal
   const handleCancelPayment = (paymentId: string, partyName: string, amount: number) => {
-    if (
-      !window.confirm(
-        `Êtes-vous sûr de vouloir annuler le versement de ${formatMoney(amount, settings.currency)} enregistré pour "${partyName}" par erreur ?\n\n- La dette sera réactivée (+${formatMoney(amount, settings.currency)})\n- Le versement sera supprimé de l'historique et la caisse ajustée.`
-      )
-    ) {
-      return;
-    }
+    setCancelPaymentReason('Encaissement enregistré par erreur');
+    setCancelPaymentTarget({ paymentId, partyName, amount });
+  };
 
-    const reason = window.prompt("Motif de l'annulation :", "Encaissement enregistré par erreur");
-    if (reason === null) return;
-
-    const res = cancelCreditPayment(paymentId, undefined, reason.trim() || "Encaissement enregistré par erreur");
+  const executeCancelPayment = () => {
+    if (!cancelPaymentTarget) return;
+    const { paymentId } = cancelPaymentTarget;
+    const res = cancelCreditPayment(
+      paymentId,
+      undefined,
+      cancelPaymentReason.trim() || 'Encaissement enregistré par erreur'
+    );
+    setCancelPaymentTarget(null);
     if (res.success) {
-      alert(res.message || "Versement annulé avec succès. La dette a été réactivée.");
       setCreditFeedback(null);
       setSupplierFeedback(null);
-      // Update selected customer/supplier balance in modal if open
       if (selectedCustomerForPay) {
         const updated = (customers || []).find(c => c.id === selectedCustomerForPay.id);
         if (updated) setSelectedCustomerForPay(updated);
@@ -326,8 +334,11 @@ export const ThirdPartiesView: React.FC<ThirdPartiesViewProps> = ({ initialTab =
         const updated = (suppliers || []).find(s => s.id === selectedSupplierForPay.id);
         if (updated) setSelectedSupplierForPay(updated);
       }
+      setToastMessage(`✅ ${res.message || 'Versement annulé avec succès. La dette a été réactivée.'}`);
+      setTimeout(() => setToastMessage(null), 5000);
     } else {
-      alert(res.message || "Erreur lors de l'annulation.");
+      setToastMessage(`⚠️ ${res.message || "Erreur lors de l'annulation."}`);
+      setTimeout(() => setToastMessage(null), 5000);
     }
   };
 
@@ -413,6 +424,18 @@ export const ThirdPartiesView: React.FC<ThirdPartiesViewProps> = ({ initialTab =
 
   return (
     <div className="space-y-6 pb-12">
+      {toastMessage && (
+        <div className="p-3 bg-slate-900 text-white text-xs font-bold rounded-xl shadow-lg flex items-center justify-between animate-in fade-in">
+          <span>{toastMessage}</span>
+          <button
+            type="button"
+            onClick={() => setToastMessage(null)}
+            className="text-slate-300 hover:text-white cursor-pointer"
+          >
+            ✕
+          </button>
+        </div>
+      )}
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-4 rounded-2xl border border-slate-200 shadow-xs">
         <div>
@@ -1389,6 +1412,25 @@ export const ThirdPartiesView: React.FC<ThirdPartiesViewProps> = ({ initialTab =
           </div>
         </div>
       )}
+
+      <ConfirmModal
+        isOpen={Boolean(cancelPaymentTarget)}
+        title="Annuler ce versement ?"
+        message={
+          cancelPaymentTarget
+            ? `Voulez-vous annuler le versement de ${formatMoney(cancelPaymentTarget.amount, settings.currency)} enregistré pour "${cancelPaymentTarget.partyName}" ?\n\nLa dette sera réactivée (+${formatMoney(cancelPaymentTarget.amount, settings.currency)}), le versement sera supprimé et la caisse ajustée.`
+            : ''
+        }
+        confirmLabel="Oui, annuler le versement"
+        variant="danger"
+        showReasonInput
+        reasonLabel="Motif de l'annulation *"
+        reasonPlaceholder="Encaissement enregistré par erreur..."
+        reasonValue={cancelPaymentReason}
+        onReasonChange={setCancelPaymentReason}
+        onConfirm={executeCancelPayment}
+        onCancel={() => setCancelPaymentTarget(null)}
+      />
     </div>
   );
 };

@@ -781,8 +781,9 @@ export const ProductsView: React.FC = () => {
                   <label className="font-semibold text-slate-700 block mb-1">Stock Actuel</label>
                   <input
                     type="number"
+                    step="any"
                     value={formData.currentStock}
-                    onChange={(e) => setFormData({ ...formData, currentStock: parseInt(e.target.value, 10) || 0 })}
+                    onChange={(e) => setFormData({ ...formData, currentStock: parseFloat(e.target.value) || 0 })}
                     className="w-full px-3 py-2 border border-slate-200 rounded-lg font-bold"
                   />
                 </div>
@@ -790,8 +791,9 @@ export const ProductsView: React.FC = () => {
                   <label className="font-semibold text-slate-700 block mb-1">Stock Minimum (Alerte)</label>
                   <input
                     type="number"
+                    step="any"
                     value={formData.minStock}
-                    onChange={(e) => setFormData({ ...formData, minStock: parseInt(e.target.value, 10) || 0 })}
+                    onChange={(e) => setFormData({ ...formData, minStock: parseFloat(e.target.value) || 0 })}
                     className="w-full px-3 py-2 border border-slate-200 rounded-lg"
                   />
                 </div>
@@ -799,8 +801,9 @@ export const ProductsView: React.FC = () => {
                   <label className="font-semibold text-slate-700 block mb-1">Stock Maximum</label>
                   <input
                     type="number"
+                    step="any"
                     value={formData.maxStock}
-                    onChange={(e) => setFormData({ ...formData, maxStock: parseInt(e.target.value, 10) || 0 })}
+                    onChange={(e) => setFormData({ ...formData, maxStock: parseFloat(e.target.value) || 0 })}
                     className="w-full px-3 py-2 border border-slate-200 rounded-lg"
                   />
                 </div>

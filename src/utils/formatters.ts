@@ -50,25 +50,52 @@ export const formatTimeOnly = (isoString?: string): string => {
   }
 };
 
+export const getLocalDateKey = (dateInput?: string | Date): string => {
+  const d = dateInput ? (dateInput instanceof Date ? dateInput : new Date(dateInput)) : new Date();
+  if (isNaN(d.getTime())) return '';
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
 export const generateId = (prefix = 'id'): string => {
   return `${prefix}_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
 };
 
-export const generateInvoiceNumber = (count: number): string => {
+export const getNextSequenceNumber = (existingNumbers: (string | undefined)[], fallbackCount = 0): number => {
+  let maxSeq = fallbackCount;
+  (existingNumbers || []).forEach((num) => {
+    if (!num) return;
+    const match = String(num).match(/(\d+)$/);
+    if (match) {
+      const parsed = parseInt(match[1], 10);
+      if (!isNaN(parsed) && parsed > maxSeq) {
+        maxSeq = parsed;
+      }
+    }
+  });
+  return maxSeq + 1;
+};
+
+export const generateInvoiceNumber = (count: number, existingNumbers?: (string | undefined)[]): string => {
   const year = new Date().getFullYear();
-  const padded = String(count + 1).padStart(4, '0');
+  const next = existingNumbers ? getNextSequenceNumber(existingNumbers, count) : count + 1;
+  const padded = String(next).padStart(4, '0');
   return `FAC-${year}-${padded}`;
 };
 
-export const generateQuoteNumber = (count: number): string => {
+export const generateQuoteNumber = (count: number, existingNumbers?: (string | undefined)[]): string => {
   const year = new Date().getFullYear();
-  const padded = String(count + 1).padStart(4, '0');
+  const next = existingNumbers ? getNextSequenceNumber(existingNumbers, count) : count + 1;
+  const padded = String(next).padStart(4, '0');
   return `DEV-${year}-${padded}`;
 };
 
-export const generateOrderNumber = (count: number): string => {
+export const generateOrderNumber = (count: number, existingNumbers?: (string | undefined)[]): string => {
   const year = new Date().getFullYear();
-  const padded = String(count + 1).padStart(3, '0');
+  const next = existingNumbers ? getNextSequenceNumber(existingNumbers, count) : count + 1;
+  const padded = String(next).padStart(3, '0');
   return `BC-${year}-${padded}`;
 };
 

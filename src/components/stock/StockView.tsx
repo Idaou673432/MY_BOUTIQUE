@@ -433,10 +433,11 @@ export const StockView: React.FC = () => {
                 <label className="font-semibold text-slate-700 block mb-1">Quantité *</label>
                 <input
                   type="number"
-                  min="1"
+                  min="0.01"
+                  step="any"
                   required
                   value={quantity}
-                  onChange={(e) => setQuantity(parseInt(e.target.value, 10) || 1)}
+                  onChange={(e) => setQuantity(parseFloat(e.target.value) || 1)}
                   className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none font-black text-sm text-slate-900"
                 />
               </div>
